@@ -92,6 +92,16 @@ db.exec(`
     finish_time INTEGER,
     PRIMARY KEY (vc_id, discord_id)
   );
+
+  CREATE TABLE IF NOT EXISTS daily_problems (
+    date_str TEXT PRIMARY KEY,
+    p1_id TEXT,
+    p2_id TEXT,
+    p3_id TEXT,
+    first_blood_1 TEXT,
+    first_blood_2 TEXT,
+    first_blood_3 TEXT
+  );
 `);
 
 // ─── User Helpers ────────────────────────────────────────────
@@ -278,6 +288,24 @@ function getActiveVCForChannel(channelId) {
   return row;
 }
 
+// ─── Daily Problems Helpers ─────────────────────────────────────
+function setDailyProblems(dateStr, p1_id, p2_id, p3_id) {
+  db.prepare(`
+    INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(date_str) DO UPDATE SET
+      p1_id = excluded.p1_id, p2_id = excluded.p2_id, p3_id = excluded.p3_id
+  `).run(dateStr, p1_id, p2_id, p3_id);
+}
+
+function getDailyProblems(dateStr) {
+  return db.prepare('SELECT * FROM daily_problems WHERE date_str = ?').get(dateStr);
+}
+
+function setFirstBlood(dateStr, field, discordId) {
+  db.prepare(`UPDATE daily_problems SET ${field} = ? WHERE date_str = ?`).run(discordId, dateStr);
+}
+
 // ─── Config Helpers ───────────────────────────────────────────
 function getConfig(key) {
   const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(key);
@@ -300,5 +328,6 @@ module.exports = {
   getConfig, setConfig,
   insertRatingHistory, getRatingHistory,
   upsertStreak, getStreak, getAllStreaks,
-  createVC, getVC, getActiveVCs, endVC, joinVC, getVCParticipants, updateVCSolved, getActiveVCForChannel
+  createVC, getVC, getActiveVCs, endVC, joinVC, getVCParticipants, updateVCSolved, getActiveVCForChannel,
+  setDailyProblems, getDailyProblems, setFirstBlood
 };

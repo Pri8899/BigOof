@@ -1,16 +1,16 @@
 // tasks/dailyChallenge.js — Daily suggestions post at 9pm UTC+6 (15:00 UTC)
-// Posts CF + AtCoder details to #cp-suggestions
+// Posts CF details to #cp-suggestions and tracks First Blood
 const cron = require('node-cron');
+const axios = require('axios');
 const { EmbedBuilder } = require('discord.js');
-const { getConfig }           = require('../database/db');
+const { getConfig, setDailyProblems, getDailyProblems, setFirstBlood, getAllUsers } = require('../database/db');
 const { getCFProblems }       = require('../utils/codeforces');
-const { getACContests }       = require('../utils/atcoder');
 
-// CF tiers
+// CF tiers as requested
 const CF_TIERS = [
-  { label: '🟢 Beginner',     min: 800,  max: 1200 },
-  { label: '🔵 Intermediate', min: 1400, max: 1800 },
-  { label: '🔴 Advanced',     min: 2000, max: 2400 }
+  { label: '🟢 Beginner (Under 1000)',     min: 800,  max: 1000 },
+  { label: '🔵 Intermediate (Under 1500)', min: 1000, max: 1500 },
+  { label: '🔴 Advanced (Under 2500)',     min: 1500, max: 2500 }
 ];
 
 // ─── Post Daily Problem Recommendations ──────────────────────
@@ -31,51 +31,111 @@ async function postDailySuggestions(client) {
   // Fetch CF problems for all tiers
   const cfResults = await Promise.all(CF_TIERS.map(tier => getCFProblems(tier.min, tier.max, null, 1)));
 
+  const p1 = cfResults[0]?.length > 0 ? cfResults[0][0] : null;
+  const p2 = cfResults[1]?.length > 0 ? cfResults[1][0] : null;
+  const p3 = cfResults[2]?.length > 0 ? cfResults[2][0] : null;
+
+  // Save to DB for First Blood tracking
+  const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const todayDateStr = formatterDate.format(new Date());
+  setDailyProblems(todayDateStr, p1?.id || null, p2?.id || null, p3?.id || null);
+
   // ── Codeforces Section ──
   const cfEmbed = new EmbedBuilder()
     .setColor(0x1F8DD6)
     .setAuthor({ name: '🔵 Codeforces — Daily Practice Problems' })
     .setTitle(`💡 Daily Problem Suggestions — ${today}`)
-    .setDescription('Sharpen your skills with today\'s picks across all platforms!\n\u200b');
+    .setDescription('Sharpen your skills! The **First Person** to solve any of these today gets a **First Blood 🩸** broadcast!\n\u200b');
 
-  CF_TIERS.forEach((tier, i) => {
-    const problems = cfResults[i];
-    if (problems.length > 0) {
-      const p = problems[0];
-      cfEmbed.addFields({
-        name:  `${tier.label}  ·  CF Rating ${p.rating}`,
-        value: `**[${p.name}](${p.url})**\n🏷️ ${p.tags.join(', ') || 'N/A'}`,
-        inline: false
-      });
-    }
-  });
+  if (p1) cfEmbed.addFields({ name: `${CF_TIERS[0].label}  ·  Rating ${p1.rating}`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
+  if (p2) cfEmbed.addFields({ name: `${CF_TIERS[1].label}  ·  Rating ${p2.rating}`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
+  if (p3) cfEmbed.addFields({ name: `${CF_TIERS[2].label}  ·  Rating ${p3.rating}`, value: `**[${p3.name}](${p3.url})**\n🏷️ ${p3.tags.join(', ') || 'N/A'}`, inline: false });
 
   cfEmbed
     .addFields({ name: '\u200b', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', inline: false })
-    .setFooter({ text: 'React with your solve ✅ in this channel!' })
+    .setFooter({ text: 'Bot checks for First Blood automatically every 5 minutes!' })
     .setTimestamp();
 
   await channel.send({ embeds: [cfEmbed] }).catch(() => {});
-
-  // ── AtCoder Section ──
-  // Fetch upcoming contests as a bonus — AC doesn't have an open problem API
-  // So we show today's suggestion as "practice on these recent contests"
-  const acEmbed = new EmbedBuilder()
-    .setColor(0xE74C3C)
-    .setAuthor({ name: '🔴 AtCoder — Practice Recommendation' })
-    .addFields({
-      name:  '📚 AtCoder Practice',
-      value: `**[AtCoder Problems](https://kenkoooo.com/atcoder/#/table/)**\nUse AtCoder Problems to find recommended problems by difficulty rating!\n\n🔗 [Virtual Contest on AtCoder Problems](https://kenkoooo.com/atcoder/#/contest/recent)`,
-      inline: false
-    })
-    .setFooter({ text: 'AtCoder problem API is not publicly available' })
-    .setTimestamp();
-
-  await channel.send({ embeds: [acEmbed] }).catch(() => {});
-
-  console.log('[Suggest] Posted daily suggestions for all 3 platforms.');
+  console.log('[Suggest] Posted daily suggestions.');
 }
 
+// ─── First Blood Checker ─────────────────────────────────────
+async function checkFirstBloods(client) {
+  try {
+    const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const todayDateStr = formatterDate.format(new Date());
+    
+    const daily = getDailyProblems(todayDateStr);
+    if (!daily) return; // No problems posted today
+
+    // Check if there's any problem still missing First Blood
+    if ((daily.p1_id && daily.first_blood_1) && 
+        (daily.p2_id && daily.first_blood_2) && 
+        (daily.p3_id && daily.first_blood_3)) {
+      return; // All solved
+    }
+
+    const channelId = getConfig('suggest_channel_id') || process.env.SUGGEST_CHANNEL_ID;
+    if (!channelId) return;
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) return;
+
+    const users = getAllUsers().filter(u => u.cf_handle);
+    const problemsToCheck = [
+      { id: daily.p1_id, bloodField: 'first_blood_1', currentBlood: daily.first_blood_1, label: CF_TIERS[0].label },
+      { id: daily.p2_id, bloodField: 'first_blood_2', currentBlood: daily.first_blood_2, label: CF_TIERS[1].label },
+      { id: daily.p3_id, bloodField: 'first_blood_3', currentBlood: daily.first_blood_3, label: CF_TIERS[2].label }
+    ];
+
+    for (const user of users) {
+      try {
+        const res = await axios.get(`https://codeforces.com/api/user.status?handle=${user.cf_handle}&from=1&count=10`, { timeout: 6000 });
+        if (res.data.status !== 'OK') continue;
+
+        for (const sub of res.data.result) {
+          if (sub.verdict === 'OK' && sub.problem) {
+            const pId = `${sub.problem.contestId}${sub.problem.index}`;
+            
+            for (const p of problemsToCheck) {
+              if (p.id === pId && !p.currentBlood) {
+                // FIRST BLOOD!
+                setFirstBlood(todayDateStr, p.bloodField, user.discord_id);
+                p.currentBlood = user.discord_id; // prevent duplicate announcement in same loop
+
+                const timeSec = sub.timeConsumedMillis / 1000;
+                const memMb = (sub.memoryConsumedBytes / 1048576).toFixed(2);
+                
+                const embed = new EmbedBuilder()
+                  .setColor(0xE74C3C)
+                  .setTitle(`🩸 FIRST BLOOD! 🩸`)
+                  .setDescription(`<@${user.discord_id}> is the absolute first person to solve today's **${p.label}** problem!`)
+                  .addFields(
+                    { name: 'Problem', value: `**[${sub.problem.name}](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})**`, inline: false },
+                    { name: 'Execution Time', value: `⏱️ ${timeSec} s`, inline: true },
+                    { name: 'Memory', value: `💾 ${memMb} MB`, inline: true }
+                  )
+                  .setThumbnail('https://cdn-icons-png.flaticon.com/512/833/833472.png')
+                  .setTimestamp();
+
+                await channel.send({ embeds: [embed] }).catch(() => {});
+                console.log(`[FirstBlood] Announced ${user.cf_handle} for problem ${pId}`);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // ignore CF API errors (rate limits, etc)
+      }
+      // slight delay to prevent rate limiting CF API
+      await new Promise(r => setTimeout(r, 400));
+    }
+  } catch (err) {
+    console.error('[FirstBlood Error]', err.message);
+  }
+}
+
+// ─── Scheduler ───────────────────────────────────────────────
 function startDailyChallenge(client) {
   // 9:00 PM (21:00) every day in Asia/Dhaka timezone
   cron.schedule('0 21 * * *', async () => {
@@ -112,7 +172,12 @@ function startDailyChallenge(client) {
     }
   }, 10000);
 
-  console.log('[Daily] Strict 9 PM daily cron scheduler started.');
+  // First Blood Checker: Runs every 5 minutes
+  cron.schedule('*/5 * * * *', async () => {
+    await checkFirstBloods(client);
+  });
+
+  console.log('[Daily] Strict 9 PM daily cron scheduler & 5-min First Blood checker started.');
 }
 
-module.exports = { startDailyChallenge, postDailySuggestions };
+module.exports = { startDailyChallenge, postDailySuggestions, checkFirstBloods };
