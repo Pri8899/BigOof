@@ -56,6 +56,21 @@ async function postDailySuggestions(client) {
     .setFooter({ text: 'Bot checks for First Blood automatically every 5 minutes!' })
     .setTimestamp();
 
+  // Clean up old suggestion messages
+  try {
+    const messages = await channel.messages.fetch({ limit: 50 });
+    const oldMessages = [...messages.values()].filter(m => 
+      m.author.id === client.user.id && 
+      m.embeds.length > 0 && 
+      m.embeds[0].title?.includes('Daily Problem Suggestions')
+    );
+    for (const msg of oldMessages) {
+      await msg.delete().catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[Suggest] Failed to clean up old messages:', err.message);
+  }
+
   await channel.send({ content: '@everyone', embeds: [cfEmbed] }).catch(() => {});
   console.log('[Suggest] Posted daily suggestions.');
 }
