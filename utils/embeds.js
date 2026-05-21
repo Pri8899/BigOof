@@ -222,8 +222,7 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.default)
-    .setTitle('📅  Upcoming Contests')
-    .setTimestamp();
+    .setTitle('📅  Upcoming Contests');
 
   if (filtered.length === 0) {
     embed.setDescription('_No upcoming contests found across any platform._');
@@ -259,9 +258,17 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
     }
   }
 
+  const now = new Date();
+  let hr = now.getHours();
+  if (now.getMinutes() > 50) hr += 1;
+  hr = hr % 24;
+  const ampm = hr >= 12 ? 'pm' : 'am';
+  const displayHr = hr % 12 === 0 ? 12 : hr % 12;
+  const timeStr = `${displayHr}:00 ${ampm}`;
+
   embed
     .setDescription(sections.join('\n\n'))
-    .setFooter({ text: `${displayedCount} total upcoming contests  •  Refreshes every hour` });
+    .setFooter({ text: `${displayedCount} total upcoming contests  •  Refreshes every hour  •  ${timeStr}` });
 
   return embed;
 }
