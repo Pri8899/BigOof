@@ -252,7 +252,7 @@ async function postContestSummary(client) {
     // Clean up any other messages in the channel to keep it strictly limited to the overview summary
     try {
       const allMessages = await channel.messages.fetch({ limit: 50 });
-      const summaryMsgId = msg ? msg.id : (typeof newMsg !== 'undefined' && newMsg ? newMsg.id : null);
+      const summaryMsgId = (typeof newMsg !== 'undefined' && newMsg) ? newMsg.id : null;
       if (summaryMsgId) {
         const toDelete = [...allMessages.values()].filter(m => m.id !== summaryMsgId);
         if (toDelete.length > 0) {
