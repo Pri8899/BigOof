@@ -225,21 +225,13 @@ async function postContestSummary(client) {
     }
 
     if (msg) {
-      // Edit the existing message in-place to refresh contests
-      await msg.edit({ embeds: [embed] }).catch(async err => {
-        if (err.message && err.message.includes('GOAWAY')) {
-          console.warn('[ContestFetcher] Got GOAWAY on edit, retrying in 1 second...');
-          await new Promise(r => setTimeout(r, 1000));
-          return msg.edit({ embeds: [embed] }).catch(e => {
-            console.error('[ContestFetcher] Message edit retry error:', e.message);
-          });
-        }
-        console.error('[ContestFetcher] Message edit error:', err.message);
-      });
-      console.log('[ContestFetcher] Refreshed existing contest summary message.');
-    } else {
-      // Post fresh with @everyone if no message exists (with auto-retry for GOAWAY)
-      const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(async err => {
+      // To trigger a notification while keeping only one message, we delete the old one
+      await msg.delete().catch(() => {});
+      console.log('[ContestFetcher] Deleted old contest summary message.');
+    }
+
+    // Post fresh with @everyone (with auto-retry for GOAWAY)
+    const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(async err => {
         if (err.message && err.message.includes('GOAWAY')) {
           console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
           await new Promise(r => setTimeout(r, 1000));
@@ -256,7 +248,6 @@ async function postContestSummary(client) {
         setConfig('contest_summary_msg_id', newMsg.id);
         console.log('[ContestFetcher] Posted fresh contest summary.');
       }
-    }
 
     // Clean up any other messages in the channel to keep it strictly limited to the overview summary
     try {

@@ -102,6 +102,22 @@ db.exec(`
     first_blood_2 TEXT,
     first_blood_3 TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS last_submissions (
+    discord_id TEXT NOT NULL,
+    platform   TEXT NOT NULL,
+    last_id    INTEGER,
+    PRIMARY KEY (discord_id, platform)
+  );
+
+  CREATE TABLE IF NOT EXISTS weekly_snapshots (
+    discord_id TEXT NOT NULL,
+    platform   TEXT NOT NULL,
+    rating     INTEGER DEFAULT 0,
+    solved     INTEGER DEFAULT 0,
+    snapshot_date TEXT,
+    PRIMARY KEY (discord_id, platform)
+  );
 `);
 
 // ─── User Helpers ────────────────────────────────────────────
@@ -319,6 +335,39 @@ function setConfig(key, value) {
   `).run(key, value);
 }
 
+// ─── Live Submissions Helpers ─────────────────────────────────
+function getLastSubmission(discordId, platform) {
+  const row = db.prepare('SELECT last_id FROM last_submissions WHERE discord_id = ? AND platform = ?').get(discordId, platform);
+  return row ? row.last_id : null;
+}
+
+function setLastSubmission(discordId, platform, lastId) {
+  db.prepare(`
+    INSERT INTO last_submissions (discord_id, platform, last_id) VALUES (?, ?, ?)
+    ON CONFLICT(discord_id, platform) DO UPDATE SET last_id = excluded.last_id
+  `).run(discordId, platform, lastId);
+}
+
+// ─── Weekly Wrap-Up Helpers ───────────────────────────────────
+function getWeeklySnapshot(discordId, platform) {
+  return db.prepare('SELECT * FROM weekly_snapshots WHERE discord_id = ? AND platform = ?').get(discordId, platform);
+}
+
+function setWeeklySnapshot(discordId, platform, rating, solved, dateStr) {
+  db.prepare(`
+    INSERT INTO weekly_snapshots (discord_id, platform, rating, solved, snapshot_date)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(discord_id, platform) DO UPDATE SET
+      rating = excluded.rating,
+      solved = excluded.solved,
+      snapshot_date = excluded.snapshot_date
+  `).run(discordId, platform, rating, solved, dateStr);
+}
+
+function getAllWeeklySnapshots() {
+  return db.prepare('SELECT * FROM weekly_snapshots').all();
+}
+
 module.exports = {
   db,
   getUser, upsertUser, linkPlatform, unlinkPlatform, getAllUsers,
@@ -329,5 +378,7 @@ module.exports = {
   insertRatingHistory, getRatingHistory,
   upsertStreak, getStreak, getAllStreaks,
   createVC, getVC, getActiveVCs, endVC, joinVC, getVCParticipants, updateVCSolved, getActiveVCForChannel,
-  setDailyProblems, getDailyProblems, setFirstBlood
+  setDailyProblems, getDailyProblems, setFirstBlood,
+  getLastSubmission, setLastSubmission,
+  getWeeklySnapshot, setWeeklySnapshot, getAllWeeklySnapshots
 };

@@ -11,6 +11,56 @@ const { getACUser }              = require('../utils/atcoder');
 const { buildDashboardEmbed } = require('../utils/embeds');
 const { computeLeaderboard }  = require('../commands/leaderboard');
 
+const CF_ROLES = [
+  { name: 'Legendary Grandmaster', min: 3000, color: 0xFF0000 },
+  { name: 'International Grandmaster', min: 2600, color: 0xFF0000 },
+  { name: 'Grandmaster', min: 2400, color: 0xFF0000 },
+  { name: 'International Master', min: 2300, color: 0xFF8C00 },
+  { name: 'Master', min: 2100, color: 0xFF8C00 },
+  { name: 'Candidate Master', min: 1900, color: 0xAA00AA },
+  { name: 'Expert', min: 1600, color: 0x0000FF },
+  { name: 'Specialist', min: 1400, color: 0x03A89E },
+  { name: 'Pupil', min: 1200, color: 0x008000 },
+  { name: 'Newbie', min: 0, color: 0x808080 }
+];
+
+// ─── Auto-Rank Roles ─────────────────────────────────────────
+async function updateDiscordRole(client, discordId, rating) {
+  if (!client) return;
+  const targetRoleData = CF_ROLES.find(r => rating >= r.min) || CF_ROLES[CF_ROLES.length - 1];
+  
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      const member = await guild.members.fetch(discordId).catch(() => null);
+      if (!member) continue;
+
+      let targetRole = guild.roles.cache.find(r => r.name === targetRoleData.name);
+      if (!targetRole) {
+        targetRole = await guild.roles.create({
+          name: targetRoleData.name,
+          color: targetRoleData.color,
+          reason: 'Auto-created CF Rank Role'
+        });
+      }
+
+      if (!member.roles.cache.has(targetRole.id)) {
+        await member.roles.add(targetRole).catch(() => {});
+      }
+
+      for (const roleDef of CF_ROLES) {
+        if (roleDef.name !== targetRoleData.name) {
+          const roleToRemove = guild.roles.cache.find(r => r.name === roleDef.name);
+          if (roleToRemove && member.roles.cache.has(roleToRemove.id)) {
+            await member.roles.remove(roleToRemove).catch(() => {});
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[RoleSync] Error for ${discordId}:`, err.message);
+    }
+  }
+}
+
 // ─── Rating Change Alert ─────────────────────────────────────
 async function postRatingChange(client, discordId, username, platform, oldRating, newRating, rankTitle, lastContest) {
   const channelId = getConfig('rating_channel_id') || process.env.RATING_CHANNEL_ID;
@@ -62,8 +112,11 @@ async function syncAllRatings(client) {
           const oldRating = existing['cf']?.rating ?? 0;
           upsertRating(user.discord_id, 'cf', stats);
           insertRatingHistory(user.discord_id, 'cf', stats.rating);
-          if (client && oldRating && oldRating !== stats.rating) {
-            await postRatingChange(client, user.discord_id, user.username, 'cf', oldRating, stats.rating, stats.rank_title, stats.lastContest);
+          if (client) {
+            await updateDiscordRole(client, user.discord_id, stats.rating);
+            if (oldRating && oldRating !== stats.rating) {
+              await postRatingChange(client, user.discord_id, user.username, 'cf', oldRating, stats.rating, stats.rank_title, stats.lastContest);
+            }
           }
         }).catch(err => console.error(`[RatingSync] CF error ${user.cf_handle}:`, err.message))
       );
@@ -141,25 +194,17 @@ async function updateDashboard(client) {
     }
 
     if (msg) {
-      // Edit existing message instead of deleting and sending new!
-      await msg.edit({ embeds: [embed] }).catch(async err => {
-        if (err.message && err.message.includes('GOAWAY')) {
-          console.warn('[Dashboard] Got GOAWAY on edit, retrying in 1 second...');
-          await new Promise(r => setTimeout(r, 1000));
-          return msg.edit({ embeds: [embed] }).catch(e => {
-            console.error('[Dashboard] Message edit retry error:', e.message);
-          });
-        }
-        console.error('[Dashboard] Message edit error:', err.message);
-      });
-      console.log('[Dashboard] Refreshed existing dashboard message.');
-    } else {
-      // Send a new message if it doesn't exist (with auto-retry for GOAWAY)
-      const newMsg = await channel.send({ embeds: [embed] }).catch(async err => {
-        if (err.message && err.message.includes('GOAWAY')) {
-          console.warn('[Dashboard] Got GOAWAY on send, retrying in 1 second...');
-          await new Promise(r => setTimeout(r, 1000));
-          return channel.send({ embeds: [embed] }).catch(e => {
+      // To trigger a notification while keeping only one message, we delete the old one
+      await msg.delete().catch(() => {});
+      console.log('[Dashboard] Deleted old dashboard message.');
+    }
+
+    // Send a new message (with auto-retry for GOAWAY)
+    const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(async err => {
+      if (err.message && err.message.includes('GOAWAY')) {
+        console.warn('[Dashboard] Got GOAWAY on send, retrying in 1 second...');
+        await new Promise(r => setTimeout(r, 1000));
+        return channel.send({ content: '@everyone', embeds: [embed] }).catch(e => {
             console.error('[Dashboard] Message send retry error:', e.message);
             return null;
           });
@@ -172,7 +217,6 @@ async function updateDashboard(client) {
         setConfig('dashboard_message_id', newMsg.id);
         console.log('[Dashboard] Created new dashboard message.');
       }
-    }
   } catch (err) {
     console.error('[Dashboard] updateDashboard critical error:', err);
   }

@@ -71,10 +71,14 @@ client.once('ready', () => {
   const { startContestFetcher } = require('./tasks/contestFetcher');
   const { startRatingSync }     = require('./tasks/ratingSync');
   const { startDailyChallenge } = require('./tasks/dailyChallenge');
+  const { startSubmissionFeed } = require('./tasks/submissionFeed');
+  const { startWeeklyWrapup }   = require('./tasks/weeklyWrapup');
 
   startContestFetcher(client);
   startRatingSync(client);
   startDailyChallenge(client);
+  startSubmissionFeed(client);
+  startWeeklyWrapup(client);
 });
 
 // ─── Error Handling ───────────────────────────────────────────

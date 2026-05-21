@@ -56,7 +56,7 @@ async function postDailySuggestions(client) {
     .setFooter({ text: 'Bot checks for First Blood automatically every 5 minutes!' })
     .setTimestamp();
 
-  await channel.send({ embeds: [cfEmbed] }).catch(() => {});
+  await channel.send({ content: '@everyone', embeds: [cfEmbed] }).catch(() => {});
   console.log('[Suggest] Posted daily suggestions.');
 }
 
@@ -118,7 +118,7 @@ async function checkFirstBloods(client) {
                   .setThumbnail('https://cdn-icons-png.flaticon.com/512/833/833472.png')
                   .setTimestamp();
 
-                await channel.send({ embeds: [embed] }).catch(() => {});
+                await channel.send({ content: `<@${user.discord_id}>`, embeds: [embed] }).catch(() => {});
                 console.log(`[FirstBlood] Announced ${user.cf_handle} for problem ${pId}`);
               }
             }
