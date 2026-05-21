@@ -258,9 +258,9 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
     }
   }
 
-  const now = new Date();
-  let hr = now.getHours();
-  if (now.getMinutes() > 50) hr += 1;
+  const dhakaTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
+  let hr = dhakaTime.getHours();
+  if (dhakaTime.getMinutes() > 50) hr += 1;
   hr = hr % 24;
   const ampm = hr >= 12 ? 'pm' : 'am';
   const displayHr = hr % 12 === 0 ? 12 : hr % 12;
