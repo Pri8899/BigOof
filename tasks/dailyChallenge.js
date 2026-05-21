@@ -8,9 +8,9 @@ const { getCFProblems }       = require('../utils/codeforces');
 
 // CF tiers as requested
 const CF_TIERS = [
-  { label: '🟢 Beginner (Under 1000)',     min: 800,  max: 1000 },
-  { label: '🔵 Intermediate (Under 1500)', min: 1000, max: 1500 },
-  { label: '🔴 Advanced (Under 2500)',     min: 1500, max: 2500 }
+  { label: '🟢 Beginner (Rating 800)',     min: 800,  max: 800 },
+  { label: '🔵 Intermediate (Rating 1000)', min: 1000, max: 1000 },
+  { label: '🔴 Advanced (Rating 1200)',     min: 1200, max: 1200 }
 ];
 
 // ─── Post Daily Problem Recommendations ──────────────────────
