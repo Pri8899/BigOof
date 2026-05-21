@@ -180,52 +180,40 @@ async function updateDashboard(client) {
 
 // ─── Scheduler ───────────────────────────────────────────────
 function startRatingSync(client) {
-  const syncOnStartup = async () => {
+  // Run immediately on boot
+  setTimeout(async () => {
     try {
-      const lastSyncStr = getConfig('last_rating_sync_time');
-      const lastSync = lastSyncStr ? parseInt(lastSyncStr, 10) : 0;
-      const now = Math.floor(Date.now() / 1000);
-
-      if (now - lastSync >= 3600) {
-        console.log(`[RatingSync] Startup trigger: last sync was ${now - lastSync}s ago. Syncing ratings...`);
-        await syncAllRatings(client);
-        await updateDashboard(client);
-        setConfig('last_rating_sync_time', now.toString());
-      } else {
-        console.log(`[RatingSync] Startup trigger: last sync was only ${now - lastSync}s ago. Loading dashboard from cache...`);
-        await updateDashboard(client);
-      }
+      console.log(`[RatingSync] Startup trigger: Syncing ratings and dashboard...`);
+      await syncAllRatings(client);
+      await updateDashboard(client);
     } catch (err) {
       console.error('[RatingSync Startup Error]', err);
     }
-  };
-
-  // Wait 10 seconds on startup to let the Discord REST HTTP/2 session establish
-  setTimeout(() => {
-    syncOnStartup();
   }, 10000);
 
-  // Robust hourly checker: runs every 60 seconds
-  // Immune to system/laptop sleep-wake cycles, container spin-downs, and timezone/drift errors.
-  setInterval(async () => {
+  // Hourly check for rating changes (runs at minute 30 of every hour)
+  cron.schedule('30 * * * *', async () => {
     try {
-      const lastSyncStr = getConfig('last_rating_sync_time');
-      const lastSync = lastSyncStr ? parseInt(lastSyncStr, 10) : 0;
-      const now = Math.floor(Date.now() / 1000);
-      
-      // If 1 hour (3600 seconds) has elapsed since the last successful sync
-      if (now - lastSync >= 3600) {
-        console.log(`[RatingSync] Hourly check triggered: last sync was ${now - lastSync}s ago. Syncing...`);
-        await syncAllRatings(client);
-        await updateDashboard(client);
-        setConfig('last_rating_sync_time', now.toString());
-      }
+      console.log(`[RatingSync] Hourly rating sync triggered.`);
+      await syncAllRatings(client);
     } catch (err) {
-      console.error('[RatingSync Hourly Check Error]', err);
+      console.error('[RatingSync Hourly Cron Error]', err);
     }
-  }, 60000);
+  });
 
-  console.log('[RatingSync] Sleep-resistant, fail-safe scheduler started (guaranteed hourly).');
+  // Exactly at 9:00 AM every morning in Asia/Dhaka time
+  cron.schedule('0 9 * * *', async () => {
+    try {
+      console.log(`[Dashboard] Scheduled 9 AM dashboard update triggered.`);
+      // Sync ratings before updating dashboard to ensure it's fresh
+      await syncAllRatings(client);
+      await updateDashboard(client);
+    } catch (err) {
+      console.error('[Dashboard 9AM Cron Error]', err);
+    }
+  }, { timezone: 'Asia/Dhaka' });
+
+  console.log('[RatingSync] Strict cron scheduler started (Hourly rating sync + 9 AM Dashboard update).');
 }
 
 module.exports = { startRatingSync, syncAllRatings, updateDashboard };

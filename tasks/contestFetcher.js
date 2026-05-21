@@ -126,60 +126,33 @@ async function performContestRefresh(client) {
   }
 }
 
-/**
- * Start the cron scheduler
- */
 function startContestFetcher(client) {
   // Add discord_msg_id column if missing (safe migration)
   try {
     db.prepare(`ALTER TABLE notified_contests ADD COLUMN discord_msg_id TEXT`).run();
   } catch (_) {}
 
-  // Post full grouped summary on startup
-  // Only fetch from APIs if it has been at least 1 hour since the last fetch.
-  // Otherwise, we build the embed from cached SQLite database to avoid resetting the 1-hour fetch timer!
-  const postSummaryOnStartup = async () => {
+  // Run immediately on boot
+  setTimeout(async () => {
     try {
-      const lastFetchStr = getConfig('last_contest_fetch_time');
-      const lastFetch = lastFetchStr ? parseInt(lastFetchStr, 10) : 0;
-      const now = Math.floor(Date.now() / 1000);
-
-      if (now - lastFetch >= 3600) {
-        console.log(`[ContestFetcher] Startup trigger: last fetch was ${now - lastFetch}s ago. Performing full refresh...`);
-        await performContestRefresh(client);
-      } else {
-        console.log(`[ContestFetcher] Startup trigger: last fetch was only ${now - lastFetch}s ago. Loading overview from cached database...`);
-        await postContestSummary(client);
-      }
+      console.log(`[ContestFetcher] Startup trigger: Performing full refresh...`);
+      await performContestRefresh(client);
     } catch (err) {
       console.error('[ContestFetcher Startup Error]', err);
     }
-  };
-
-  // Wait 5 seconds on startup to let the Discord REST HTTP/2 session establish
-  setTimeout(() => {
-    postSummaryOnStartup();
   }, 5000);
 
-  // Robust hourly checker: runs every 60 seconds
-  // Immune to system/laptop sleep-wake cycles, container spin-downs, and timezone/drift errors.
-  setInterval(async () => {
+  // Exact hourly schedule at the top of the hour (e.g. 14:00, 15:00)
+  cron.schedule('0 * * * *', async () => {
     try {
-      const lastFetchStr = getConfig('last_contest_fetch_time');
-      const lastFetch = lastFetchStr ? parseInt(lastFetchStr, 10) : 0;
-      const now = Math.floor(Date.now() / 1000);
-      
-      // If 1 hour (3600 seconds) has elapsed since the last successful refresh
-      if (now - lastFetch >= 3600) {
-        console.log(`[ContestFetcher] Hourly check triggered: last fetch was ${now - lastFetch}s ago. Refreshing...`);
-        await performContestRefresh(client);
-      }
+      console.log(`[ContestFetcher] Hourly cron triggered. Refreshing...`);
+      await performContestRefresh(client);
     } catch (err) {
-      console.error('[ContestFetcher Hourly Check Error]', err);
+      console.error('[ContestFetcher Hourly Cron Error]', err);
     }
-  }, 60000);
+  });
 
-  // Every day at 9am UTC+6 (03:00 UTC): refresh the grouped summary
+  // Every day at 9am UTC+6 (03:00 UTC): refresh the grouped summary (fallback)
   cron.schedule('0 3 * * *', async () => {
     try {
       await postContestSummary(client);
@@ -188,7 +161,7 @@ function startContestFetcher(client) {
     }
   }, { timezone: 'UTC' });
 
-  console.log('[ContestFetcher] Sleep-resistant, fail-safe scheduler started (guaranteed hourly).');
+  console.log('[ContestFetcher] Strict hourly cron scheduler started.');
 }
 
 /**

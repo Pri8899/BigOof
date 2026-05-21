@@ -76,66 +76,35 @@ async function postDailySuggestions(client) {
   console.log('[Suggest] Posted daily suggestions for all 3 platforms.');
 }
 
-// ─── Scheduler ───────────────────────────────────────────────
 function startDailyChallenge(client) {
-  // Run check every 60 seconds to support sleep-wake catch-up
-  setInterval(async () => {
+  // 9:00 PM (21:00) every day in Asia/Dhaka timezone
+  cron.schedule('0 21 * * *', async () => {
     try {
-      const formatterDate = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Dhaka',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      });
-      const formatterHour = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Dhaka',
-        hour: 'numeric',
-        hour12: false
-      });
+      console.log('[Daily] Scheduled 9 PM daily suggestions trigger. Posting...');
+      await postDailySuggestions(client);
       
-      const todayDateStr = formatterDate.format(new Date()); // e.g. "05/18/2026"
-      const currentHour = parseInt(formatterHour.format(new Date()), 10); // 0-23
-      
-      const lastPostDate = getConfig('last_suggest_post_date');
-      
-      // If we are at or after 9:00 PM (21:00 Dhaka time) and we haven't posted yet today
-      if (currentHour >= 21 && lastPostDate !== todayDateStr) {
-        console.log(`[Daily] Catch-up/scheduled daily suggestions trigger: current local time is past 9:00 PM Dhaka, last post was ${lastPostDate}. Posting...`);
-        
-        await postDailySuggestions(client);
-        
-        // Save today's date as the last posted date to prevent duplicates
-        const { setConfig } = require('../database/db');
-        setConfig('last_suggest_post_date', todayDateStr);
-      }
+      const { setConfig } = require('../database/db');
+      const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
+      setConfig('last_suggest_post_date', formatterDate.format(new Date()));
     } catch (err) {
       console.error('[Daily Scheduler Error]', err);
     }
-  }, 60000);
+  }, { timezone: 'Asia/Dhaka' });
 
   // Run immediately on boot with a 10s delay to perform catch-up if needed
   setTimeout(async () => {
     try {
-      const formatterDate = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Dhaka',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      });
-      const formatterHour = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Dhaka',
-        hour: 'numeric',
-        hour12: false
-      });
+      const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
+      const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', hour: 'numeric', hour12: false });
       
       const todayDateStr = formatterDate.format(new Date());
       const currentHour = parseInt(formatterHour.format(new Date()), 10);
+      const { getConfig, setConfig } = require('../database/db');
       const lastPostDate = getConfig('last_suggest_post_date');
       
       if (currentHour >= 21 && lastPostDate !== todayDateStr) {
         console.log('[Daily] Startup catch-up check: past 9:00 PM Dhaka and not posted today. Posting...');
         await postDailySuggestions(client);
-        const { setConfig } = require('../database/db');
         setConfig('last_suggest_post_date', todayDateStr);
       }
     } catch (err) {
@@ -143,7 +112,7 @@ function startDailyChallenge(client) {
     }
   }, 10000);
 
-  console.log('[Daily] Sleep-resistant, catch-up enabled scheduler started (guaranteed daily at 9:00 PM Dhaka time).');
+  console.log('[Daily] Strict 9 PM daily cron scheduler started.');
 }
 
 module.exports = { startDailyChallenge, postDailySuggestions };
