@@ -265,29 +265,39 @@ async function postContestSummary(client) {
     }
 
     if (msg) {
-      // To trigger a notification while keeping only one message, we delete the old one
-      await msg.delete().catch(() => {});
-      console.log('[ContestFetcher] Deleted old contest summary message.');
+      // Edit the existing message instead of deleting it to prevent spamming @everyone 
+      // and to minimize UI disruptions for the dropdown
+      const editPayload = { embeds: [embed] };
+      if (selectMenu) editPayload.components = [selectMenu];
+      
+      await msg.edit(editPayload).catch(err => {
+        console.error('[ContestFetcher] Failed to edit summary message:', err.message);
+        msg = null; // Fallback to sending a new one
+      });
+      console.log('[ContestFetcher] Edited existing contest summary message.');
     }
 
-    // Post fresh with @everyone (with auto-retry for GOAWAY)
-    const newMsg = await channel.send(payload).catch(async err => {
-        if (err.message && err.message.includes('GOAWAY')) {
-          console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
-          await new Promise(r => setTimeout(r, 1000));
-          return channel.send(payload).catch(e => {
-            console.error('[ContestFetcher] Message send retry error:', e.message);
-            return null;
-          });
-        }
-        console.error('[ContestFetcher] Message send error:', err.message);
-        return null;
+    let newMsg = msg;
+    if (!msg) {
+      // Post fresh with @everyone if no message exists
+      newMsg = await channel.send(payload).catch(async err => {
+          if (err.message && err.message.includes('GOAWAY')) {
+            console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
+            await new Promise(r => setTimeout(r, 1000));
+            return channel.send(payload).catch(e => {
+              console.error('[ContestFetcher] Message send retry error:', e.message);
+              return null;
+            });
+          }
+          console.error('[ContestFetcher] Message send error:', err.message);
+          return null;
       });
 
       if (newMsg) {
         setConfig('contest_summary_msg_id', newMsg.id);
         console.log('[ContestFetcher] Posted fresh contest summary.');
       }
+    }
 
     // Clean up any other messages in the channel to keep it strictly limited to the overview summary
     try {
