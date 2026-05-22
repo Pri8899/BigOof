@@ -3,12 +3,11 @@ const cron = require('node-cron');
 const {
   upsertContest, getUpcomingContests,
   markContestNotified, getReminders,
-  getConfig, setConfig, db,
-  updateReminderState
+  getConfig, setConfig, db
 } = require('../database/db');
 const { getCFContests }     = require('../utils/codeforces');
 const { getACContests }     = require('../utils/atcoder');
-const { buildContestEmbed, buildContestListEmbed, buildUrgentReminderEmbed, buildContestSelectMenu } = require('../utils/embeds');
+const { buildContestEmbed, buildContestListEmbed } = require('../utils/embeds');
 
 /**
  * Fetch all contests from all platforms and store new ones
@@ -61,6 +60,13 @@ async function sendNotifications(client) {
       markContestNotified(contest.contest_id, 'notified_24h');
       console.log(`[ContestFetcher] 📌 Marked 24h (no channel alert): [${contest.platform}] ${contest.name}`);
     }
+
+    // 1h: send DM reminders to 🔔 subscribers only
+    if (secondsUntil <= 3600 && secondsUntil > 0 && !contest.notified_1h) {
+      markContestNotified(contest.contest_id, 'notified_1h');
+      await sendReminders(client, contest);
+      console.log(`[ContestFetcher] 🔔 1h DM reminder sent: ${contest.name}`);
+    }
   }
 }
 
@@ -88,50 +94,17 @@ async function postContestNotification(channel, contest, timeLabel) {
 
 
 /**
- * Process frequent DM reminders for upcoming contests < 2h
+ * DM all users who subscribed for a 15-min reminder
  */
-async function processFrequentReminders(client) {
-  const now = Math.floor(Date.now() / 1000);
-  const contests = getUpcomingContests(2 * 3600); // next 2 hours
-
-  for (const contest of contests) {
-    const secondsUntil = contest.start_time - now;
-    if (secondsUntil <= 0) continue;
-
-    const subs = getReminders(contest.contest_id);
-    for (const sub of subs) {
-      const { discord_id, dm_acknowledged, last_dm_time } = sub;
-      let shouldSend = false;
-
-      if (secondsUntil <= 1800) {
-        // Less than 30 mins remaining: Every 10 mins (600s), ignore acknowledgment
-        if (now - last_dm_time >= 600) {
-          shouldSend = true;
-        }
-      } else {
-        // Between 30 mins and 2 hours: Every 30 mins (1800s), respect acknowledgment
-        if (dm_acknowledged === 0 && (now - last_dm_time >= 1800)) {
-          shouldSend = true;
-        }
-      }
-
-      if (shouldSend) {
-        try {
-          const user = await client.users.fetch(discord_id);
-          const embed = buildUrgentReminderEmbed(contest, secondsUntil);
-          const msg = await user.send({ embeds: [embed] });
-          
-          if (secondsUntil > 1800) {
-            await msg.react('✅').catch(() => {});
-          }
-
-          updateReminderState(discord_id, contest.contest_id, now, msg.id);
-          console.log(`[ContestFetcher] 🚨 Urgent DM sent to ${discord_id} for ${contest.name}`);
-        } catch (err) {
-          console.error(`[ContestFetcher] Failed to send urgent DM to ${discord_id}:`, err.message);
-        }
-      }
-    }
+async function sendReminders(client, contest) {
+  const subs = getReminders(contest.contest_id);
+  for (const { discord_id } of subs) {
+    try {
+      const user = await client.users.fetch(discord_id);
+      await user.send(
+        `🔔 **Reminder!** **${contest.name}** starts in **15 minutes**!\n🔗 ${contest.url}`
+      );
+    } catch { /* DMs disabled */ }
   }
 }
 
@@ -169,15 +142,6 @@ function startContestFetcher(client) {
     }
   }, 5000);
 
-  // Every minute for frequent reminders
-  cron.schedule('* * * * *', async () => {
-    try {
-      await processFrequentReminders(client);
-    } catch (err) {
-      console.error('[ContestFetcher Frequent Reminders Error]', err);
-    }
-  });
-
   // Exact hourly schedule at the top of the hour (e.g. 14:00, 15:00)
   cron.schedule('0 * * * *', async () => {
     try {
@@ -197,7 +161,7 @@ function startContestFetcher(client) {
     }
   }, { timezone: 'UTC' });
 
-  console.log('[ContestFetcher] Strict hourly and 1-minute cron schedulers started.');
+  console.log('[ContestFetcher] Strict hourly cron scheduler started.');
 }
 
 /**
@@ -227,10 +191,6 @@ async function postContestSummary(client) {
 
     const embed = buildContestListEmbed(contests, 'all', { cf: cfStatus, ac: acStatus });
     embed.setTitle('📅  Upcoming Contests — Full Overview');
-    
-    const selectMenu = buildContestSelectMenu(contests);
-    const payload = { content: '@everyone', embeds: [embed] };
-    if (selectMenu) payload.components = [selectMenu];
 
     // Fetch recent messages in the channel to find any existing summary messages sent by the bot
     let existingMessages = [];
@@ -265,39 +225,29 @@ async function postContestSummary(client) {
     }
 
     if (msg) {
-      // Edit the existing message instead of deleting it to prevent spamming @everyone 
-      // and to minimize UI disruptions for the dropdown
-      const editPayload = { embeds: [embed] };
-      if (selectMenu) editPayload.components = [selectMenu];
-      
-      await msg.edit(editPayload).catch(err => {
-        console.error('[ContestFetcher] Failed to edit summary message:', err.message);
-        msg = null; // Fallback to sending a new one
-      });
-      console.log('[ContestFetcher] Edited existing contest summary message.');
+      // To trigger a notification while keeping only one message, we delete the old one
+      await msg.delete().catch(() => {});
+      console.log('[ContestFetcher] Deleted old contest summary message.');
     }
 
-    let newMsg = msg;
-    if (!msg) {
-      // Post fresh with @everyone if no message exists
-      newMsg = await channel.send(payload).catch(async err => {
-          if (err.message && err.message.includes('GOAWAY')) {
-            console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
-            await new Promise(r => setTimeout(r, 1000));
-            return channel.send(payload).catch(e => {
-              console.error('[ContestFetcher] Message send retry error:', e.message);
-              return null;
-            });
-          }
-          console.error('[ContestFetcher] Message send error:', err.message);
-          return null;
+    // Post fresh with @everyone (with auto-retry for GOAWAY)
+    const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(async err => {
+        if (err.message && err.message.includes('GOAWAY')) {
+          console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
+          await new Promise(r => setTimeout(r, 1000));
+          return channel.send({ content: '@everyone', embeds: [embed] }).catch(e => {
+            console.error('[ContestFetcher] Message send retry error:', e.message);
+            return null;
+          });
+        }
+        console.error('[ContestFetcher] Message send error:', err.message);
+        return null;
       });
 
       if (newMsg) {
         setConfig('contest_summary_msg_id', newMsg.id);
         console.log('[ContestFetcher] Posted fresh contest summary.');
       }
-    }
 
     // Clean up any other messages in the channel to keep it strictly limited to the overview summary
     try {

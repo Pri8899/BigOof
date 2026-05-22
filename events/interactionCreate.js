@@ -1,28 +1,8 @@
-// events/interactionCreate.js — Route slash commands and handle interactions
-const { addReminder, getUpcomingContests } = require('../database/db');
-
+// events/interactionCreate.js — Route slash commands and handle reactions
 module.exports = {
   name: 'interactionCreate',
 
   async execute(interaction, client) {
-    if (interaction.isStringSelectMenu()) {
-      if (interaction.customId === 'contest_subscribe_select') {
-        const contestIds = interaction.values;
-        
-        let subbedCount = 0;
-        for (const cid of contestIds) {
-          addReminder(interaction.user.id, cid);
-          subbedCount++;
-        }
-
-        return interaction.reply({
-          content: `✅ Successfully subscribed to ${subbedCount} contest(s)! You will receive frequent DM reminders starting 2 hours before they begin.`,
-          ephemeral: true
-        });
-      }
-      return;
-    }
-
     if (!interaction.isChatInputCommand()) return;
 
     const command = client.commands.get(interaction.commandName);

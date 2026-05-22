@@ -1,5 +1,5 @@
 // utils/embeds.js — Discord embed builders
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 
 // Platform colors
 const COLORS = {
@@ -337,74 +337,6 @@ function buildWeeklyWrapupEmbed(topSolved, topRating) {
 }
 
 
-/**
- * Build an urgent reminder embed for DMs
- */
-function buildUrgentReminderEmbed(contest, timeRemainingSec) {
-  const startTime = contest.startTime ?? contest.start_time;
-  const platform  = contest.platform;
-  const name      = contest.name;
-  const url       = contest.url;
-
-  const min = Math.floor(timeRemainingSec / 60);
-  
-  const embed = new EmbedBuilder()
-    .setColor(0xE74C3C) // Red for urgency
-    .setAuthor({ name: '🚨 CONTEST REMINDER 🚨' })
-    .setTitle(`🏆 ${name}`)
-    .setURL(url)
-    .setDescription(`**This contest is starting in ${min} minutes!**\n\n<t:${startTime}:R>`)
-    .addFields(
-      {
-        name: '🔗 Link',
-        value: `[**Go to Contest**](${url})`,
-        inline: false
-      }
-    )
-    .setTimestamp();
-
-  if (timeRemainingSec > 1800) {
-    // more than 30 mins, so it's the 30 min interval reminder
-    embed.setFooter({ text: '⚠️ WARNING: React with ✅ to STOP receiving these 30-min reminders! (You will only get the final 10-min alerts later)' });
-  } else {
-    // less than 30 mins, 10 min interval
-    embed.setFooter({ text: '🚨 Starting soon! (These final 10-min reminders cannot be muted)' });
-  }
-
-  return embed;
-}
-
-/**
- * Build a dropdown menu for subscribing to contests
- */
-function buildContestSelectMenu(contests) {
-  // Discord select menus max out at 25 options
-  const options = contests.slice(0, 25).map(c => {
-    const start = c.startTime ?? c.start_time;
-    const dateObj = new Date(start * 1000);
-    const dateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    
-    let label = c.name;
-    if (label.length > 95) label = label.substring(0, 95) + '...';
-
-    return new StringSelectMenuOptionBuilder()
-      .setLabel(label)
-      .setDescription(`[${c.platform}] Starts: ${dateStr}`)
-      .setValue(c.contest_id ?? String(c.id));
-  });
-
-  if (options.length === 0) return null;
-
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId('contest_subscribe_select')
-    .setPlaceholder('Select contests to get DM reminders...')
-    .setMinValues(1)
-    .setMaxValues(options.length)
-    .addOptions(options);
-
-  return new ActionRowBuilder().addComponents(selectMenu);
-}
-
 module.exports = {
   buildContestEmbed,
   buildProfileEmbed,
@@ -413,7 +345,5 @@ module.exports = {
   successEmbed,
   errorEmbed,
   buildSubmissionEmbed,
-  buildWeeklyWrapupEmbed,
-  buildUrgentReminderEmbed,
-  buildContestSelectMenu
+  buildWeeklyWrapupEmbed
 };
