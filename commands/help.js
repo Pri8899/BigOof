@@ -4,7 +4,7 @@ const data = new SlashCommandBuilder()
   .setName('help')
   .setDescription('Request help in the debug help lobby')
   .addStringOption(opt =>
-    opt.setName('reason')
+    opt.setName('problem')
       .setDescription('Reason or description of the problem')
       .setRequired(true)
   );
@@ -30,7 +30,7 @@ module.exports = {
       });
     }
 
-    const reason = interaction.options.getString('reason');
+    const problem = interaction.options.getString('problem');
     const user = interaction.user;
 
     const attachments = [];
@@ -45,7 +45,7 @@ module.exports = {
       .setColor('#ff9900')
       .setTitle('🚨 Help Required!')
       .setDescription(`**${user.username}** is facing an issue and needs some assistance.`)
-      .addFields({ name: 'Problem Reason', value: reason })
+      .addFields({ name: 'Problem Description', value: problem })
       .setThumbnail(user.displayAvatarURL({ dynamic: true }))
       .setFooter({ text: 'Debug Help Lobby' })
       .setTimestamp();
