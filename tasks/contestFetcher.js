@@ -8,7 +8,7 @@ const {
 } = require('../database/db');
 const { getCFContests }     = require('../utils/codeforces');
 const { getACContests }     = require('../utils/atcoder');
-const { buildContestEmbed, buildContestListEmbed, buildUrgentReminderEmbed } = require('../utils/embeds');
+const { buildContestEmbed, buildContestListEmbed, buildUrgentReminderEmbed, buildContestSelectMenu } = require('../utils/embeds');
 
 /**
  * Fetch all contests from all platforms and store new ones
@@ -227,6 +227,10 @@ async function postContestSummary(client) {
 
     const embed = buildContestListEmbed(contests, 'all', { cf: cfStatus, ac: acStatus });
     embed.setTitle('📅  Upcoming Contests — Full Overview');
+    
+    const selectMenu = buildContestSelectMenu(contests);
+    const payload = { content: '@everyone', embeds: [embed] };
+    if (selectMenu) payload.components = [selectMenu];
 
     // Fetch recent messages in the channel to find any existing summary messages sent by the bot
     let existingMessages = [];
@@ -267,11 +271,11 @@ async function postContestSummary(client) {
     }
 
     // Post fresh with @everyone (with auto-retry for GOAWAY)
-    const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(async err => {
+    const newMsg = await channel.send(payload).catch(async err => {
         if (err.message && err.message.includes('GOAWAY')) {
           console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
           await new Promise(r => setTimeout(r, 1000));
-          return channel.send({ content: '@everyone', embeds: [embed] }).catch(e => {
+          return channel.send(payload).catch(e => {
             console.error('[ContestFetcher] Message send retry error:', e.message);
             return null;
           });

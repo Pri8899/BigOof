@@ -1,5 +1,5 @@
 // utils/embeds.js — Discord embed builders
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 
 // Platform colors
 const COLORS = {
@@ -374,6 +374,37 @@ function buildUrgentReminderEmbed(contest, timeRemainingSec) {
   return embed;
 }
 
+/**
+ * Build a dropdown menu for subscribing to contests
+ */
+function buildContestSelectMenu(contests) {
+  // Discord select menus max out at 25 options
+  const options = contests.slice(0, 25).map(c => {
+    const start = c.startTime ?? c.start_time;
+    const dateObj = new Date(start * 1000);
+    const dateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    
+    let label = c.name;
+    if (label.length > 95) label = label.substring(0, 95) + '...';
+
+    return new StringSelectMenuOptionBuilder()
+      .setLabel(label)
+      .setDescription(`[${c.platform}] Starts: ${dateStr}`)
+      .setValue(c.contest_id ?? String(c.id));
+  });
+
+  if (options.length === 0) return null;
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId('contest_subscribe_select')
+    .setPlaceholder('Select contests to get DM reminders...')
+    .setMinValues(1)
+    .setMaxValues(options.length)
+    .addOptions(options);
+
+  return new ActionRowBuilder().addComponents(selectMenu);
+}
+
 module.exports = {
   buildContestEmbed,
   buildProfileEmbed,
@@ -383,5 +414,6 @@ module.exports = {
   errorEmbed,
   buildSubmissionEmbed,
   buildWeeklyWrapupEmbed,
-  buildUrgentReminderEmbed
+  buildUrgentReminderEmbed,
+  buildContestSelectMenu
 };
