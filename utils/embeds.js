@@ -337,6 +337,43 @@ function buildWeeklyWrapupEmbed(topSolved, topRating) {
 }
 
 
+/**
+ * Build an urgent reminder embed for DMs
+ */
+function buildUrgentReminderEmbed(contest, timeRemainingSec) {
+  const startTime = contest.startTime ?? contest.start_time;
+  const platform  = contest.platform;
+  const name      = contest.name;
+  const url       = contest.url;
+
+  const min = Math.floor(timeRemainingSec / 60);
+  
+  const embed = new EmbedBuilder()
+    .setColor(0xE74C3C) // Red for urgency
+    .setAuthor({ name: '🚨 CONTEST REMINDER 🚨' })
+    .setTitle(`🏆 ${name}`)
+    .setURL(url)
+    .setDescription(`**This contest is starting in ${min} minutes!**\n\n<t:${startTime}:R>`)
+    .addFields(
+      {
+        name: '🔗 Link',
+        value: `[**Go to Contest**](${url})`,
+        inline: false
+      }
+    )
+    .setTimestamp();
+
+  if (timeRemainingSec > 1800) {
+    // more than 30 mins, so it's the 30 min interval reminder
+    embed.setFooter({ text: '⚠️ WARNING: React with ✅ to STOP receiving these 30-min reminders! (You will only get the final 10-min alerts later)' });
+  } else {
+    // less than 30 mins, 10 min interval
+    embed.setFooter({ text: '🚨 Starting soon! (These final 10-min reminders cannot be muted)' });
+  }
+
+  return embed;
+}
+
 module.exports = {
   buildContestEmbed,
   buildProfileEmbed,
@@ -345,5 +382,6 @@ module.exports = {
   successEmbed,
   errorEmbed,
   buildSubmissionEmbed,
-  buildWeeklyWrapupEmbed
+  buildWeeklyWrapupEmbed,
+  buildUrgentReminderEmbed
 };

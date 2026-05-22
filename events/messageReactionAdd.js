@@ -1,12 +1,11 @@
-// events/messageReactionAdd.js — Handle 🔔 reactions for contest reminders
-const { addReminder, getUpcomingContests } = require('../database/db');
+// events/messageReactionAdd.js — Handle reactions for contest reminders
+const { addReminder, getUpcomingContests, getReminderByMsgId, acknowledgeReminder } = require('../database/db');
 
 module.exports = {
   name: 'messageReactionAdd',
 
   async execute(reaction, user) {
     if (user.bot) return;
-    if (reaction.emoji.name !== '🔔') return;
 
     // Fetch partial if needed
     if (reaction.partial) {
@@ -16,21 +15,35 @@ module.exports = {
       try { await reaction.message.fetch(); } catch { return; }
     }
 
-    // Find the contest this message is about by matching the message ID to stored embeds
-    // We store the discord message ID in the contest table
     const msg = reaction.message;
-    const contests = getUpcomingContests();
 
-    // Check if this message is a contest notification
-    const contest = contests.find(c => c.discord_msg_id === msg.id);
-    if (!contest) return;
+    // ── Handle DM Acknowledgment (✅) ──
+    if (!msg.guildId && reaction.emoji.name === '✅') {
+      const reminder = getReminderByMsgId(msg.id);
+      if (reminder) {
+        acknowledgeReminder(user.id, reminder.contest_id);
+        try {
+          await user.send(`✅ Reminders muted! (You will still receive the final 10-minute alerts)`);
+        } catch {}
+      }
+      return;
+    }
 
-    addReminder(user.id, contest.contest_id);
+    // ── Handle Channel Subscribe (🔔) ──
+    if (reaction.emoji.name === '🔔') {
+      const contests = getUpcomingContests();
+      
+      // Check if this message is a contest notification
+      const contest = contests.find(c => c.discord_msg_id === msg.id);
+      if (!contest) return;
 
-    try {
-      await user.send(`✅ You'll receive a DM reminder **15 minutes before** **${contest.name}** starts!`);
-    } catch {
-      // DMs disabled
+      addReminder(user.id, contest.contest_id);
+
+      try {
+        await user.send(`✅ You'll receive frequent DM reminders for **${contest.name}** starting 2 hours before it begins!\n\n⚠️ **Warning:** If you react with ✅ to any of those DMs, the bot will **STOP** sending you the 30-minute reminders.`);
+      } catch {
+        // DMs disabled
+      }
     }
   }
 };

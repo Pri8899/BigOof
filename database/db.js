@@ -44,8 +44,11 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS reminders (
-    discord_id   TEXT NOT NULL,
-    contest_id   TEXT NOT NULL,
+    discord_id       TEXT NOT NULL,
+    contest_id       TEXT NOT NULL,
+    dm_acknowledged  INTEGER DEFAULT 0,
+    last_dm_time     INTEGER DEFAULT 0,
+    dm_msg_id        TEXT,
     PRIMARY KEY (discord_id, contest_id)
   );
 
@@ -119,6 +122,11 @@ db.exec(`
     PRIMARY KEY (discord_id, platform)
   );
 `);
+
+// Safe migrations for reminders
+try { db.prepare(`ALTER TABLE reminders ADD COLUMN dm_acknowledged INTEGER DEFAULT 0`).run(); } catch (_) {}
+try { db.prepare(`ALTER TABLE reminders ADD COLUMN last_dm_time INTEGER DEFAULT 0`).run(); } catch (_) {}
+try { db.prepare(`ALTER TABLE reminders ADD COLUMN dm_msg_id TEXT`).run(); } catch (_) {}
 
 // ─── User Helpers ────────────────────────────────────────────
 function getUser(discordId) {
@@ -204,7 +212,25 @@ function addReminder(discordId, contestId) {
 }
 
 function getReminders(contestId) {
-  return db.prepare('SELECT discord_id FROM reminders WHERE contest_id = ?').all(contestId);
+  return db.prepare('SELECT * FROM reminders WHERE contest_id = ?').all(contestId);
+}
+
+function updateReminderState(discordId, contestId, lastDmTime, dmMsgId) {
+  db.prepare(`
+    UPDATE reminders SET last_dm_time = ?, dm_msg_id = ? 
+    WHERE discord_id = ? AND contest_id = ?
+  `).run(lastDmTime, dmMsgId, discordId, contestId);
+}
+
+function acknowledgeReminder(discordId, contestId) {
+  db.prepare(`
+    UPDATE reminders SET dm_acknowledged = 1 
+    WHERE discord_id = ? AND contest_id = ?
+  `).run(discordId, contestId);
+}
+
+function getReminderByMsgId(msgId) {
+  return db.prepare('SELECT * FROM reminders WHERE dm_msg_id = ?').get(msgId);
 }
 
 // ─── Rating History Helpers ──────────────────────────────────
@@ -373,7 +399,7 @@ module.exports = {
   getUser, upsertUser, linkPlatform, unlinkPlatform, getAllUsers,
   upsertRating, getRatings, getAllRatings,
   contestExists, upsertContest, getUpcomingContests, markContestNotified,
-  addReminder, getReminders,
+  addReminder, getReminders, updateReminderState, acknowledgeReminder, getReminderByMsgId,
   getConfig, setConfig,
   insertRatingHistory, getRatingHistory,
   upsertStreak, getStreak, getAllStreaks,

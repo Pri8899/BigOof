@@ -3,11 +3,12 @@ const cron = require('node-cron');
 const {
   upsertContest, getUpcomingContests,
   markContestNotified, getReminders,
-  getConfig, setConfig, db
+  getConfig, setConfig, db,
+  updateReminderState
 } = require('../database/db');
 const { getCFContests }     = require('../utils/codeforces');
 const { getACContests }     = require('../utils/atcoder');
-const { buildContestEmbed, buildContestListEmbed } = require('../utils/embeds');
+const { buildContestEmbed, buildContestListEmbed, buildUrgentReminderEmbed } = require('../utils/embeds');
 
 /**
  * Fetch all contests from all platforms and store new ones
@@ -60,13 +61,6 @@ async function sendNotifications(client) {
       markContestNotified(contest.contest_id, 'notified_24h');
       console.log(`[ContestFetcher] 📌 Marked 24h (no channel alert): [${contest.platform}] ${contest.name}`);
     }
-
-    // 1h: send DM reminders to 🔔 subscribers only
-    if (secondsUntil <= 3600 && secondsUntil > 0 && !contest.notified_1h) {
-      markContestNotified(contest.contest_id, 'notified_1h');
-      await sendReminders(client, contest);
-      console.log(`[ContestFetcher] 🔔 1h DM reminder sent: ${contest.name}`);
-    }
   }
 }
 
@@ -94,17 +88,50 @@ async function postContestNotification(channel, contest, timeLabel) {
 
 
 /**
- * DM all users who subscribed for a 15-min reminder
+ * Process frequent DM reminders for upcoming contests < 2h
  */
-async function sendReminders(client, contest) {
-  const subs = getReminders(contest.contest_id);
-  for (const { discord_id } of subs) {
-    try {
-      const user = await client.users.fetch(discord_id);
-      await user.send(
-        `🔔 **Reminder!** **${contest.name}** starts in **15 minutes**!\n🔗 ${contest.url}`
-      );
-    } catch { /* DMs disabled */ }
+async function processFrequentReminders(client) {
+  const now = Math.floor(Date.now() / 1000);
+  const contests = getUpcomingContests(2 * 3600); // next 2 hours
+
+  for (const contest of contests) {
+    const secondsUntil = contest.start_time - now;
+    if (secondsUntil <= 0) continue;
+
+    const subs = getReminders(contest.contest_id);
+    for (const sub of subs) {
+      const { discord_id, dm_acknowledged, last_dm_time } = sub;
+      let shouldSend = false;
+
+      if (secondsUntil <= 1800) {
+        // Less than 30 mins remaining: Every 10 mins (600s), ignore acknowledgment
+        if (now - last_dm_time >= 600) {
+          shouldSend = true;
+        }
+      } else {
+        // Between 30 mins and 2 hours: Every 30 mins (1800s), respect acknowledgment
+        if (dm_acknowledged === 0 && (now - last_dm_time >= 1800)) {
+          shouldSend = true;
+        }
+      }
+
+      if (shouldSend) {
+        try {
+          const user = await client.users.fetch(discord_id);
+          const embed = buildUrgentReminderEmbed(contest, secondsUntil);
+          const msg = await user.send({ embeds: [embed] });
+          
+          if (secondsUntil > 1800) {
+            await msg.react('✅').catch(() => {});
+          }
+
+          updateReminderState(discord_id, contest.contest_id, now, msg.id);
+          console.log(`[ContestFetcher] 🚨 Urgent DM sent to ${discord_id} for ${contest.name}`);
+        } catch (err) {
+          console.error(`[ContestFetcher] Failed to send urgent DM to ${discord_id}:`, err.message);
+        }
+      }
+    }
   }
 }
 
@@ -142,6 +169,15 @@ function startContestFetcher(client) {
     }
   }, 5000);
 
+  // Every minute for frequent reminders
+  cron.schedule('* * * * *', async () => {
+    try {
+      await processFrequentReminders(client);
+    } catch (err) {
+      console.error('[ContestFetcher Frequent Reminders Error]', err);
+    }
+  });
+
   // Exact hourly schedule at the top of the hour (e.g. 14:00, 15:00)
   cron.schedule('0 * * * *', async () => {
     try {
@@ -161,7 +197,7 @@ function startContestFetcher(client) {
     }
   }, { timezone: 'UTC' });
 
-  console.log('[ContestFetcher] Strict hourly cron scheduler started.');
+  console.log('[ContestFetcher] Strict hourly and 1-minute cron schedulers started.');
 }
 
 /**
