@@ -120,25 +120,40 @@ async function scrapeAtCoderContests() {
 // Helper to fetch solved count from submissions API
 async function getACSolvedCount(handle) {
   try {
+    const solvedProblems = new Set();
+    let fromSecond = 0;
+    while (true) {
+      const res = await axios.get(
+        `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=${fromSecond}`,
+        { timeout: 10000, headers: KENKOOOO_HEADERS }
+      );
+      if (!Array.isArray(res.data) || res.data.length === 0) {
+        break;
+      }
+      for (const s of res.data) {
+        if (s.result === 'AC') {
+          solvedProblems.add(s.problem_id);
+        }
+      }
+      if (res.data.length < 500) {
+        break;
+      }
+      const maxEpoch = Math.max(...res.data.map(s => s.epoch_second));
+      fromSecond = maxEpoch + 1;
+    }
+    if (solvedProblems.size > 0) {
+      return solvedProblems.size;
+    }
+  } catch (_) {}
+
+  // Fallback to ac_rank if submissions fetch fails
+  try {
     const rankRes = await axios.get(
       `https://kenkoooo.com/atcoder/atcoder-api/v3/user/ac_rank?user=${handle}`,
       { timeout: 10000, headers: KENKOOOO_HEADERS }
     );
     if (rankRes.data && rankRes.data.count !== undefined) {
       return rankRes.data.count;
-    }
-  } catch (_) {}
-
-  try {
-    const res = await axios.get(
-      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=0`,
-      { timeout: 10000, headers: KENKOOOO_HEADERS }
-    );
-    if (Array.isArray(res.data)) {
-      const solvedProblems = new Set(
-        res.data.filter(s => s.result === 'AC').map(s => s.problem_id)
-      );
-      return solvedProblems.size;
     }
   } catch (_) {}
   return 0;
