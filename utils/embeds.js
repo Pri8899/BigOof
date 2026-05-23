@@ -76,7 +76,6 @@ function buildContestEmbed(contest, timeUntilLabel) {
         inline: false
       }
     )
-    .setFooter({ text: '🔔 React with 🔔 below to get a DM reminder 15 min before start!' })
     .setTimestamp();
 }
 

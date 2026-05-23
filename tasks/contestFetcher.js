@@ -2,7 +2,6 @@
 const cron = require('node-cron');
 const {
   upsertContest, getUpcomingContests,
-  markContestNotified, getReminders,
   getConfig, setConfig, db
 } = require('../database/db');
 const { getCFContests }     = require('../utils/codeforces');
@@ -44,78 +43,15 @@ async function fetchAndStoreContests() {
 }
 
 
-/**
- * Post individual alerts for upcoming contests at 24h mark so users can subscribe via reactions,
- * and send DM reminders to 🔔 subscribers at the 1h/15-min mark.
- */
-async function sendNotifications(client) {
-  const now      = Math.floor(Date.now() / 1000);
-  const contests = getUpcomingContests(25 * 3600); // next 25 hours
-
-  for (const contest of contests) {
-    const secondsUntil = contest.start_time - now;
-
-    // Mark 24h notified (no channel message as requested)
-    if (secondsUntil <= 86400 && secondsUntil > 0 && !contest.notified_24h) {
-      markContestNotified(contest.contest_id, 'notified_24h');
-      console.log(`[ContestFetcher] 📌 Marked 24h (no channel alert): [${contest.platform}] ${contest.name}`);
-    }
-
-    // 1h: send DM reminders to 🔔 subscribers only
-    if (secondsUntil <= 3600 && secondsUntil > 0 && !contest.notified_1h) {
-      markContestNotified(contest.contest_id, 'notified_1h');
-      await sendReminders(client, contest);
-      console.log(`[ContestFetcher] 🔔 1h DM reminder sent: ${contest.name}`);
-    }
-  }
-}
-
-/**
- * Post a single contest embed to the channel
- */
-async function postContestNotification(channel, contest, timeLabel) {
-  try {
-    const embed = buildContestEmbed(contest, timeLabel);
-
-    const msg = await channel.send({ content: '@everyone', embeds: [embed] });
-    await msg.react('🔔').catch(() => {});
-
-    // Store message ID for reaction tracking (synchronous SQLite)
-    try {
-      db.prepare(`UPDATE notified_contests SET discord_msg_id = ? WHERE contest_id = ?`)
-        .run(msg.id, contest.contest_id);
-    } catch (_) {}
-
-    console.log(`[ContestFetcher] ✅ Notified: [${contest.platform}] ${contest.name}`);
-  } catch (err) {
-    console.error('[ContestFetcher] Post error:', err.message);
-  }
-}
 
 
 /**
- * DM all users who subscribed for a 15-min reminder
- */
-async function sendReminders(client, contest) {
-  const subs = getReminders(contest.contest_id);
-  for (const { discord_id } of subs) {
-    try {
-      const user = await client.users.fetch(discord_id);
-      await user.send(
-        `🔔 **Reminder!** **${contest.name}** starts in **15 minutes**!\n🔗 ${contest.url}`
-      );
-    } catch { /* DMs disabled */ }
-  }
-}
-
-/**
- * Run a full contest refresh cycle: fetch APIs, process reminders/alerts, post overview.
+ * Run a full contest refresh cycle: fetch APIs, post overview.
  * Updates the last fetch timestamp in SQLite ONLY if everything completes successfully.
  */
 async function performContestRefresh(client) {
   console.log('[ContestFetcher] Starting full contest refresh cycle...');
   await fetchAndStoreContests();
-  await sendNotifications(client);
   await postContestSummary(client);
   
   try {

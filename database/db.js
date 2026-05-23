@@ -1,8 +1,16 @@
 // database/db.js — SQLite setup and helper functions
 const Database = require('better-sqlite3');
+const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '..', 'cpbot.db');
+let defaultDbPath = path.join(__dirname, '..', 'cpbot.db');
+
+// If deployed on Railway and the /data volume exists, use it automatically!
+if (process.env.RAILWAY_ENVIRONMENT && fs.existsSync('/data')) {
+  defaultDbPath = '/data/cpbot.db';
+}
+
+const DB_PATH = process.env.DATABASE_PATH || defaultDbPath;
 const db = new Database(DB_PATH);
 
 // Enable WAL mode for better performance
@@ -41,12 +49,6 @@ db.exec(`
     notified_24h  INTEGER DEFAULT 0,
     notified_1h   INTEGER DEFAULT 0,
     discord_msg_id TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS reminders (
-    discord_id   TEXT NOT NULL,
-    contest_id   TEXT NOT NULL,
-    PRIMARY KEY (discord_id, contest_id)
   );
 
   CREATE TABLE IF NOT EXISTS guild_config (
@@ -194,17 +196,6 @@ function getUpcomingContests(maxSeconds = 7 * 24 * 3600) {
 
 function markContestNotified(contestId, field) {
   db.prepare(`UPDATE notified_contests SET ${field} = 1 WHERE contest_id = ?`).run(contestId);
-}
-
-// ─── Reminder Helpers ─────────────────────────────────────────
-function addReminder(discordId, contestId) {
-  db.prepare(`
-    INSERT OR IGNORE INTO reminders (discord_id, contest_id) VALUES (?, ?)
-  `).run(discordId, contestId);
-}
-
-function getReminders(contestId) {
-  return db.prepare('SELECT discord_id FROM reminders WHERE contest_id = ?').all(contestId);
 }
 
 // ─── Rating History Helpers ──────────────────────────────────
@@ -373,7 +364,6 @@ module.exports = {
   getUser, upsertUser, linkPlatform, unlinkPlatform, getAllUsers,
   upsertRating, getRatings, getAllRatings,
   contestExists, upsertContest, getUpcomingContests, markContestNotified,
-  addReminder, getReminders,
   getConfig, setConfig,
   insertRatingHistory, getRatingHistory,
   upsertStreak, getStreak, getAllStreaks,
