@@ -54,9 +54,10 @@ async function fetchACSubmissions(user) {
     let lastTime = getLastSubmission(user.discord_id, 'ac');
     const now = Math.floor(Date.now() / 1000);
     
-    // If first time, just set it to now to avoid fetching all history
+    // If first time, set it to 1 hour ago instead of exactly 'now'.
+    // This prevents missing submissions if the bot restarts or if Kenkoooo has a delay.
     if (lastTime === null) {
-      setLastSubmission(user.discord_id, 'ac', now);
+      setLastSubmission(user.discord_id, 'ac', now - 3600);
       return [];
     }
     

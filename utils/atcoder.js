@@ -120,6 +120,16 @@ async function scrapeAtCoderContests() {
 // Helper to fetch solved count from submissions API
 async function getACSolvedCount(handle) {
   try {
+    const rankRes = await axios.get(
+      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/ac_rank?user=${handle}`,
+      { timeout: 10000, headers: KENKOOOO_HEADERS }
+    );
+    if (rankRes.data && rankRes.data.count !== undefined) {
+      return rankRes.data.count;
+    }
+  } catch (_) {}
+
+  try {
     const res = await axios.get(
       `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=0`,
       { timeout: 10000, headers: KENKOOOO_HEADERS }
