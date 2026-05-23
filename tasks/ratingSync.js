@@ -109,12 +109,13 @@ async function syncAllRatings(client) {
       tasks.push(
         getCFUser(user.cf_handle).then(async stats => {
           if (!stats) return;
+          const hasExisting = existing['cf'] !== undefined;
           const oldRating = existing['cf']?.rating ?? 0;
           upsertRating(user.discord_id, 'cf', stats);
           insertRatingHistory(user.discord_id, 'cf', stats.rating);
           if (client) {
             await updateDiscordRole(client, user.discord_id, stats.rating);
-            if (oldRating && oldRating !== stats.rating) {
+            if (hasExisting && oldRating !== stats.rating) {
               await postRatingChange(client, user.discord_id, user.username, 'cf', oldRating, stats.rating, stats.rank_title, stats.lastContest);
             }
           }
@@ -126,10 +127,11 @@ async function syncAllRatings(client) {
       tasks.push(
         getACUser(user.ac_handle).then(async stats => {
           if (!stats) return;
+          const hasExisting = existing['ac'] !== undefined;
           const oldRating = existing['ac']?.rating ?? 0;
           upsertRating(user.discord_id, 'ac', stats);
           insertRatingHistory(user.discord_id, 'ac', stats.rating);
-          if (client && oldRating && oldRating !== stats.rating) {
+          if (client && hasExisting && oldRating !== stats.rating) {
             await postRatingChange(client, user.discord_id, user.username, 'ac', oldRating, stats.rating, stats.rank_title, stats.lastContest);
           }
         }).catch(err => console.error(`[RatingSync] AC error ${user.ac_handle}:`, err.message))
