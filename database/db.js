@@ -39,6 +39,11 @@ db.exec(`
     PRIMARY KEY (discord_id, platform)
   );
 
+  CREATE TABLE IF NOT EXISTS cf_contest_cache (
+    contest_id   TEXT PRIMARY KEY,
+    name         TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS notified_contests (
     contest_id    TEXT PRIMARY KEY,
     platform      TEXT NOT NULL,
@@ -359,6 +364,15 @@ function getAllWeeklySnapshots() {
   return db.prepare('SELECT * FROM weekly_snapshots').all();
 }
 
+function getCachedContestName(contestId) {
+  const row = db.prepare('SELECT name FROM cf_contest_cache WHERE contest_id = ?').get(String(contestId));
+  return row ? row.name : null;
+}
+
+function cacheContestName(contestId, name) {
+  db.prepare('INSERT OR REPLACE INTO cf_contest_cache (contest_id, name) VALUES (?, ?)').run(String(contestId), name);
+}
+
 module.exports = {
   db,
   getUser, upsertUser, linkPlatform, unlinkPlatform, getAllUsers,
@@ -370,5 +384,6 @@ module.exports = {
   createVC, getVC, getActiveVCs, endVC, joinVC, getVCParticipants, updateVCSolved, getActiveVCForChannel,
   setDailyProblems, getDailyProblems, setFirstBlood,
   getLastSubmission, setLastSubmission,
-  getWeeklySnapshot, setWeeklySnapshot, getAllWeeklySnapshots
+  getWeeklySnapshot, setWeeklySnapshot, getAllWeeklySnapshots,
+  getCachedContestName, cacheContestName
 };

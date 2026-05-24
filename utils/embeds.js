@@ -276,25 +276,33 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
 /**
  * Build submission embed for Live Feed
  */
-function buildSubmissionEmbed(user, problem, platform, ratingInfo) {
+function buildSubmissionEmbed(user, problem, platform) {
   const isCF = platform === 'cf';
   let titleSuffix = '';
   
-  if (ratingInfo) {
-    if (isCF) {
-      const rating = ratingInfo.rating ?? 0;
-      let div = 'Unrated';
-      if (rating >= 1900) div = 'Div. 1';
-      else if (rating >= 1600) div = 'Div. 2';
-      else if (rating >= 1400) div = 'Div. 3';
-      else if (rating > 0) div = 'Div. 4';
+  if (isCF) {
+    if (problem.contestName) {
+      const match = problem.contestName.match(/Div\.\s*\d+(\s*\+\s*Div\.\s*\d+)*/i);
+      const match2 = problem.contestName.match(/Div\s*\d+(\s*\+\s*Div\s*\d+)*/i);
       
-      titleSuffix = ` (${div})`;
-    } else {
-      const rank = ratingInfo.rank_title ?? 'Unrated';
-      if (rank !== 'Unrated') {
-        titleSuffix = ` (${rank})`;
-      }
+      let div = null;
+      if (match) div = match[0];
+      else if (match2) div = match2[0];
+      else if (problem.contestName.includes("Educational")) div = "Div. 2";
+      else if (problem.contestName.includes("Global Round")) div = "Global";
+      
+      if (div) titleSuffix = ` (${div})`;
+    }
+  } else {
+    if (problem.contestId) {
+      const lower = problem.contestId.toLowerCase();
+      let div = null;
+      if (lower.startsWith('abc')) div = 'ABC';
+      else if (lower.startsWith('arc')) div = 'ARC';
+      else if (lower.startsWith('agc')) div = 'AGC';
+      else if (lower.startsWith('ahc')) div = 'AHC';
+      
+      if (div) titleSuffix = ` (${div})`;
     }
   }
 

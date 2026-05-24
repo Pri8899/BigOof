@@ -1,10 +1,28 @@
 // tasks/submissionFeed.js — Live feed for accepted submissions
 const cron = require('node-cron');
 const axios = require('axios');
-const { getAllUsers, getConfig, getLastSubmission, setLastSubmission, getRatings } = require('../database/db');
+const { getAllUsers, getConfig, getLastSubmission, setLastSubmission, getCachedContestName, cacheContestName } = require('../database/db');
 const { buildSubmissionEmbed } = require('../utils/embeds');
 
 const CF_BASE = 'https://codeforces.com/api';
+
+async function getOrFetchContestName(contestId) {
+  if (!contestId) return null;
+  let name = getCachedContestName(contestId);
+  if (name) return name;
+
+  try {
+    const res = await axios.get(`${CF_BASE}/contest.standings?contestId=${contestId}&from=1&count=1`, { timeout: 5000 });
+    if (res.data.status === 'OK' && res.data.result.contest) {
+      name = res.data.result.contest.name;
+      cacheContestName(contestId, name);
+      return name;
+    }
+  } catch (err) {
+    console.error(`[SubmissionFeed] Failed to fetch contest name for ${contestId}:`, err.message);
+  }
+  return null;
+}
 
 async function fetchCFSubmissions(user) {
   if (!user.cf_handle) return [];
@@ -25,11 +43,13 @@ async function fetchCFSubmissions(user) {
       } else if (sub.id > lastId) {
         highestId = Math.max(highestId, sub.id);
         if (sub.verdict === 'OK' && sub.problem) {
+          const contestName = await getOrFetchContestName(sub.problem.contestId);
           newAc.push({
             name: sub.problem.name,
             url: `https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`,
             rating: sub.problem.rating,
-            tags: sub.problem.tags
+            tags: sub.problem.tags,
+            contestName: contestName
           });
         }
       }
@@ -80,7 +100,8 @@ async function fetchACSubmissions(user) {
           name: `${sub.problem_id}`,
           url: `https://atcoder.jp/contests/${sub.contest_id}/tasks/${sub.problem_id}`,
           difficulty: null,
-          tags: []
+          tags: [],
+          contestId: sub.contest_id
         });
       }
     }
@@ -105,22 +126,18 @@ async function runSubmissionFeed(client) {
   const users = getAllUsers();
   
   for (const user of users) {
-    const ratings = getRatings(user.discord_id) || [];
-    const cfRating = ratings.find(r => r.platform === 'cf');
-    const acRating = ratings.find(r => r.platform === 'ac');
-
     const [cfNew, acNew] = await Promise.all([
       fetchCFSubmissions(user),
       fetchACSubmissions(user)
     ]);
     
     for (const sub of cfNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'cf', cfRating);
+      const embed = buildSubmissionEmbed(user, sub, 'cf');
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
     
     for (const sub of acNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'ac', acRating);
+      const embed = buildSubmissionEmbed(user, sub, 'ac');
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
     
