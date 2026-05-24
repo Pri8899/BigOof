@@ -11,15 +11,31 @@ async function getOrFetchContestName(contestId) {
   let name = getCachedContestName(contestId);
   if (name) return name;
 
+  // Try ratingChanges first
   try {
-    const res = await axios.get(`${CF_BASE}/contest.standings?contestId=${contestId}&from=1&count=1`, { timeout: 5000 });
-    if (res.data.status === 'OK' && res.data.result.contest) {
-      name = res.data.result.contest.name;
+    const res = await axios.get(`${CF_BASE}/contest.ratingChanges?contestId=${contestId}`, { timeout: 5000 });
+    if (res.data.status === 'OK' && res.data.result && res.data.result.length > 0) {
+      name = res.data.result[0].contestName;
       cacheContestName(contestId, name);
       return name;
     }
   } catch (err) {
-    console.error(`[SubmissionFeed] Failed to fetch contest name for ${contestId}:`, err.message);
+    // Ignore and fallback
+  }
+
+  // Fallback to contest.list
+  try {
+    const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 8000 });
+    if (res.data.status === 'OK') {
+      const contest = res.data.result.find(c => c.id === Number(contestId));
+      if (contest) {
+        name = contest.name;
+        cacheContestName(contestId, name);
+        return name;
+      }
+    }
+  } catch (err) {
+    console.error(`[SubmissionFeed] Failed to fetch contest name from list for ${contestId}:`, err.message);
   }
   return null;
 }
