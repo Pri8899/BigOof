@@ -1,7 +1,7 @@
 // tasks/submissionFeed.js — Live feed for accepted submissions
 const cron = require('node-cron');
 const axios = require('axios');
-const { getAllUsers, getConfig, getLastSubmission, setLastSubmission } = require('../database/db');
+const { getAllUsers, getConfig, getLastSubmission, setLastSubmission, getRatings } = require('../database/db');
 const { buildSubmissionEmbed } = require('../utils/embeds');
 
 const CF_BASE = 'https://codeforces.com/api';
@@ -105,18 +105,22 @@ async function runSubmissionFeed(client) {
   const users = getAllUsers();
   
   for (const user of users) {
+    const ratings = getRatings(user.discord_id) || [];
+    const cfRating = ratings.find(r => r.platform === 'cf');
+    const acRating = ratings.find(r => r.platform === 'ac');
+
     const [cfNew, acNew] = await Promise.all([
       fetchCFSubmissions(user),
       fetchACSubmissions(user)
     ]);
     
     for (const sub of cfNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'cf');
+      const embed = buildSubmissionEmbed(user, sub, 'cf', cfRating);
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
     
     for (const sub of acNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'ac');
+      const embed = buildSubmissionEmbed(user, sub, 'ac', acRating);
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
     

@@ -276,12 +276,32 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
 /**
  * Build submission embed for Live Feed
  */
-function buildSubmissionEmbed(user, problem, platform) {
+function buildSubmissionEmbed(user, problem, platform, ratingInfo) {
   const isCF = platform === 'cf';
+  let titleSuffix = '';
+  
+  if (ratingInfo) {
+    if (isCF) {
+      const rating = ratingInfo.rating ?? 0;
+      let div = 'Unrated';
+      if (rating >= 1900) div = 'Div. 1';
+      else if (rating >= 1600) div = 'Div. 2';
+      else if (rating >= 1400) div = 'Div. 3';
+      else if (rating > 0) div = 'Div. 4';
+      
+      titleSuffix = ` (${div})`;
+    } else {
+      const rank = ratingInfo.rank_title ?? 'Unrated';
+      if (rank !== 'Unrated') {
+        titleSuffix = ` (${rank})`;
+      }
+    }
+  }
+
   const embed = new EmbedBuilder()
     .setColor(isCF ? COLORS.Codeforces : COLORS.AtCoder)
     .setAuthor({ name: `${isCF ? '🔵 Codeforces' : '🔴 AtCoder'} — Live Accepted!` })
-    .setTitle(`🎉 ${user.username} just got an Accepted (AC)!`)
+    .setTitle(`🎉 ${user.username}${titleSuffix} just got an Accepted (AC)!`)
     .setDescription(`<@${user.discord_id}> solved **[${problem.name}](${problem.url})**!`)
     .setThumbnail(isCF ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' : 'https://img.atcoder.jp/assets/logo.png')
     .setTimestamp();
