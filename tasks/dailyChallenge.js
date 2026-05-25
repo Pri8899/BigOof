@@ -91,9 +91,8 @@ async function checkFirstBloods(client) {
       return; // All solved
     }
 
-    const channelId = getConfig('suggest_channel_id') || process.env.SUGGEST_CHANNEL_ID;
-    if (!channelId) return;
-    const channel = await client.channels.fetch(channelId).catch(() => null);
+    const generalChannelId = process.env.GENERAL_CHANNEL_ID || '1505614835650658355';
+    const channel = await client.channels.fetch(generalChannelId).catch(() => null);
     if (!channel) return;
 
     const users = getAllUsers().filter(u => u.cf_handle);
