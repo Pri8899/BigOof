@@ -279,19 +279,41 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
 function buildSubmissionEmbed(user, problem, platform) {
   const isCF = platform === 'cf';
   let titleSuffix = '';
+  let embedColor = isCF ? COLORS.Codeforces : COLORS.AtCoder;
+  let authorName = `${isCF ? '🔵 Codeforces' : '🔴 AtCoder'} — Live Accepted!`;
   
   if (isCF) {
     if (problem.contestName) {
-      const match = problem.contestName.match(/Div\.\s*\d+(\s*\+\s*Div\.\s*\d+)*/i);
-      const match2 = problem.contestName.match(/Div\s*\d+(\s*\+\s*Div\s*\d+)*/i);
+      let category = null;
+      if (/ICPC/i.test(problem.contestName)) {
+        category = 'ICPC';
+      } else {
+        const match = problem.contestName.match(/Div\.\s*\d+(\s*\+\s*Div\.\s*\d+)*/i);
+        const match2 = problem.contestName.match(/Div\s*\d+(\s*\+\s*Div\s*\d+)*/i);
+        if (match) category = match[0];
+        else if (match2) category = match2[0];
+        else if (problem.contestName.includes("Educational")) category = "Educational Round";
+        else if (problem.contestName.includes("Global Round")) category = "Global Round";
+        else if (problem.contestName.includes("Kotlin Heroes")) category = "Kotlin Heroes";
+        else if (problem.contestName.includes("VK Cup")) category = "VK Cup";
+        else {
+          let clean = problem.contestName
+            .replace(/\(.*?\)/g, '')
+            .replace(/Codeforces/gi, '')
+            .replace(/Round\s*\d+/gi, 'Round')
+            .trim();
+          if (clean.toLowerCase() === 'round') clean = 'CF Round';
+          category = clean || null;
+        }
+      }
       
-      let div = null;
-      if (match) div = match[0];
-      else if (match2) div = match2[0];
-      else if (problem.contestName.includes("Educational")) div = "Div. 2";
-      else if (problem.contestName.includes("Global Round")) div = "Global";
-      
-      if (div) titleSuffix = ` (${div})`;
+      if (category) {
+        titleSuffix = ` (${category})`;
+        if (category === 'ICPC') {
+          embedColor = 0xD4AF37; // Gold
+          authorName = `🏆 Codeforces (ICPC) — Live Accepted!`;
+        }
+      }
     }
   } else {
     if (problem.contestId) {
@@ -307,8 +329,8 @@ function buildSubmissionEmbed(user, problem, platform) {
   }
 
   const embed = new EmbedBuilder()
-    .setColor(isCF ? COLORS.Codeforces : COLORS.AtCoder)
-    .setAuthor({ name: `${isCF ? '🔵 Codeforces' : '🔴 AtCoder'} — Live Accepted!` })
+    .setColor(embedColor)
+    .setAuthor({ name: authorName })
     .setTitle(`🎉 ${user.username}${titleSuffix} just got an Accepted (AC)!`)
     .setDescription(`<@${user.discord_id}> solved **[${problem.name}](${problem.url})**!`)
     .setThumbnail(isCF ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' : 'https://img.atcoder.jp/assets/logo.png')
