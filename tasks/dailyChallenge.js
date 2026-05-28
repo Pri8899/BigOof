@@ -78,11 +78,20 @@ async function postDailySuggestions(client) {
 // ─── First Blood Checker ─────────────────────────────────────
 async function checkFirstBloods(client) {
   try {
-    const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
-    const todayDateStr = formatterDate.format(new Date());
+    const now = new Date();
+    const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', hour: 'numeric', hour12: false });
+    const currentHour = parseInt(formatterHour.format(now), 10);
     
-    const daily = getDailyProblems(todayDateStr);
-    if (!daily) return; // No problems posted today
+    let activeDate = now;
+    if (currentHour < 21) {
+      activeDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    }
+    
+    const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const activeDateStr = formatterDate.format(activeDate);
+    
+    const daily = getDailyProblems(activeDateStr);
+    if (!daily) return; // No problems posted for active date
 
     // Check if there's any problem still missing First Blood
     if ((daily.p1_id && daily.first_blood_1) && 
@@ -114,7 +123,7 @@ async function checkFirstBloods(client) {
             for (const p of problemsToCheck) {
               if (p.id === pId && !p.currentBlood) {
                 // FIRST BLOOD!
-                setFirstBlood(todayDateStr, p.bloodField, user.discord_id);
+                setFirstBlood(activeDateStr, p.bloodField, user.discord_id);
                 p.currentBlood = user.discord_id; // prevent duplicate announcement in same loop
 
                 const timeSec = sub.timeConsumedMillis / 1000;
