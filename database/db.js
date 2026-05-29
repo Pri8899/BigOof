@@ -107,7 +107,8 @@ db.exec(`
     p3_id TEXT,
     first_blood_1 TEXT,
     first_blood_2 TEXT,
-    first_blood_3 TEXT
+    first_blood_3 TEXT,
+    sweep_announced TEXT DEFAULT '[]'
   );
 
   CREATE TABLE IF NOT EXISTS last_submissions (
@@ -126,6 +127,13 @@ db.exec(`
     PRIMARY KEY (discord_id, platform)
   );
 `);
+
+// Run migration to add sweep_announced column to daily_problems if it doesn't exist
+try {
+  db.exec("ALTER TABLE daily_problems ADD COLUMN sweep_announced TEXT DEFAULT '[]';");
+} catch (e) {
+  // Column already exists
+}
 
 // ─── User Helpers ────────────────────────────────────────────
 function getUser(discordId) {
@@ -318,6 +326,10 @@ function setFirstBlood(dateStr, field, discordId) {
   db.prepare(`UPDATE daily_problems SET ${field} = ? WHERE date_str = ?`).run(discordId, dateStr);
 }
 
+function setSweepAnnounced(dateStr, sweepAnnouncedJson) {
+  db.prepare('UPDATE daily_problems SET sweep_announced = ? WHERE date_str = ?').run(sweepAnnouncedJson, dateStr);
+}
+
 // ─── Config Helpers ───────────────────────────────────────────
 function getConfig(key) {
   const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(key);
@@ -382,7 +394,7 @@ module.exports = {
   insertRatingHistory, getRatingHistory,
   upsertStreak, getStreak, getAllStreaks,
   createVC, getVC, getActiveVCs, endVC, joinVC, getVCParticipants, updateVCSolved, getActiveVCForChannel,
-  setDailyProblems, getDailyProblems, setFirstBlood,
+  setDailyProblems, getDailyProblems, setFirstBlood, setSweepAnnounced,
   getLastSubmission, setLastSubmission,
   getWeeklySnapshot, setWeeklySnapshot, getAllWeeklySnapshots,
   getCachedContestName, cacheContestName

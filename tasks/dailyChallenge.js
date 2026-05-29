@@ -3,7 +3,7 @@
 const cron = require('node-cron');
 const axios = require('axios');
 const { EmbedBuilder } = require('discord.js');
-const { getConfig, setDailyProblems, getDailyProblems, setFirstBlood, getAllUsers } = require('../database/db');
+const { getConfig, setDailyProblems, getDailyProblems, setFirstBlood, getAllUsers, setSweepAnnounced } = require('../database/db');
 const { getCFProblems }       = require('../utils/codeforces');
 
 // CF tiers as requested
@@ -45,7 +45,7 @@ async function postDailySuggestions(client) {
     .setColor(0x1F8DD6)
     .setAuthor({ name: '🔵 Codeforces — Daily Practice Problems' })
     .setTitle(`💡 Daily Problem Suggestions — ${today}`)
-    .setDescription('Sharpen your skills! The **First Person** to solve any of these today gets a **First Blood 🩸** broadcast!\n\u200b');
+    .setDescription('Sharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b');
 
   if (p1) cfEmbed.addFields({ name: `${CF_TIERS[0].label}  ·  Rating ${p1.rating}`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
   if (p2) cfEmbed.addFields({ name: `${CF_TIERS[1].label}  ·  Rating ${p2.rating}`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
@@ -75,6 +75,17 @@ async function postDailySuggestions(client) {
   console.log('[Suggest] Posted daily suggestions.');
 }
 
+// Calculate active cycle window (9pm Dhaka to 9pm Dhaka next day, which corresponds to 15:00 UTC to 15:00 UTC)
+function getActiveCycleWindow(activeDate) {
+  const activeYear = parseInt(activeDate.toLocaleDateString('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric' }), 10);
+  const activeMonth = parseInt(activeDate.toLocaleDateString('en-US', { timeZone: 'Asia/Dhaka', month: 'numeric' }), 10);
+  const activeDay = parseInt(activeDate.toLocaleDateString('en-US', { timeZone: 'Asia/Dhaka', day: 'numeric' }), 10);
+  
+  const startTimeUtc = Date.UTC(activeYear, activeMonth - 1, activeDay, 15, 0, 0) / 1000;
+  const endTimeUtc = startTimeUtc + 24 * 60 * 60;
+  return { startTimeUtc, endTimeUtc };
+}
+
 // ─── First Blood Checker ─────────────────────────────────────
 async function checkFirstBloods(client) {
   try {
@@ -93,12 +104,7 @@ async function checkFirstBloods(client) {
     const daily = getDailyProblems(activeDateStr);
     if (!daily) return; // No problems posted for active date
 
-    // Check if there's any problem still missing First Blood
-    if ((daily.p1_id && daily.first_blood_1) && 
-        (daily.p2_id && daily.first_blood_2) && 
-        (daily.p3_id && daily.first_blood_3)) {
-      return; // All solved
-    }
+    const { startTimeUtc, endTimeUtc } = getActiveCycleWindow(activeDate);
 
     const generalChannelId = process.env.GENERAL_CHANNEL_ID || '1505614835650658355';
     const channel = await client.channels.fetch(generalChannelId).catch(() => null);
@@ -111,50 +117,158 @@ async function checkFirstBloods(client) {
       { id: daily.p3_id, bloodField: 'first_blood_3', currentBlood: daily.first_blood_3, label: CF_TIERS[2].label }
     ];
 
+    const problemDetails = {};
+
     for (const user of users) {
       try {
-        const res = await axios.get(`https://codeforces.com/api/user.status?handle=${user.cf_handle}&from=1&count=10`, { timeout: 6000 });
+        const res = await axios.get(`https://codeforces.com/api/user.status?handle=${user.cf_handle}&from=1&count=100`, { timeout: 8000 });
         if (res.data.status !== 'OK') continue;
+
+        const solvedInWindow = new Set();
 
         for (const sub of res.data.result) {
           if (sub.verdict === 'OK' && sub.problem) {
             const pId = `${sub.problem.contestId}${sub.problem.index}`;
             
-            for (const p of problemsToCheck) {
-              if (p.id === pId && !p.currentBlood) {
-                // FIRST BLOOD!
-                setFirstBlood(activeDateStr, p.bloodField, user.discord_id);
-                p.currentBlood = user.discord_id; // prevent duplicate announcement in same loop
+            // Validate that submission is within active window
+            if (sub.creationTimeSeconds >= startTimeUtc && sub.creationTimeSeconds < endTimeUtc) {
+              if (pId === daily.p1_id || pId === daily.p2_id || pId === daily.p3_id) {
+                solvedInWindow.add(pId);
+                if (!problemDetails[pId]) {
+                  problemDetails[pId] = {
+                    name: sub.problem.name,
+                    url: `https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`
+                  };
+                }
+              }
 
-                const timeSec = sub.timeConsumedMillis / 1000;
-                const memMb = (sub.memoryConsumedBytes / 1048576).toFixed(2);
-                
-                const embed = new EmbedBuilder()
-                  .setColor(0xE74C3C)
-                  .setTitle(`🩸 FIRST BLOOD! 🩸`)
-                  .setDescription(`<@${user.discord_id}> is the absolute first person to solve today's **${p.label}** problem!`)
-                  .addFields(
-                    { name: 'Problem', value: `**[${sub.problem.name}](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})**`, inline: false },
-                    { name: 'Execution Time', value: `⏱️ ${timeSec} s`, inline: true },
-                    { name: 'Memory', value: `💾 ${memMb} MB`, inline: true }
-                  )
-                  .setThumbnail('https://cdn-icons-png.flaticon.com/512/833/833472.png')
-                  .setTimestamp();
+              // Check First Blood
+              for (const p of problemsToCheck) {
+                if (p.id === pId && !p.currentBlood) {
+                  // FIRST BLOOD!
+                  setFirstBlood(activeDateStr, p.bloodField, user.discord_id);
+                  p.currentBlood = user.discord_id;
 
-                await channel.send({ content: `<@${user.discord_id}>`, embeds: [embed] }).catch(() => {});
-                console.log(`[FirstBlood] Announced ${user.cf_handle} for problem ${pId}`);
+                  const timeSec = sub.timeConsumedMillis / 1000;
+                  const memMb = (sub.memoryConsumedBytes / 1048576).toFixed(2);
+                  
+                  const embed = new EmbedBuilder()
+                    .setColor(0xE74C3C)
+                    .setTitle(`🩸 FIRST BLOOD! 🩸`)
+                    .setDescription(`<@${user.discord_id}> is the absolute first person to solve the daily **${p.label}** problem!`)
+                    .addFields(
+                      { name: 'Problem', value: `**[${sub.problem.name}](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})**`, inline: false },
+                      { name: 'Execution Time', value: `⏱️ ${timeSec} s`, inline: true },
+                      { name: 'Memory', value: `💾 ${memMb} MB`, inline: true }
+                    )
+                    .setThumbnail('https://cdn-icons-png.flaticon.com/512/833/833472.png')
+                    .setTimestamp();
+
+                  await channel.send({ content: `<@${user.discord_id}>`, embeds: [embed] }).catch(() => {});
+                  console.log(`[FirstBlood] Announced ${user.cf_handle} for problem ${pId}`);
+                }
               }
             }
           }
         }
+
+        // Check if user solved all suggested problems
+        const suggestedProblemIds = [daily.p1_id, daily.p2_id, daily.p3_id].filter(Boolean);
+        if (suggestedProblemIds.length > 0 && suggestedProblemIds.every(id => solvedInWindow.has(id))) {
+          let sweepAnnounced = [];
+          try {
+            sweepAnnounced = JSON.parse(daily.sweep_announced || '[]');
+          } catch (_) {}
+
+          if (!sweepAnnounced.includes(user.discord_id)) {
+            sweepAnnounced.push(user.discord_id);
+            const updatedJson = JSON.stringify(sweepAnnounced);
+            setSweepAnnounced(activeDateStr, updatedJson);
+            daily.sweep_announced = updatedJson; // update cache
+
+            const getProbLink = (id, defaultLabel) => {
+              if (problemDetails[id]) {
+                return `**[${problemDetails[id].name}](${problemDetails[id].url})**`;
+              }
+              const match = id.match(/^(\d+)(.+)$/);
+              if (match) {
+                return `**[Problem ${match[1]}${match[2]}](https://codeforces.com/problemset/problem/${match[1]}/${match[2]})**`;
+              }
+              return `**[${defaultLabel}](https://codeforces.com/problemset/problem)**`;
+            };
+
+            const sweepEmbed = new EmbedBuilder()
+              .setColor(0xF1C40F) // Gold
+              .setTitle('🏆 DAILY CHALLENGE SWEEP! 🏆')
+              .setDescription(`🎉 **Congratulations to <@${user.discord_id}>!** 🎉\n\nThey have successfully solved **all 3** of the daily practice problems within the active daily cycle!`)
+              .addFields(
+                { name: `🟢 Beginner`, value: getProbLink(daily.p1_id, 'Beginner Problem'), inline: false },
+                { name: `🔵 Intermediate`, value: getProbLink(daily.p2_id, 'Intermediate Problem'), inline: false },
+                { name: `🔴 Advanced`, value: getProbLink(daily.p3_id, 'Advanced Problem'), inline: false }
+              )
+              .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
+              .setFooter({ text: 'Daily Sweep achieved!' })
+              .setTimestamp();
+
+            await channel.send({ content: `🏆 **Daily Sweep!** <@${user.discord_id}> has cleared all 3 daily problems!`, embeds: [sweepEmbed] }).catch(() => {});
+            console.log(`[Sweep] Announced ${user.cf_handle} for daily sweep of date ${activeDateStr}`);
+          }
+        }
       } catch (e) {
-        // ignore CF API errors (rate limits, etc)
+        console.warn(`[FirstBlood] Error checking handle ${user.cf_handle}:`, e.message);
       }
       // slight delay to prevent rate limiting CF API
       await new Promise(r => setTimeout(r, 400));
     }
   } catch (err) {
     console.error('[FirstBlood Error]', err.message);
+  }
+}
+
+// One-time startup reset to delete the incorrect Beginner first blood message and re-announce
+async function runOneTimeStartupReset(client) {
+  try {
+    const { getConfig, setConfig, db } = require('../database/db');
+    const resetDone = getConfig('reset_0528_done');
+    if (resetDone === 'true') return;
+
+    console.log('[Reset] Starting one-time reset for 05/28/2026 daily challenge...');
+
+    // 1. Clear first_blood_1 for 05/28/2026 in SQLite daily_problems table
+    const row = db.prepare('SELECT * FROM daily_problems WHERE date_str = ?').get('05/28/2026');
+    if (row) {
+      db.prepare("UPDATE daily_problems SET first_blood_1 = NULL WHERE date_str = '05/28/2026'").run();
+      console.log('[Reset] Cleared first_blood_1 for 05/28/2026 in database.');
+    } else {
+      console.log('[Reset] No daily_problems row found for 05/28/2026.');
+    }
+
+    // 2. Fetch the general channel messages and delete the old first blood message
+    const generalChannelId = process.env.GENERAL_CHANNEL_ID || '1505614835650658355';
+    const channel = await client.channels.fetch(generalChannelId).catch(() => null);
+    if (channel) {
+      const messages = await channel.messages.fetch({ limit: 50 }).catch(() => []);
+      const targetMessages = [...messages.values()].filter(m => 
+        m.author.id === client.user.id &&
+        m.embeds.length > 0 &&
+        m.embeds[0].title?.includes('FIRST BLOOD!') &&
+        (m.embeds[0].description?.includes("Nene's Game") || m.embeds[0].fields?.some(f => f.name === 'Problem' && f.value?.includes("Nene's Game")))
+      );
+
+      for (const msg of targetMessages) {
+        await msg.delete().catch(() => {});
+        console.log(`[Reset] Deleted old first blood message: ${msg.id}`);
+      }
+    }
+
+    // Mark reset as done
+    setConfig('reset_0528_done', 'true');
+    console.log('[Reset] One-time reset complete. Re-checking first bloods immediately...');
+
+    // 3. Re-run checkFirstBloods immediately
+    await checkFirstBloods(client);
+  } catch (err) {
+    console.error('[Reset Error]', err);
   }
 }
 
@@ -190,6 +304,9 @@ function startDailyChallenge(client) {
         await postDailySuggestions(client);
         setConfig('last_suggest_post_date', todayDateStr);
       }
+
+      // One-time startup reset for 05/28/2026
+      await runOneTimeStartupReset(client);
     } catch (err) {
       console.error('[Daily Startup Catch-up Error]', err);
     }
