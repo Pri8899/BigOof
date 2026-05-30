@@ -349,39 +349,37 @@ function buildSubmissionEmbed(user, problem, platform) {
 /**
  * Build Weekly Wrap-Up Embed
  */
-function buildWeeklyWrapupEmbed(topSolved, topRating) {
+function buildWeeklyWrapupEmbed(allSolved, allRatingGains) {
   const embed = new EmbedBuilder()
     .setColor(0xD4AF37) // Legendary Gold
-    .setTitle('👑 WEEKLY CP HALL OF FAME 👑')
-    .setDescription(`Happy Sunday! Here is the weekly performance roundup of **all members** in the server.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png') // Trophy icon
+    .setTitle('👑 CP SERVER WEEKLY CHAMPIONS 👑')
+    .setDescription(`Happy Sunday! Let's celebrate the top performers who dominated the competitive programming charts this week!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png') // Gold trophy icon
     .setTimestamp();
 
-  // Format Solved List
-  let solvedText = '';
-  if (topSolved.length > 0) {
-    solvedText = topSolved.map((u, i) => {
-      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `\`${i + 1}.\``;
-      return `${medal} <@${u.discord_id}> — **${u.solved_this_week}** solves`;
-    }).join('\n');
+  // 1. Solves Champion (handles ties)
+  let solvedValue = '';
+  if (allSolved.length > 0 && allSolved[0].solved_this_week > 0) {
+    const maxSolved = allSolved[0].solved_this_week;
+    const coChamps = allSolved.filter(u => u.solved_this_week === maxSolved);
+    const mentions = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
+    solvedValue = `🏆 **Weekly Solves Champion**\n\n🎉 Huge congratulations to ${mentions} for solving **${maxSolved}** problems this week! Absolute beast mode! 🚀`;
   } else {
-    solvedText = '_No members tracked yet._';
+    solvedValue = `🏆 **Weekly Solves Champion**\n\n_No one solved any problems this week. Let's get active next week!_`;
   }
-  embed.addFields({ name: '🔥 Server Solves Leaderboard (This Week)', value: solvedText, inline: false });
+  embed.addFields({ name: '\u200b', value: solvedValue, inline: false });
 
-  // Format Rating Gains List
-  let ratingText = '';
-  if (topRating.length > 0) {
-    ratingText = topRating.map((u, i) => {
-      const medal = i === 0 ? '📈' : '◽';
-      const gain = u.rating_gained;
-      const gainLabel = gain > 0 ? `▲ +${gain}` : gain < 0 ? `▼ ${gain}` : `— 0`;
-      return `${medal} <@${u.discord_id}> — **${gainLabel}** rating`;
-    }).join('\n');
+  // 2. Rating Champion (handles ties)
+  let ratingValue = '';
+  if (allRatingGains.length > 0 && allRatingGains[0].rating_gained > 0) {
+    const maxRating = allRatingGains[0].rating_gained;
+    const coChamps = allRatingGains.filter(u => u.rating_gained === maxRating);
+    const mentions = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
+    ratingValue = `📈 **Weekly Rating Champion**\n\n🎉 Amazing job by ${mentions} for gaining **+${maxRating}** rating points this week! Incredible progress and skill! 📈`;
   } else {
-    ratingText = '_No members tracked yet._';
+    ratingValue = `📈 **Weekly Rating Champion**\n\n_No rating gains recorded this week._`;
   }
-  embed.addFields({ name: '📈 Server Rating Changes (This Week)', value: ratingText, inline: false });
+  embed.addFields({ name: '\u200b', value: ratingValue, inline: false });
 
   embed.setFooter({ text: 'Consistency is the key to mastery! Keep coding!' });
   return embed;

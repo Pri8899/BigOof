@@ -96,10 +96,53 @@ function getTargetWeeklyWrapupDate() {
   return formatterDate.format(targetSunday);
 }
 
+// One-time weekly reset to clean up old leaderboard messages and regenerate with new layout
+async function runOneTimeWeeklyReset(client) {
+  try {
+    const { getConfig, setConfig, db } = require('../database/db');
+    const resetWeeklyDone = getConfig('reset_weekly_layout_done');
+    if (resetWeeklyDone === 'true') return;
+
+    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset...');
+
+    // 1. Fetch channel and delete the previous wrap-up message
+    const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id');
+    if (channelId) {
+      const channel = await client.channels.fetch(channelId).catch(() => null);
+      if (channel) {
+        const messages = await channel.messages.fetch({ limit: 50 }).catch(() => []);
+        const targetMessages = [...messages.values()].filter(m => 
+          m.author.id === client.user.id &&
+          m.embeds.length > 0 &&
+          (m.embeds[0].title?.includes('WEEKLY CP HALL OF FAME') || m.embeds[0].title?.includes('Weekly CP Wrap-Up') || m.embeds[0].title?.includes('CP SERVER WEEKLY CHAMPIONS'))
+        );
+
+        for (const msg of targetMessages) {
+          await msg.delete().catch(() => {});
+          console.log(`[WeeklyReset] Deleted old weekly wrap-up message: ${msg.id}`);
+        }
+      }
+    }
+
+    // 2. Clear last_weekly_wrapup_date so catch-up triggers immediately
+    setConfig('last_weekly_wrapup_date', 'null_reset');
+
+    // 3. Mark reset as done
+    setConfig('reset_weekly_layout_done', 'true');
+    console.log('[WeeklyReset] One-time weekly wrap-up reset complete.');
+  } catch (err) {
+    console.error('[WeeklyReset Error]', err);
+  }
+}
+
 function startWeeklyWrapup(client) {
   // Catch-up check on boot (waits 15s to let bot fully connect)
   setTimeout(async () => {
     try {
+      // 1. Run layout reset first
+      await runOneTimeWeeklyReset(client);
+
+      // 2. Then perform the catch-up check
       const targetDateStr = getTargetWeeklyWrapupDate();
       const lastWrapupDate = getConfig('last_weekly_wrapup_date');
       
