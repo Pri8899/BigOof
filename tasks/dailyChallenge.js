@@ -259,44 +259,57 @@ async function checkFirstBloods(client) {
 async function runOneTimeStartupReset(client) {
   try {
     const { getConfig, setConfig, db } = require('../database/db');
+    
+    // Reset for 05/28/2026 First Blood (already done in prod, but safe to keep)
     const resetDone = getConfig('reset_0528_done');
-    if (resetDone === 'true') return;
-
-    console.log('[Reset] Starting one-time reset for 05/28/2026 daily challenge...');
-
-    // 1. Clear first_blood_1 for 05/28/2026 in SQLite daily_problems table
-    const row = db.prepare('SELECT * FROM daily_problems WHERE date_str = ?').get('05/28/2026');
-    if (row) {
-      db.prepare("UPDATE daily_problems SET first_blood_1 = NULL WHERE date_str = '05/28/2026'").run();
-      console.log('[Reset] Cleared first_blood_1 for 05/28/2026 in database.');
-    } else {
-      console.log('[Reset] No daily_problems row found for 05/28/2026.');
-    }
-
-    // 2. Fetch the general channel messages and delete the old first blood message
-    const generalChannelId = process.env.GENERAL_CHANNEL_ID || '1505614835650658355';
-    const channel = await client.channels.fetch(generalChannelId).catch(() => null);
-    if (channel) {
-      const messages = await channel.messages.fetch({ limit: 50 }).catch(() => []);
-      const targetMessages = [...messages.values()].filter(m => 
-        m.author.id === client.user.id &&
-        m.embeds.length > 0 &&
-        m.embeds[0].title?.includes('FIRST BLOOD!') &&
-        (m.embeds[0].description?.includes("Nene's Game") || m.embeds[0].fields?.some(f => f.name === 'Problem' && f.value?.includes("Nene's Game")))
-      );
-
-      for (const msg of targetMessages) {
-        await msg.delete().catch(() => {});
-        console.log(`[Reset] Deleted old first blood message: ${msg.id}`);
+    if (resetDone !== 'true') {
+      console.log('[Reset] Starting one-time reset for 05/28/2026 daily challenge...');
+      const row = db.prepare('SELECT * FROM daily_problems WHERE date_str = ?').get('05/28/2026');
+      if (row) {
+        db.prepare("UPDATE daily_problems SET first_blood_1 = NULL WHERE date_str = '05/28/2026'").run();
+        console.log('[Reset] Cleared first_blood_1 for 05/28/2026 in database.');
+      } else {
+        console.log('[Reset] No daily_problems row found for 05/28/2026.');
       }
+
+      const generalChannelId = process.env.GENERAL_CHANNEL_ID || '1505614835650658355';
+      const channel = await client.channels.fetch(generalChannelId).catch(() => null);
+      if (channel) {
+        const messages = await channel.messages.fetch({ limit: 50 }).catch(() => []);
+        const targetMessages = [...messages.values()].filter(m => 
+          m.author.id === client.user.id &&
+          m.embeds.length > 0 &&
+          m.embeds[0].title?.includes('FIRST BLOOD!') &&
+          (m.embeds[0].description?.includes("Nene's Game") || m.embeds[0].fields?.some(f => f.name === 'Problem' && f.value?.includes("Nene's Game")))
+        );
+
+        for (const msg of targetMessages) {
+          await msg.delete().catch(() => {});
+          console.log(`[Reset] Deleted old first blood message: ${msg.id}`);
+        }
+      }
+
+      setConfig('reset_0528_done', 'true');
+      console.log('[Reset] One-time reset complete for 05/28/2026.');
+      await checkFirstBloods(client);
     }
 
-    // Mark reset as done
-    setConfig('reset_0528_done', 'true');
-    console.log('[Reset] One-time reset complete. Re-checking first bloods immediately...');
-
-    // 3. Re-run checkFirstBloods immediately
-    await checkFirstBloods(client);
+    // Reset for 05/30/2026 Daily Suggestions
+    const resetDone0530 = getConfig('reset_0530_done');
+    if (resetDone0530 !== 'true') {
+      console.log('[Reset] Starting one-time reset for 05/30/2026 daily suggestions...');
+      
+      // Clear suggestions row so new ones will be generated
+      db.prepare("DELETE FROM daily_problems WHERE date_str = '05/30/2026'").run();
+      console.log('[Reset] Cleared daily_problems row for 05/30/2026.');
+      
+      // Set last_suggest_post_date to yesterday so catch-up triggers immediately
+      setConfig('last_suggest_post_date', '05/29/2026');
+      
+      // Set reset done flag
+      setConfig('reset_0530_done', 'true');
+      console.log('[Reset] One-time reset complete for 05/30/2026 daily suggestions.');
+    }
   } catch (err) {
     console.error('[Reset Error]', err);
   }
@@ -321,6 +334,10 @@ function startDailyChallenge(client) {
   // Run immediately on boot with a 10s delay to perform catch-up if needed
   setTimeout(async () => {
     try {
+      // 1. Run one-time startup reset first
+      await runOneTimeStartupReset(client);
+
+      // 2. Then perform the catch-up check
       const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
       const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', hour: 'numeric', hour12: false });
       
@@ -334,9 +351,6 @@ function startDailyChallenge(client) {
         await postDailySuggestions(client);
         setConfig('last_suggest_post_date', todayDateStr);
       }
-
-      // One-time startup reset for 05/28/2026
-      await runOneTimeStartupReset(client);
     } catch (err) {
       console.error('[Daily Startup Catch-up Error]', err);
     }
