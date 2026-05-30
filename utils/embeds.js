@@ -351,37 +351,39 @@ function buildSubmissionEmbed(user, problem, platform) {
  */
 function buildWeeklyWrapupEmbed(topSolved, topRating) {
   const embed = new EmbedBuilder()
-    .setColor(0xF1C40F)
-    .setTitle('📅 Weekly CP Wrap-Up!')
-    .setDescription(`Happy Sunday, everyone! Here is the summary of our server's performance this week.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3176/3176366.png')
+    .setColor(0xD4AF37) // Legendary Gold
+    .setTitle('👑 WEEKLY CP HALL OF FAME 👑')
+    .setDescription(`Happy Sunday! Here is the weekly performance roundup of **all members** in the server.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png') // Trophy icon
     .setTimestamp();
 
-  // Top Solved
+  // Format Solved List
   let solvedText = '';
   if (topSolved.length > 0) {
     solvedText = topSolved.map((u, i) => {
-      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `\`${i+1}.\``;
-      return `${medal} <@${u.discord_id}> : **${u.solved_this_week}** problems`;
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `\`${i + 1}.\``;
+      return `${medal} <@${u.discord_id}> — **${u.solved_this_week}** solves`;
     }).join('\n');
   } else {
-    solvedText = '_No one solved any problems this week!_';
+    solvedText = '_No members tracked yet._';
   }
-  embed.addFields({ name: '🔥 Most Problems Solved (This Week)', value: solvedText, inline: false });
+  embed.addFields({ name: '🔥 Server Solves Leaderboard (This Week)', value: solvedText, inline: false });
 
-  // Top Rating Gain
+  // Format Rating Gains List
   let ratingText = '';
   if (topRating.length > 0) {
     ratingText = topRating.map((u, i) => {
-      const medal = i === 0 ? '📈' : '🚀';
-      return `${medal} <@${u.discord_id}> : **+${u.rating_gained}** rating (${u.platform.toUpperCase()})`;
+      const medal = i === 0 ? '📈' : '◽';
+      const gain = u.rating_gained;
+      const gainLabel = gain > 0 ? `▲ +${gain}` : gain < 0 ? `▼ ${gain}` : `— 0`;
+      return `${medal} <@${u.discord_id}> — **${gainLabel}** rating`;
     }).join('\n');
   } else {
-    ratingText = '_No positive rating changes this week!_';
+    ratingText = '_No members tracked yet._';
   }
-  embed.addFields({ name: '📈 Top Rating Gainers (This Week)', value: ratingText, inline: false });
+  embed.addFields({ name: '📈 Server Rating Changes (This Week)', value: ratingText, inline: false });
 
-  embed.setFooter({ text: 'Keep up the great work for next week!' });
+  embed.setFooter({ text: 'Consistency is the key to mastery! Keep coding!' });
   return embed;
 }
 
