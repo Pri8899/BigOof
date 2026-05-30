@@ -13,6 +13,33 @@ const CF_TIERS = [
   { label: '🔴 Advanced (Rating 1200)',     min: 1200, max: 1200 }
 ];
 
+// Helper to fetch solved problems from Codeforces for all server members
+async function getMergedSolvedSet() {
+  const users = getAllUsers().filter(u => u.cf_handle);
+  const solvedSet = new Set();
+
+  for (const user of users) {
+    try {
+      console.log(`[Daily] Fetching solved history for ${user.cf_handle} to filter recommendations...`);
+      // Fetch up to 2000 submissions to be comprehensive
+      const res = await axios.get(`https://codeforces.com/api/user.status?handle=${user.cf_handle}&from=1&count=2000`, { timeout: 8000 });
+      if (res.data.status === 'OK') {
+        for (const sub of res.data.result) {
+          if (sub.verdict === 'OK' && sub.problem) {
+            const pId = `${sub.problem.contestId}${sub.problem.index}`;
+            solvedSet.add(pId);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[Daily] Failed to fetch solves for ${user.cf_handle}:`, err.message);
+    }
+    // Respect Codeforces 1 request / 2 seconds limit
+    await new Promise(r => setTimeout(r, 2500));
+  }
+  return solvedSet;
+}
+
 // ─── Post Daily Problem Recommendations ──────────────────────
 async function postDailySuggestions(client) {
   const channelId = getConfig('suggest_channel_id') || process.env.SUGGEST_CHANNEL_ID;
@@ -28,8 +55,11 @@ async function postDailySuggestions(client) {
     weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Dhaka'
   });
 
-  // Fetch CF problems for all tiers
-  const cfResults = await Promise.all(CF_TIERS.map(tier => getCFProblems(tier.min, tier.max, null, 1)));
+  // Fetch the solved problems set from all users to filter out recommendations
+  const solvedSet = await getMergedSolvedSet();
+
+  // Fetch CF problems for all tiers, excluding already solved ones
+  const cfResults = await Promise.all(CF_TIERS.map(tier => getCFProblems(tier.min, tier.max, null, 1, solvedSet)));
 
   const p1 = cfResults[0]?.length > 0 ? cfResults[0][0] : null;
   const p2 = cfResults[1]?.length > 0 ? cfResults[1][0] : null;

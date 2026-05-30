@@ -103,7 +103,7 @@ async function validateCFHandle(handle) {
  * @param {string|null} tag
  * @param {number} count - how many to return
  */
-async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, count = 5) {
+async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, count = 5, excludeIds = new Set()) {
   try {
     const url = tag
       ? `${CF_BASE}/problemset.problems?tags=${encodeURIComponent(tag)}`
@@ -111,9 +111,10 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
     const res = await axios.get(url, { timeout: 10000 });
     if (res.data.status !== 'OK') return [];
 
-    let problems = res.data.result.problems.filter(p =>
-      p.rating >= minRating && p.rating <= maxRating
-    );
+    let problems = res.data.result.problems.filter(p => {
+      const pId = `${p.contestId}${p.index}`;
+      return p.rating >= minRating && p.rating <= maxRating && !excludeIds.has(pId);
+    });
 
     // Shuffle and pick
     problems = problems.sort(() => Math.random() - 0.5).slice(0, count);

@@ -46,7 +46,25 @@ module.exports = {
     const minR    = Math.max(800,  base - 100);
     const maxR    = Math.min(3500, base + 100);
 
-    const problems = await getCFProblems(minR, maxR, tag, 5);
+    // Fetch the user's solved problems to exclude them from suggestions
+    const excludeIds = new Set();
+    if (user && user.cf_handle) {
+      try {
+        const axios = require('axios');
+        const res = await axios.get(`https://codeforces.com/api/user.status?handle=${user.cf_handle}&from=1&count=2000`, { timeout: 8000 });
+        if (res.data.status === 'OK') {
+          for (const sub of res.data.result) {
+            if (sub.verdict === 'OK' && sub.problem) {
+              excludeIds.add(`${sub.problem.contestId}${sub.problem.index}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[Suggest] Failed to fetch solves for ${user.cf_handle}:`, err.message);
+      }
+    }
+
+    const problems = await getCFProblems(minR, maxR, tag, 5, excludeIds);
 
     if (problems.length === 0) {
       return interaction.editReply({
