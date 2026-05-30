@@ -6,12 +6,40 @@ const { buildSubmissionEmbed } = require('../utils/embeds');
 
 const CF_BASE = 'https://codeforces.com/api';
 
+let contestListCache = null;
+let lastContestListFetchTime = 0;
+
 async function getOrFetchContestName(contestId) {
   if (!contestId) return null;
   let name = getCachedContestName(contestId);
   if (name) return name;
 
-  // Try ratingChanges first
+  const now = Date.now();
+  // Fetch contest list if cache is empty or older than 1 hour (3600000 ms)
+  if (!contestListCache || (now - lastContestListFetchTime > 3600000)) {
+    try {
+      console.log('[SubmissionFeed] Fetching Codeforces contest list for cache...');
+      const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 8000 });
+      if (res.data.status === 'OK') {
+        contestListCache = res.data.result;
+        lastContestListFetchTime = now;
+      }
+    } catch (err) {
+      console.error('[SubmissionFeed] Failed to fetch contest list:', err.message);
+    }
+  }
+
+  // Look up contest in cache
+  if (contestListCache) {
+    const contest = contestListCache.find(c => c.id === Number(contestId));
+    if (contest) {
+      name = contest.name;
+      cacheContestName(contestId, name);
+      return name;
+    }
+  }
+
+  // Fallback to contest.ratingChanges if not found in list (e.g. if it is a very new contest)
   try {
     const res = await axios.get(`${CF_BASE}/contest.ratingChanges?contestId=${contestId}`, { timeout: 5000 });
     if (res.data.status === 'OK' && res.data.result && res.data.result.length > 0) {
@@ -20,23 +48,9 @@ async function getOrFetchContestName(contestId) {
       return name;
     }
   } catch (err) {
-    // Ignore and fallback
+    // Ignore fallback errors
   }
 
-  // Fallback to contest.list
-  try {
-    const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 8000 });
-    if (res.data.status === 'OK') {
-      const contest = res.data.result.find(c => c.id === Number(contestId));
-      if (contest) {
-        name = contest.name;
-        cacheContestName(contestId, name);
-        return name;
-      }
-    }
-  } catch (err) {
-    console.error(`[SubmissionFeed] Failed to fetch contest name from list for ${contestId}:`, err.message);
-  }
   return null;
 }
 
@@ -157,8 +171,8 @@ async function runSubmissionFeed(client) {
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
     
-    // Slight delay to prevent rate limits when scanning many users
-    await new Promise(r => setTimeout(r, 500));
+    // Slight delay to prevent rate limits when scanning many users (respecting 1 request / 2 seconds CF limit)
+    await new Promise(r => setTimeout(r, 2500));
   }
 }
 

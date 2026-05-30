@@ -217,8 +217,8 @@ async function checkFirstBloods(client) {
       } catch (e) {
         console.warn(`[FirstBlood] Error checking handle ${user.cf_handle}:`, e.message);
       }
-      // slight delay to prevent rate limiting CF API
-      await new Promise(r => setTimeout(r, 400));
+      // slight delay to prevent rate limiting CF API (respecting 1 request / 2 seconds limit)
+      await new Promise(r => setTimeout(r, 2500));
     }
   } catch (err) {
     console.error('[FirstBlood Error]', err.message);
