@@ -5,19 +5,22 @@ const { EmbedBuilder } = require('discord.js');
 const COLORS = {
   Codeforces: 0x1F8DD6,
   AtCoder:    0x222222,
+  Custom:     0xD4AF37,
   default:    0x5865F2
 };
 
 // Platform emojis
 const PLATFORM_EMOJI = {
   cf: '🔵',
-  ac: '🔴'
+  ac: '🔴',
+  custom: '🏆'
 };
 
 // Platform labels + badge
 const PLATFORM_BADGE = {
   Codeforces: '🔵 Codeforces',
-  AtCoder:    '🔴 AtCoder'
+  AtCoder:    '🔴 AtCoder',
+  Custom:     '🏆 Custom'
 };
 
 /**
@@ -205,18 +208,29 @@ function errorEmbed(title, description) {
  * Order: Codeforces → AtCoder
  */
 function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
-  const PLATFORM_ORDER = ['Codeforces', 'AtCoder'];
+  const hasCustom = contests.some(c => c.platform === 'Custom');
+  const PLATFORM_ORDER = [];
+  if (hasCustom || platform.toLowerCase().startsWith('custom')) {
+    PLATFORM_ORDER.push('Custom');
+  }
+  if (platform === 'all' || platform.toLowerCase().startsWith('codeforces')) {
+    PLATFORM_ORDER.push('Codeforces');
+  }
+  if (platform === 'all' || platform.toLowerCase().startsWith('atcoder')) {
+    PLATFORM_ORDER.push('AtCoder');
+  }
   
   const cfStatus = apiStatus.cf ?? true;
   const acStatus = apiStatus.ac ?? true;
 
   const PLATFORM_HEADER = {
+    Custom:     `🏆 ───────── CUSTOM ─────────`,
     Codeforces: `🔵 ─────── CODEFORCES ───────${cfStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`,
     AtCoder:    `🔴 ──────── ATCODER ─────────${acStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`
   };
 
   const filtered = platform === 'all'
-    ? contests.filter(c => PLATFORM_ORDER.includes(c.platform))
+    ? contests.filter(c => ['Custom', 'Codeforces', 'AtCoder'].includes(c.platform))
     : contests.filter(c => c.platform.toLowerCase().startsWith(platform.toLowerCase()));
 
   const embed = new EmbedBuilder()
@@ -241,7 +255,9 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
     const list = grouped[p];
     const header = PLATFORM_HEADER[p] ?? `⚡ ${p.toUpperCase()}`;
     if (list.length === 0) {
-      sections.push(`${header}\n*No upcoming contests*`);
+      if (p !== 'Custom') {
+        sections.push(`${header}\n*No upcoming contests*`);
+      }
     } else {
       const sliced = list.slice(0, 10);
       displayedCount += sliced.length;
