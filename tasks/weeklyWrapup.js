@@ -73,37 +73,61 @@ async function runWeeklyWrapup(client) {
 
 function getTargetWeeklyWrapupDate() {
   const now = new Date();
-  const dhakaStr = now.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' });
-  const dhakaDate = new Date(dhakaStr);
-  const day = dhakaDate.getDay(); // 0 = Sunday, 1 = Monday...
-  const hour = dhakaDate.getHours();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Dhaka',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
   
-  let targetSunday = new Date(dhakaDate);
-  if (day === 0) {
-    if (hour < 21) {
-      // Sunday before 9pm Dhaka time, target is previous Sunday
-      targetSunday.setDate(dhakaDate.getDate() - 7);
-    } else {
-      // Sunday after 9pm, target is today
-      targetSunday.setDate(dhakaDate.getDate());
-    }
-  } else {
-    // Monday-Saturday, target is most recent Sunday
-    targetSunday.setDate(dhakaDate.getDate() - day);
+  const formatted = formatter.format(now);
+  const match = formatted.match(/^(\d{2})\/(\d{2})\/(\d{4}),\s*(\d{2}):(\d{2}):(\d{2})$/);
+  if (!match) {
+    // Fallback if match fails
+    return '';
   }
   
-  const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
-  return formatterDate.format(targetSunday);
+  const month = parseInt(match[1], 10) - 1; // 0-based
+  const dayOfMonth = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+  const hour = parseInt(match[4], 10);
+  
+  const localDhakaDate = new Date(Date.UTC(year, month, dayOfMonth, hour, 0, 0));
+  const dayOfWeek = localDhakaDate.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
+  
+  let targetSunday = new Date(localDhakaDate);
+  if (dayOfWeek === 0) {
+    if (hour < 21) {
+      // Sunday before 9pm Dhaka time -> target is previous Sunday
+      targetSunday.setUTCDate(localDhakaDate.getUTCDate() - 7);
+    } else {
+      // Sunday after 9pm -> target is today
+      targetSunday.setUTCDate(localDhakaDate.getUTCDate());
+    }
+  } else {
+    // Monday-Saturday -> target is most recent Sunday
+    targetSunday.setUTCDate(localDhakaDate.getUTCDate() - dayOfWeek);
+  }
+  
+  const targetYear = targetSunday.getUTCFullYear();
+  const targetMonth = String(targetSunday.getUTCMonth() + 1).padStart(2, '0');
+  const targetDay = String(targetSunday.getUTCDate()).padStart(2, '0');
+  
+  return `${targetMonth}/${targetDay}/${targetYear}`;
 }
 
 // One-time weekly reset to clean up old leaderboard messages and regenerate with new layout
 async function runOneTimeWeeklyReset(client) {
   try {
     const { getConfig, setConfig, db } = require('../database/db');
-    const resetWeeklyDone = getConfig('reset_weekly_layout_done');
+    const resetWeeklyDone = getConfig('reset_weekly_0531_done');
     if (resetWeeklyDone === 'true') return;
 
-    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset...');
+    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 05/31...');
 
     // 1. Fetch channel and delete the previous wrap-up message
     const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id');
@@ -125,10 +149,10 @@ async function runOneTimeWeeklyReset(client) {
     }
 
     // 2. Clear last_weekly_wrapup_date so catch-up triggers immediately
-    setConfig('last_weekly_wrapup_date', 'null_reset');
+    setConfig('last_weekly_wrapup_date', 'null_reset_0531');
 
     // 3. Mark reset as done
-    setConfig('reset_weekly_layout_done', 'true');
+    setConfig('reset_weekly_0531_done', 'true');
     console.log('[WeeklyReset] One-time weekly wrap-up reset complete.');
   } catch (err) {
     console.error('[WeeklyReset Error]', err);
