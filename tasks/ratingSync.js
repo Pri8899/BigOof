@@ -196,17 +196,25 @@ async function updateDashboard(client) {
     }
 
     if (msg) {
-      // To trigger a notification while keeping only one message, we delete the old one
-      await msg.delete().catch(() => {});
-      console.log('[Dashboard] Deleted old dashboard message.');
-    }
-
-    // Send a new message (with auto-retry for GOAWAY)
-    const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(async err => {
-      if (err.message && err.message.includes('GOAWAY')) {
-        console.warn('[Dashboard] Got GOAWAY on send, retrying in 1 second...');
-        await new Promise(r => setTimeout(r, 1000));
-        return channel.send({ content: '@everyone', embeds: [embed] }).catch(e => {
+      // Edit existing message silently instead of deleting and reposting with @everyone
+      await msg.edit({ content: '', embeds: [embed] }).catch(async err => {
+        if (err.message && err.message.includes('GOAWAY')) {
+          console.warn('[Dashboard] Got GOAWAY on edit, retrying in 1 second...');
+          await new Promise(r => setTimeout(r, 1000));
+          return msg.edit({ content: '', embeds: [embed] }).catch(e => {
+            console.error('[Dashboard] Message edit retry error:', e.message);
+          });
+        }
+        console.error('[Dashboard] Message edit error:', err.message);
+      });
+      console.log('[Dashboard] Refreshed existing dashboard message.');
+    } else {
+      // Send a new message if it doesn't exist (without @everyone ping)
+      const newMsg = await channel.send({ embeds: [embed] }).catch(async err => {
+        if (err.message && err.message.includes('GOAWAY')) {
+          console.warn('[Dashboard] Got GOAWAY on send, retrying in 1 second...');
+          await new Promise(r => setTimeout(r, 1000));
+          return channel.send({ embeds: [embed] }).catch(e => {
             console.error('[Dashboard] Message send retry error:', e.message);
             return null;
           });
@@ -219,6 +227,7 @@ async function updateDashboard(client) {
         setConfig('dashboard_message_id', newMsg.id);
         console.log('[Dashboard] Created new dashboard message.');
       }
+    }
   } catch (err) {
     console.error('[Dashboard] updateDashboard critical error:', err);
   }
