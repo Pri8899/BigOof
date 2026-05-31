@@ -74,7 +74,9 @@ async function postRatingChange(client, discordId, username, platform, oldRating
   const sign   = diff > 0 ? `+${diff}` : `${diff}`;
   const color  = diff > 0 ? 0x2ECC71 : 0xE74C3C;
 
-  const platformName = { cf: 'Codeforces 🔵', ac: 'AtCoder 🔴' }[platform] ?? platform;
+  const { getPlatformEmojis } = require('../utils/emojis');
+  const emojis = await getPlatformEmojis(channel.guild);
+  const platformName = { cf: `Codeforces ${emojis.cf}`, ac: `AtCoder ${emojis.ac}` }[platform] ?? platform;
 
   const embed = new EmbedBuilder()
     .setColor(color)
@@ -161,7 +163,9 @@ async function updateDashboard(client) {
     const ratings = getAllRatings();
     const streaks = getAllStreaks();
     const rows    = computeLeaderboard(users, ratings);
-    const embed   = buildDashboardEmbed(rows, streaks);
+    const { getPlatformEmojis } = require('../utils/emojis');
+    const emojis  = await getPlatformEmojis(channel.guild);
+    const embed   = buildDashboardEmbed(rows, streaks, emojis);
 
     // Fetch recent messages in the channel to find any existing dashboard messages sent by the bot
     let existingMessages = [];

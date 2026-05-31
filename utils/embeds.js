@@ -138,7 +138,7 @@ function buildProfileEmbed(member, user, ratings) {
  * @param {Array} rows  - from computeLeaderboard
  * @param {Array} streaks - from getAllStreaks()
  */
-function buildDashboardEmbed(rows, streaks = []) {
+function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '🔴' }) {
   const medals = ['🥇', '🥈', '🥉'];
 
   // Build streak lookup: discord_id -> max streak across platforms
@@ -156,11 +156,11 @@ function buildDashboardEmbed(rows, streaks = []) {
     const lines = rows.map((row, i) => {
       const medal   = medals[i] ?? `\`${String(i + 1).padStart(2, ' ')}\``;
       const cfStr   = row.cf_linked
-        ? (row.cf_rating > 0 ? `CF: **${row.cf_rating}** (Solved: **${row.cf_solved}**)` : `CF: Unrated (Solved: **${row.cf_solved}**)`)
-        : 'CF: —';
+        ? (row.cf_rating > 0 ? `${emojis.cf} **${row.cf_rating}** (Solved: **${row.cf_solved}**)` : `${emojis.cf} Unrated (Solved: **${row.cf_solved}**)`)
+        : `${emojis.cf} —`;
       const acStr   = row.ac_linked
-        ? (row.ac_rating > 0 ? `AC: **${row.ac_rating}** (Solved: **${row.ac_solved}**)` : `AC: Unrated (Solved: **${row.ac_solved}**)`)
-        : 'AC: —';
+        ? (row.ac_rating > 0 ? `${emojis.ac} **${row.ac_rating}** (Solved: **${row.ac_solved}**)` : `${emojis.ac} Unrated (Solved: **${row.ac_solved}**)`)
+        : `${emojis.ac} —`;
       const streak  = streakMap[row.discord_id];
       const fire    = streak >= 7 ? ` 🔥${streak}d` : streak >= 1 ? ` ⚡${streak}d` : '';
       return `${medal} **${row.username ?? 'Unknown'}**${fire} — ${cfStr} | ${acStr}`;
@@ -172,7 +172,7 @@ function buildDashboardEmbed(rows, streaks = []) {
     .setColor(0x2ECC71)
     .setDescription(`#    🏅 CP Server Leaderboard\n\n${description}`)
     .addFields(
-      { name: '📊 Platforms',     value: '🔵 Codeforces · 🔴 AtCoder', inline: false },
+      { name: '📊 Platforms',     value: `${emojis.cf} Codeforces · ${emojis.ac} AtCoder`, inline: false },
       { name: '🔢 Total Members', value: `${rows.length} ranked`,                     inline: true },
       { name: '🔥 Streak',        value: '⚡ = active  🔥 = 7+ days',                 inline: true }
     )
@@ -206,7 +206,7 @@ function errorEmbed(title, description) {
  * Build upcoming contests list embed — grouped by platform
  * Order: Codeforces → AtCoder
  */
-function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
+function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emojis = { cf: '🔵', ac: '🔴' }) {
   const hasCustom = contests.some(c => c.platform === 'Custom');
   const PLATFORM_ORDER = [];
   if (hasCustom || platform.toLowerCase().startsWith('custom')) {
@@ -224,8 +224,8 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
 
   const PLATFORM_HEADER = {
     Custom:     `🏆 ───────── CUSTOM ─────────`,
-    Codeforces: `🔵 ─────── CODEFORCES ───────${cfStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`,
-    AtCoder:    `🔴 ──────── ATCODER ─────────${acStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`
+    Codeforces: `${emojis.cf} ─────── CODEFORCES ───────${cfStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`,
+    AtCoder:    `${emojis.ac} ──────── ATCODER ─────────${acStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`
   };
 
   const filtered = platform === 'all'
@@ -385,7 +385,7 @@ function buildSubmissionEmbed(user, problem, platform) {
 /**
  * Build Weekly Wrap-Up Embed
  */
-function buildWeeklyWrapupEmbed(allSolved, allRatingGains) {
+function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵', ac: '🔴' }) {
   const embed = new EmbedBuilder()
     .setColor(0xD4AF37) // Legendary Gold
     .setDescription(`# \u2003\u2003\u2003👑 CP SERVER WEEKLY CHAMPIONS 👑\n\nHappy Sunday! Let's celebrate the top performers who dominated the competitive programming charts this week!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)

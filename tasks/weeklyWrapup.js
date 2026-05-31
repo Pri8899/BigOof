@@ -216,7 +216,9 @@ async function runWeeklyWrapup(client) {
   allSolved.sort((a, b) => b.solved_this_week - a.solved_this_week);
   allRatingGains.sort((a, b) => b.rating_gained - a.rating_gained);
   
-  const embed = buildWeeklyWrapupEmbed(allSolved, allRatingGains);
+  const { getPlatformEmojis } = require('../utils/emojis');
+  const emojis = await getPlatformEmojis(channel.guild);
+  const embed = buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis);
   
   await channel.send({ content: '@everyone', embeds: [embed] }).catch(err => {
     console.error('[WeeklyWrapUp] Failed to post wrap up:', err.message);

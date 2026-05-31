@@ -125,7 +125,9 @@ async function postContestSummary(client) {
     const acStatus = getConfig('ac_api_online') !== '0';
     console.log(`[ContestFetcher] API status - CF: ${cfStatus}, AC: ${acStatus}`);
 
-    const embed = buildContestListEmbed(contests, 'all', { cf: cfStatus, ac: acStatus });
+    const { getPlatformEmojis } = require('../utils/emojis');
+    const emojis = await getPlatformEmojis(channel.guild);
+    const embed = buildContestListEmbed(contests, 'all', { cf: cfStatus, ac: acStatus }, emojis);
 
     // Fetch recent messages in the channel to find any existing summary messages sent by the bot
     let existingMessages = [];

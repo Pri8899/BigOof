@@ -8,9 +8,9 @@ const { getCFProblems }       = require('../utils/codeforces');
 
 // CF tiers as requested
 const CF_TIERS = [
-  { label: '🟢 Beginner (Rating 800)',     min: 800,  max: 800 },
-  { label: '🔵 Intermediate (Rating 1000)', min: 1000, max: 1000 },
-  { label: '🔴 Advanced (Rating 1200)',     min: 1200, max: 1200 }
+  { label: '🟢 Easy · Div. 3/4 A (Rating 800)',     min: 800,  max: 800 },
+  { label: '🔵 Medium · Div. 2 A / Div. 3 B (Rating 1000)', min: 1000, max: 1000 },
+  { label: '🔴 Hard · Div. 2 B / Div. 3 C (Rating 1200)',     min: 1200, max: 1200 }
 ];
 
 // Helper to fetch solved problems from Codeforces for all server members
@@ -106,9 +106,12 @@ async function postDailySuggestions(client) {
   }
 
   // ── Codeforces Section ──
+  const { getPlatformEmojis } = require('../utils/emojis');
+  const emojis = await getPlatformEmojis(channel.guild);
+
   const cfEmbed = new EmbedBuilder()
     .setColor(0x1F8DD6)
-    .setDescription(`# \u2003🔵 Codeforces — Daily Practice Problems\n### \u2003💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
+    .setDescription(`# \u2003${emojis.cf} Codeforces — Daily Practice Problems\n### \u2003💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
 
   if (p1) cfEmbed.addFields({ name: `${CF_TIERS[0].label}  ·  Rating ${p1.rating}`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
   if (p2) cfEmbed.addFields({ name: `${CF_TIERS[1].label}  ·  Rating ${p2.rating}`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
@@ -266,9 +269,9 @@ async function checkFirstBloods(client) {
               .setTitle('🏆 DAILY CHALLENGE SWEEP! 🏆')
               .setDescription(`🎉 **Congratulations to <@${user.discord_id}>!** 🎉\n\nThey have successfully solved **all 3** of the daily practice problems within the active daily cycle!`)
               .addFields(
-                { name: `🟢 Beginner`, value: getProbLink(daily.p1_id, 'Beginner Problem'), inline: false },
-                { name: `🔵 Intermediate`, value: getProbLink(daily.p2_id, 'Intermediate Problem'), inline: false },
-                { name: `🔴 Advanced`, value: getProbLink(daily.p3_id, 'Advanced Problem'), inline: false }
+                { name: `🟢 Easy`, value: getProbLink(daily.p1_id, 'Easy Problem'), inline: false },
+                { name: `🔵 Medium`, value: getProbLink(daily.p2_id, 'Medium Problem'), inline: false },
+                { name: `🔴 Hard`, value: getProbLink(daily.p3_id, 'Hard Problem'), inline: false }
               )
               .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
               .setFooter({ text: 'Daily Sweep achieved!' })
@@ -346,14 +349,14 @@ async function runOneTimeStartupReset(client) {
     }
 
     // Reset for 05/31/2026 Daily Suggestions reposting with new style
-    const resetDone0531_v5 = getConfig('reset_0531_v5');
-    if (resetDone0531_v5 !== 'true') {
+    const resetDone0531_v6 = getConfig('reset_0531_v6');
+    if (resetDone0531_v6 !== 'true') {
       console.log('[Reset] Starting one-time reset to force reposting of 05/31/2026 daily suggestions...');
       
       // Clear last_suggest_post_date so catch-up triggers immediately on boot
       setConfig('last_suggest_post_date', '05/30/2026');
       
-      setConfig('reset_0531_v5', 'true');
+      setConfig('reset_0531_v6', 'true');
       console.log('[Reset] One-time reset complete.');
     }
   } catch (err) {
