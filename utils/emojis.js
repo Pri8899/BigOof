@@ -18,6 +18,9 @@ async function getPlatformEmojis(guild) {
   }
   
   try {
+    // Fetch emojis to populate cache
+    await guild.emojis.fetch().catch(e => console.warn(`[Emojis] Fetch failed:`, e.message));
+
     // 1. Search for existing emojis by name
     let cfEmoji = guild.emojis.cache.find(e => e.name === 'codeforces');
     if (!cfEmoji) {

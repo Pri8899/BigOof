@@ -14,8 +14,8 @@ module.exports = {
         .setDescription('Platform to link')
         .setRequired(true)
         .addChoices(
-          { name: '🔵 Codeforces', value: 'cf' },
-          { name: '🔴 AtCoder',    value: 'ac' }
+          { name: 'Codeforces', value: 'cf' },
+          { name: 'AtCoder',    value: 'ac' }
         ))
     .addStringOption(opt =>
       opt.setName('handle')

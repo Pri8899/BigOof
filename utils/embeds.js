@@ -138,7 +138,7 @@ function buildProfileEmbed(member, user, ratings) {
  * @param {Array} rows  - from computeLeaderboard
  * @param {Array} streaks - from getAllStreaks()
  */
-function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '🔴' }) {
+function buildDashboardEmbed(rows, streaks = []) {
   const medals = ['🥇', '🥈', '🥉'];
 
   // Build streak lookup: discord_id -> max streak across platforms
@@ -156,11 +156,11 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
     const lines = rows.map((row, i) => {
       const medal   = medals[i] ?? `\`${String(i + 1).padStart(2, ' ')}\``;
       const cfStr   = row.cf_linked
-        ? (row.cf_rating > 0 ? `${emojis.cf} **${row.cf_rating}** (Solved: **${row.cf_solved}**)` : `${emojis.cf} Unrated (Solved: **${row.cf_solved}**)`)
-        : `${emojis.cf} —`;
+        ? (row.cf_rating > 0 ? `CF: **${row.cf_rating}** (Solved: **${row.cf_solved}**)` : `CF: Unrated (Solved: **${row.cf_solved}**)`)
+        : `CF: —`;
       const acStr   = row.ac_linked
-        ? (row.ac_rating > 0 ? `${emojis.ac} **${row.ac_rating}** (Solved: **${row.ac_solved}**)` : `${emojis.ac} Unrated (Solved: **${row.ac_solved}**)`)
-        : `${emojis.ac} —`;
+        ? (row.ac_rating > 0 ? `AC: **${row.ac_rating}** (Solved: **${row.ac_solved}**)` : `AC: Unrated (Solved: **${row.ac_solved}**)`)
+        : `AC: —`;
       const streak  = streakMap[row.discord_id];
       const fire    = streak >= 7 ? ` 🔥${streak}d` : streak >= 1 ? ` ⚡${streak}d` : '';
       return `${medal} **${row.username ?? 'Unknown'}**${fire} — ${cfStr} | ${acStr}`;
@@ -172,7 +172,7 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
     .setColor(0x2ECC71)
     .setDescription(`#    🏅 CP Server Leaderboard\n\n${description}`)
     .addFields(
-      { name: '📊 Platforms',     value: `${emojis.cf} Codeforces · ${emojis.ac} AtCoder`, inline: false },
+      { name: '📊 Platforms',     value: `🔵 Codeforces · 🔴 AtCoder`, inline: false },
       { name: '🔢 Total Members', value: `${rows.length} ranked`,                     inline: true },
       { name: '🔥 Streak',        value: '⚡ = active  🔥 = 7+ days',                 inline: true }
     )

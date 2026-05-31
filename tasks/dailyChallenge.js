@@ -359,6 +359,23 @@ async function runOneTimeStartupReset(client) {
       setConfig('reset_0531_v7', 'true');
       console.log('[Reset] One-time reset complete.');
     }
+
+    // Reset for 06/01/2026 Daily Suggestions reposting with correct logo
+    const resetDone0601_v1 = getConfig('reset_0601_v1');
+    if (resetDone0601_v1 !== 'true') {
+      console.log('[Reset] Starting one-time reset to force reposting of daily suggestions with correct logo...');
+      try {
+        await postDailySuggestions(client);
+        
+        const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
+        const todayDateStr = formatterDate.format(new Date());
+        setConfig('last_suggest_post_date', todayDateStr);
+        setConfig('reset_0601_v1', 'true');
+        console.log('[Reset] One-time reset complete for 06/01/2026.');
+      } catch (err) {
+        console.error('[Reset Error 06/01/2026]', err.message);
+      }
+    }
   } catch (err) {
     console.error('[Reset Error]', err);
   }
