@@ -1,6 +1,7 @@
 // tasks/weeklyWrapup.js — Weekly Wrap-Up posted on Sunday Midnight
 const cron = require('node-cron');
-const { getAllUsers, getRatings, getWeeklySnapshot, setWeeklySnapshot, getConfig, setConfig } = require('../database/db');
+const axios = require('axios');
+const { getAllUsers, getRatings, getWeeklySnapshot, setWeeklySnapshot, getConfig, setConfig, db } = require('../database/db');
 const { buildWeeklyWrapupEmbed } = require('../utils/embeds');
 
 async function runWeeklyWrapup(client) {
@@ -29,21 +30,131 @@ async function runWeeklyWrapup(client) {
   const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
   const todayStr = formatterDate.format(new Date());
 
+  const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 3600;
+
   for (const user of users) {
     const ratings = getRatings(user.discord_id);
     let userTotalSolved = 0;
     let userTotalRatingGain = 0;
     
+    // CF stats
+    let cfSolved = null;
+    let cfGain = null;
+    if (user.cf_handle) {
+      try {
+        const statusRes = await axios.get(`https://codeforces.com/api/user.status?handle=${user.cf_handle}`, { timeout: 8000 }).catch(() => null);
+        if (statusRes && statusRes.data && statusRes.data.status === 'OK' && statusRes.data.result) {
+          const solvedSet = new Set();
+          for (const sub of statusRes.data.result) {
+            if (sub.creationTimeSeconds < sevenDaysAgo) break;
+            if (sub.verdict === 'OK' && sub.problem) {
+              solvedSet.add(`${sub.problem.contestId}-${sub.problem.index}`);
+            }
+          }
+          cfSolved = solvedSet.size;
+        }
+      } catch (err) {
+        console.error(`[WeeklyWrapUp] CF Status API error for ${user.username}:`, err.message);
+      }
+      
+      try {
+        const ratingRes = await axios.get(`https://codeforces.com/api/user.rating?handle=${user.cf_handle}`, { timeout: 6000 }).catch(() => null);
+        if (ratingRes && ratingRes.data && ratingRes.data.status === 'OK' && ratingRes.data.result) {
+          const history = ratingRes.data.result;
+          if (history.length > 0) {
+            let ratingSevenDaysAgo = history[0].oldRating;
+            for (const change of history) {
+              if (change.ratingUpdateTimeSeconds < sevenDaysAgo) {
+                ratingSevenDaysAgo = change.newRating;
+              } else {
+                break;
+              }
+            }
+            const currentRating = history[history.length - 1].newRating;
+            cfGain = Math.max(0, currentRating - ratingSevenDaysAgo);
+          } else {
+            cfGain = 0;
+          }
+        }
+      } catch (err) {
+        console.error(`[WeeklyWrapUp] CF Rating API error for ${user.username}:`, err.message);
+      }
+    }
+
+    // AtCoder stats
+    let acSolved = null;
+    let acGain = null;
+    if (user.ac_handle) {
+      try {
+        const resultsRes = await axios.get(`https://kenkoooo.com/atcoder/atcoder-api/results?user=${user.ac_handle}`, { timeout: 8000 }).catch(() => null);
+        if (resultsRes && resultsRes.data && Array.isArray(resultsRes.data)) {
+          const solvedSet = new Set();
+          for (const sub of resultsRes.data) {
+            if (sub.epoch_second >= sevenDaysAgo && sub.result === 'AC') {
+              solvedSet.add(sub.problem_id);
+            }
+          }
+          acSolved = solvedSet.size;
+        }
+      } catch (err) {
+        console.error(`[WeeklyWrapUp] AtCoder API error for ${user.username}:`, err.message);
+      }
+      
+      try {
+        const oldRatingRow = db.prepare(`
+          SELECT rating FROM rating_history
+          WHERE discord_id = ? AND platform = 'ac' AND recorded_at < ?
+          ORDER BY recorded_at DESC LIMIT 1
+        `).get(user.discord_id, sevenDaysAgo);
+        
+        const acDbRating = ratings.find(r => r.platform === 'ac');
+        if (acDbRating) {
+          const currentRating = acDbRating.rating;
+          const ratingSevenDaysAgo = oldRatingRow ? oldRatingRow.rating : 0;
+          acGain = Math.max(0, currentRating - ratingSevenDaysAgo);
+        }
+      } catch (err) {
+        console.error(`[WeeklyWrapUp] AtCoder Local History error for ${user.username}:`, err.message);
+      }
+    }
+
+    // Hybrid calculation: Use API data if available, otherwise fall back to DB snapshots
+    if (user.cf_handle) {
+      const cfDbRating = ratings.find(r => r.platform === 'cf');
+      const snap = getWeeklySnapshot(user.discord_id, 'cf');
+      
+      if (cfSolved !== null) {
+        userTotalSolved += cfSolved;
+      } else if (cfDbRating && snap) {
+        userTotalSolved += Math.max(0, cfDbRating.solved - snap.solved);
+      }
+      
+      if (cfGain !== null) {
+        userTotalRatingGain += cfGain;
+      } else if (cfDbRating && snap) {
+        userTotalRatingGain += Math.max(0, cfDbRating.rating - snap.rating);
+      }
+    }
+    
+    if (user.ac_handle) {
+      const acDbRating = ratings.find(r => r.platform === 'ac');
+      const snap = getWeeklySnapshot(user.discord_id, 'ac');
+      
+      if (acSolved !== null) {
+        userTotalSolved += acSolved;
+      } else if (acDbRating && snap) {
+        userTotalSolved += Math.max(0, acDbRating.solved - snap.solved);
+      }
+      
+      if (acGain !== null) {
+        userTotalRatingGain += acGain;
+      } else if (acDbRating && snap) {
+        userTotalRatingGain += Math.max(0, acDbRating.rating - snap.rating);
+      }
+    }
+    
+    // Save/update snapshot for the next week
     for (const r of ratings) {
-      const snap = getWeeklySnapshot(user.discord_id, r.platform);
-      
-      const startSolved = snap ? snap.solved : r.solved;
-      const startRating = snap ? snap.rating : r.rating;
-      
-      userTotalSolved += Math.max(0, r.solved - startSolved);
-      userTotalRatingGain += (r.rating - startRating);
-      
-      // Save new snapshot for the next week
       setWeeklySnapshot(user.discord_id, r.platform, r.rating, r.solved, todayStr);
     }
     
@@ -124,10 +235,10 @@ function getTargetWeeklyWrapupDate() {
 async function runOneTimeWeeklyReset(client) {
   try {
     const { getConfig, setConfig, db } = require('../database/db');
-    const resetWeeklyDone = getConfig('reset_weekly_0531_done');
+    const resetWeeklyDone = getConfig('reset_weekly_0531_v3');
     if (resetWeeklyDone === 'true') return;
 
-    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 05/31...');
+    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 05/31 v3...');
 
     // 1. Fetch channel and delete the previous wrap-up message
     const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id');
@@ -149,10 +260,10 @@ async function runOneTimeWeeklyReset(client) {
     }
 
     // 2. Clear last_weekly_wrapup_date so catch-up triggers immediately
-    setConfig('last_weekly_wrapup_date', 'null_reset_0531');
+    setConfig('last_weekly_wrapup_date', 'null_reset_0531_v3');
 
     // 3. Mark reset as done
-    setConfig('reset_weekly_0531_done', 'true');
+    setConfig('reset_weekly_0531_v3', 'true');
     console.log('[WeeklyReset] One-time weekly wrap-up reset complete.');
   } catch (err) {
     console.error('[WeeklyReset Error]', err);
