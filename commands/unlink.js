@@ -21,10 +21,14 @@ module.exports = {
     const userId   = interaction.user.id;
     const names    = { cf: 'Codeforces', ac: 'AtCoder' };
 
+    const { getPlatformEmojis } = require('../utils/emojis');
+    const emojis = await getPlatformEmojis(interaction.guild);
+    const platformEmoji = platform === 'cf' ? emojis.cf : emojis.ac;
+
     const user = getUser(userId);
     if (!user || !user[`${platform}_handle`]) {
       return interaction.reply({
-        embeds: [errorEmbed('Not Linked', `You don't have a **${names[platform]}** account linked.`)],
+        embeds: [errorEmbed('Not Linked', `${platformEmoji} You don't have a **${names[platform]}** account linked.`)],
         ephemeral: true
       });
     }
@@ -35,7 +39,7 @@ module.exports = {
     updateDashboard(interaction.client).catch(err => console.error('[unlink] Dashboard update failed:', err.message));
 
     return interaction.reply({
-      embeds: [successEmbed('Account Unlinked', `Your **${names[platform]}** account has been removed.`)],
+      embeds: [successEmbed('Account Unlinked', `${platformEmoji} Your **${names[platform]}** account has been removed.`)],
       ephemeral: true
     });
   }

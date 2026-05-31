@@ -33,6 +33,9 @@ module.exports = {
     upsertUser(userId, username);
 
     const platformNames = { cf: 'Codeforces', ac: 'AtCoder' };
+    const { getPlatformEmojis } = require('../utils/emojis');
+    const emojis = await getPlatformEmojis(interaction.guild);
+    const platformEmoji = platform === 'cf' ? emojis.cf : emojis.ac;
 
     let valid = false;
     if (platform === 'cf') valid = await validateCFHandle(handle);
@@ -42,7 +45,7 @@ module.exports = {
       return interaction.editReply({
         embeds: [errorEmbed(
           'Invalid Handle',
-          `Could not find **${handle}** on **${platformNames[platform]}**.\nPlease check your username and try again.`
+          `${platformEmoji} Could not find **${handle}** on **${platformNames[platform]}**.\nPlease check your username and try again.`
         )]
       });
     }
@@ -52,7 +55,7 @@ module.exports = {
     interaction.editReply({
       embeds: [successEmbed(
         'Account Linked!',
-        `Your **${platformNames[platform]}** account \`${handle}\` has been linked! 🎉\n\nFetching your stats now... they'll appear in the dashboard soon.`
+        `${platformEmoji} Your **${platformNames[platform]}** account \`${handle}\` has been linked! 🎉\n\nFetching your stats now... they'll appear in the dashboard soon.`
       )]
     });
 
