@@ -126,17 +126,17 @@ async function postContestSummary(client) {
     console.log(`[ContestFetcher] API status - CF: ${cfStatus}, AC: ${acStatus}`);
 
     const embed = buildContestListEmbed(contests, 'all', { cf: cfStatus, ac: acStatus });
-    embed.setTitle('     📅  Upcoming Contests — Full Overview');
 
     // Fetch recent messages in the channel to find any existing summary messages sent by the bot
     let existingMessages = [];
     try {
       const messages = await channel.messages.fetch({ limit: 50 });
-      // Filter for messages sent by the bot that have the summary embed title
+      // Filter for messages sent by the bot that have the summary embed title or description
       existingMessages = [...messages.values()].filter(m => 
         m.author.id === client.user.id && 
         m.embeds.length > 0 && 
-        (m.embeds[0].title?.includes('Upcoming Contests') || m.embeds[0].title?.includes('Full Overview'))
+        ((m.embeds[0].title && (m.embeds[0].title.includes('Upcoming Contests') || m.embeds[0].title.includes('Full Overview'))) ||
+         (m.embeds[0].description && (m.embeds[0].description.includes('Upcoming Contests') || m.embeds[0].description.includes('Full Overview'))))
       );
     } catch (err) {
       console.warn('[ContestFetcher] Failed to fetch recent channel messages:', err.message);

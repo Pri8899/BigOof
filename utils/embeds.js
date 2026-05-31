@@ -170,8 +170,7 @@ function buildDashboardEmbed(rows, streaks = []) {
 
   return new EmbedBuilder()
     .setColor(0x2ECC71)
-    .setTitle('🏅 CP Server Leaderboard')
-    .setDescription(description)
+    .setDescription(`#    🏅 CP Server Leaderboard\n\n${description}`)
     .addFields(
       { name: '📊 Platforms',     value: '🔵 Codeforces · 🔴 AtCoder', inline: false },
       { name: '🔢 Total Members', value: `${rows.length} ranked`,                     inline: true },
@@ -234,11 +233,16 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
     : contests.filter(c => c.platform.toLowerCase().startsWith(platform.toLowerCase()));
 
   const embed = new EmbedBuilder()
-    .setColor(COLORS.default)
-    .setTitle('📅  Upcoming Contests');
+    .setColor(COLORS.default);
+
+  const titleText = platform === 'all'
+    ? '📅  Upcoming Contests — Full Overview'
+    : `📅  Upcoming Contests — ${platform.charAt(0).toUpperCase() + platform.slice(1)}`;
+  
+  const header = `#    ${titleText}`;
 
   if (filtered.length === 0) {
-    embed.setDescription('_No upcoming contests found across any platform._');
+    embed.setDescription(`${header}\n\n_No upcoming contests found across any platform._`);
     return embed;
   }
 
@@ -298,7 +302,7 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
   const timeStr = `${displayHr}:00 ${ampm}`;
 
   embed
-    .setDescription(sections.join('\n\n'))
+    .setDescription(`${header}\n\n` + sections.join('\n\n'))
     .setFooter({ text: `${displayedCount} total upcoming contests  •  Refreshes every hour  •  ${timeStr}` });
 
   return embed;
