@@ -9,30 +9,6 @@ const CF_TAGS = [
   'number theory'
 ];
 
-const RATING_CHOICES = [
-  { name: '800', value: 800 },
-  { name: '900', value: 900 },
-  { name: '1000', value: 1000 },
-  { name: '1100', value: 1100 },
-  { name: '1200', value: 1200 },
-  { name: '1300', value: 1300 },
-  { name: '1400', value: 1400 },
-  { name: '1500', value: 1500 },
-  { name: '1600', value: 1600 },
-  { name: '1700', value: 1700 },
-  { name: '1800', value: 1800 },
-  { name: '1900', value: 1900 },
-  { name: '2000', value: 2000 },
-  { name: '2100', value: 2100 },
-  { name: '2200', value: 2200 },
-  { name: '2300', value: 2300 },
-  { name: '2400', value: 2400 },
-  { name: '2500', value: 2500 },
-  { name: '2600', value: 2600 },
-  { name: '2800', value: 2800 },
-  { name: '3000', value: 3000 }
-];
-
 const DIV_CHOICES = [
   { name: 'Div. 1', value: 'div1' },
   { name: 'Div. 2', value: 'div2' },
@@ -51,14 +27,32 @@ module.exports = {
         .addChoices(...CF_TAGS.map(t => ({ name: t, value: t }))))
     .addIntegerOption(opt =>
       opt.setName('rating')
-        .setDescription('Filter by Codeforces rating')
+        .setDescription('Filter by Codeforces rating (800 - 3500)')
         .setRequired(false)
-        .addChoices(...RATING_CHOICES))
+        .setMinValue(800)
+        .setMaxValue(3500)
+        .setAutocomplete(true))
     .addStringOption(opt =>
       opt.setName('div')
         .setDescription('Filter by Codeforces division')
         .setRequired(false)
         .addChoices(...DIV_CHOICES)),
+
+  async autocomplete(interaction) {
+    const focusedValue = interaction.options.getFocused();
+    const allRatings = [];
+    for (let r = 800; r <= 3500; r += 100) {
+      allRatings.push(r.toString());
+    }
+
+    const filtered = allRatings
+      .filter(choice => choice.startsWith(focusedValue))
+      .slice(0, 25);
+
+    await interaction.respond(
+      filtered.map(choice => ({ name: choice, value: parseInt(choice, 10) }))
+    ).catch(() => {});
+  },
 
   async execute(interaction) {
     await interaction.deferReply();
