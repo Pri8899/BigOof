@@ -98,33 +98,87 @@ async function validateCFHandle(handle) {
 
 let cachedProblems = null;
 let lastCacheFetchTime = 0;
+let cachedContests = null;
+let lastContestCacheFetchTime = 0;
 const CACHE_DURATION = 6 * 3600 * 1000; // 6 hours
 
-// Pre-populate problemset cache on boot
+// Pre-populate problemset and contest cache on boot
 async function initializeProblemCache() {
-  console.log('[CF] Warming up Codeforces problem set cache...');
+  console.log('[CF] Warming up Codeforces problem set and contest caches...');
   try {
-    const res = await axios.get(`${CF_BASE}/problemset.problems`, { timeout: 20000 });
-    if (res.data && res.data.status === 'OK' && res.data.result && Array.isArray(res.data.result.problems)) {
-      cachedProblems = res.data.result.problems;
+    const [probRes, contestRes] = await Promise.all([
+      axios.get(`${CF_BASE}/problemset.problems`, { timeout: 20000 }),
+      axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 15000 }).catch(() => null)
+    ]);
+    
+    if (probRes && probRes.data && probRes.data.status === 'OK' && probRes.data.result && Array.isArray(probRes.data.result.problems)) {
+      cachedProblems = probRes.data.result.problems;
       lastCacheFetchTime = Date.now();
-      console.log(`[CF] Problem set cache warmed up successfully: ${cachedProblems.length} problems loaded.`);
+      console.log(`[CF] Problem set cache warmed up: ${cachedProblems.length} problems loaded.`);
+    }
+
+    if (contestRes && contestRes.data && contestRes.data.status === 'OK' && Array.isArray(contestRes.data.result)) {
+      const contestMap = {};
+      for (const c of contestRes.data.result) {
+        contestMap[c.id] = c.name;
+      }
+      cachedContests = contestMap;
+      lastContestCacheFetchTime = Date.now();
+      console.log(`[CF] Contest list cache warmed up: ${Object.keys(cachedContests).length} contests loaded.`);
     }
   } catch (err) {
-    console.warn('[CF] Failed to warm up problem set cache on startup:', err.message);
+    console.warn('[CF] Failed to warm up caches on startup:', err.message);
   }
 }
 
+// Check if a contest name matches the selected division filter
+function matchesDivision(contestName, division) {
+  if (!contestName) return false;
+  const lowerName = contestName.toLowerCase();
+  
+  if (division === 'div1') {
+    return (
+      (lowerName.includes('div. 1') || lowerName.includes('div 1')) &&
+      !lowerName.includes('div. 2') &&
+      !lowerName.includes('div 2')
+    ) || lowerName.includes('global round') || lowerName.includes('div. 1 + div. 2');
+  }
+  
+  if (division === 'div2') {
+    return (
+      (lowerName.includes('div. 2') || lowerName.includes('div 2')) &&
+      !lowerName.includes('div. 3') &&
+      !lowerName.includes('div 3') &&
+      !lowerName.includes('div. 4') &&
+      !lowerName.includes('div 4')
+    ) || lowerName.includes('educational') || lowerName.includes('div. 1 + div. 2');
+  }
+  
+  if (division === 'div3') {
+    return lowerName.includes('div. 3') || lowerName.includes('div 3');
+  }
+  
+  if (division === 'div4') {
+    return lowerName.includes('div. 4') || lowerName.includes('div 4');
+  }
+  
+  return true;
+}
+
 /**
- * Fetch CF problems filtered by rating range and optional tag
+ * Fetch CF problems filtered by rating range, optional tag, and optional division
  * @param {number} minRating
  * @param {number} maxRating
  * @param {string|null} tag
  * @param {number} count - how many to return
+ * @param {Set} excludeIds - solved problem IDs
+ * @param {string|null} division - 'div1', 'div2', 'div3', 'div4'
  */
-async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, count = 5, excludeIds = new Set()) {
+async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, count = 5, excludeIds = new Set(), division = null) {
   try {
     const now = Date.now();
+    
+    // Fetch problemset cache if needed
     if (!cachedProblems || (now - lastCacheFetchTime > CACHE_DURATION)) {
       console.log('[CF] Cache expired or empty. Fetching full problemset from Codeforces API...');
       const res = await axios.get(`${CF_BASE}/problemset.problems`, { timeout: 15000 });
@@ -132,6 +186,19 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
         cachedProblems = res.data.result.problems;
         lastCacheFetchTime = now;
         console.log(`[CF] Successfully cached ${cachedProblems.length} problems.`);
+      }
+    }
+
+    // Fetch contest list cache if needed
+    if (!cachedContests || (now - lastContestCacheFetchTime > CACHE_DURATION)) {
+      const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 10000 }).catch(() => null);
+      if (res && res.data && res.data.status === 'OK' && Array.isArray(res.data.result)) {
+        const contestMap = {};
+        for (const c of res.data.result) {
+          contestMap[c.id] = c.name;
+        }
+        cachedContests = contestMap;
+        lastContestCacheFetchTime = now;
       }
     }
 
@@ -158,6 +225,14 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
       if (tag) {
         const lowerTag = tag.toLowerCase();
         if (!p.tags || !p.tags.some(t => t.toLowerCase() === lowerTag)) {
+          return false;
+        }
+      }
+
+      // Check division if provided
+      if (division) {
+        const contestName = cachedContests ? cachedContests[p.contestId] : null;
+        if (!matchesDivision(contestName, division)) {
           return false;
         }
       }
@@ -189,6 +264,10 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
         if (tag) {
           const lowerTag = tag.toLowerCase();
           if (!p.tags || !p.tags.some(t => t.toLowerCase() === lowerTag)) return false;
+        }
+        if (division) {
+          const contestName = cachedContests ? cachedContests[p.contestId] : null;
+          if (!matchesDivision(contestName, division)) return false;
         }
         return true;
       });

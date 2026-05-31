@@ -6,45 +6,80 @@ const { getCFProblems }         = require('../utils/codeforces');
 const CF_TAGS = [
   'implementation', 'math', 'greedy', 'dp', 'data structures',
   'graphs', 'strings', 'binary search', 'constructive algorithms',
-  'number theory', 'geometry', 'combinatorics', 'brute force'
+  'number theory'
+];
+
+const RATING_CHOICES = [
+  { name: '800', value: 800 },
+  { name: '900', value: 900 },
+  { name: '1000', value: 1000 },
+  { name: '1100', value: 1100 },
+  { name: '1200', value: 1200 },
+  { name: '1300', value: 1300 },
+  { name: '1400', value: 1400 },
+  { name: '1500', value: 1500 },
+  { name: '1600', value: 1600 },
+  { name: '1700', value: 1700 },
+  { name: '1800', value: 1800 },
+  { name: '1900', value: 1900 },
+  { name: '2000', value: 2000 },
+  { name: '2100', value: 2100 },
+  { name: '2200', value: 2200 },
+  { name: '2300', value: 2300 },
+  { name: '2400', value: 2400 },
+  { name: '2500', value: 2500 },
+  { name: '2600', value: 2600 },
+  { name: '2800', value: 2800 },
+  { name: '3000', value: 3000 }
+];
+
+const DIV_CHOICES = [
+  { name: 'Div. 1', value: 'div1' },
+  { name: 'Div. 2', value: 'div2' },
+  { name: 'Div. 3', value: 'div3' },
+  { name: 'Div. 4', value: 'div4' }
 ];
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('suggest')
-    .setDescription('Get personalized CF problem suggestions based on your rating')
+    .setDescription('Get CF problem suggestions')
     .addStringOption(opt =>
       opt.setName('tag')
         .setDescription('Filter by topic tag')
         .setRequired(false)
-        .addChoices(...CF_TAGS.slice(0, 10).map(t => ({ name: t, value: t }))))
-    .addStringOption(opt =>
-      opt.setName('difficulty')
-        .setDescription('Difficulty relative to your rating')
+        .addChoices(...CF_TAGS.map(t => ({ name: t, value: t }))))
+    .addIntegerOption(opt =>
+      opt.setName('rating')
+        .setDescription('Filter by Codeforces rating')
         .setRequired(false)
-        .addChoices(
-          { name: '🟢 Easy (-200)',    value: 'easy' },
-          { name: '🔵 Normal (±0)',    value: 'normal' },
-          { name: '🔴 Hard (+200)',    value: 'hard' },
-          { name: '💀 Very Hard (+400)', value: 'vhard' }
-        )),
+        .addChoices(...RATING_CHOICES))
+    .addStringOption(opt =>
+      opt.setName('div')
+        .setDescription('Filter by Codeforces division')
+        .setRequired(false)
+        .addChoices(...DIV_CHOICES)),
 
   async execute(interaction) {
     await interaction.deferReply();
 
-    const tag        = interaction.options.getString('tag');
-    const difficulty = interaction.options.getString('difficulty') ?? 'normal';
-    const userId     = interaction.user.id;
+    const tag          = interaction.options.getString('tag');
+    const ratingOption = interaction.options.getInteger('rating');
+    const division     = interaction.options.getString('div');
+    const userId       = interaction.user.id;
 
     const user    = getUser(userId);
     const ratings = getRatings(userId);
     const cfRating = ratings.find(r => r.platform === 'cf')?.rating ?? 1200;
 
-    // Determine rating window based on difficulty
-    const offsets = { easy: -200, normal: 0, hard: 200, vhard: 400 };
-    const base    = cfRating + (offsets[difficulty] ?? 0);
-    const minR    = Math.max(800,  base - 100);
-    const maxR    = Math.min(3500, base + 100);
+    let minR, maxR;
+    if (ratingOption) {
+      minR = ratingOption;
+      maxR = ratingOption;
+    } else {
+      minR = Math.max(800, cfRating - 100);
+      maxR = Math.min(3500, cfRating + 100);
+    }
 
     // Fetch the user's solved problems to exclude them from suggestions
     const excludeIds = new Set();
@@ -64,27 +99,33 @@ module.exports = {
       }
     }
 
-    const problems = await getCFProblems(minR, maxR, tag, 5, excludeIds);
+    const problems = await getCFProblems(minR, maxR, tag, 5, excludeIds, division);
 
     if (problems.length === 0) {
       return interaction.editReply({
         embeds: [new EmbedBuilder()
           .setColor(0xE74C3C)
           .setTitle('❌ No Problems Found')
-          .setDescription('No problems found for that filter. Try a different tag or difficulty.')]
+          .setDescription('No problems found matching your selected tag, rating, and division filters.')]
       });
     }
 
-    const diffLabel = { easy: '🟢 Easy', normal: '🔵 Normal', hard: '🔴 Hard', vhard: '💀 Very Hard' }[difficulty];
+    let filterDescription = '';
+    if (ratingOption) {
+      filterDescription += `Rating: **${ratingOption}**`;
+    } else {
+      filterDescription += `Based on your CF rating **${cfRating}** · Target range: **${minR}–${maxR}**`;
+    }
+    if (tag) filterDescription += ` · Tag: \`${tag}\``;
+    if (division) filterDescription += ` · Division: **${division.toUpperCase().replace('DIV', 'Div. ')}**`;
+
+    const { getPlatformEmojis } = require('../utils/emojis');
+    const emojis = await getPlatformEmojis(interaction.guild);
 
     const embed = new EmbedBuilder()
       .setColor(0x9B59B6)
-      .setTitle(`💡 Problem Suggestions — ${diffLabel}`)
-      .setDescription(
-        `Based on your CF rating **${cfRating}** · Target range: **${minR}–${maxR}**` +
-        (tag ? ` · Tag: \`${tag}\`` : '') +
-        '\n\u200b'
-      );
+      .setTitle(`${emojis.cf} CP Problem Suggestions`)
+      .setDescription(filterDescription + '\n\u200b');
 
     problems.forEach((p, i) => {
       embed.addFields({
