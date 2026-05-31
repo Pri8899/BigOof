@@ -49,9 +49,11 @@ module.exports = {
     let startTimeSec = null;
     let durationSec = null;
 
-    // 2. Parse Date & Time
-    if (!isDateNA && !isTimeNA) {
-      let year, month, day;
+    let year, month, day;
+    let hours, minutes;
+
+    // 2. Parse Date
+    if (!isDateNA) {
       const datePattern1 = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/; // DD-MM-YYYY
       const datePattern2 = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/; // YYYY-MM-DD
 
@@ -76,7 +78,10 @@ module.exports = {
           });
         }
       }
+    }
 
+    // 3. Parse Time
+    if (!isTimeNA) {
       const timePattern = /^(\d{1,2}):(\d{2})$/;
       const timeMatch = timeStr.match(timePattern);
       if (!timeMatch) {
@@ -88,8 +93,8 @@ module.exports = {
           ephemeral: true
         });
       }
-      const hours = parseInt(timeMatch[1], 10);
-      const minutes = parseInt(timeMatch[2], 10);
+      hours = parseInt(timeMatch[1], 10);
+      minutes = parseInt(timeMatch[2], 10);
 
       if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
         return interaction.reply({
@@ -100,7 +105,10 @@ module.exports = {
           ephemeral: true
         });
       }
+    }
 
+    // 4. Construct Epoch if both are not N/A
+    if (!isDateNA && !isTimeNA) {
       const utcDate = Date.UTC(year, month, day, hours, minutes, 0);
       if (isNaN(utcDate)) {
         return interaction.reply({
@@ -112,14 +120,6 @@ module.exports = {
         });
       }
       startTimeSec = Math.floor((utcDate - 6 * 3600 * 1000) / 1000);
-    } else if (isDateNA !== isTimeNA) {
-      return interaction.reply({
-        embeds: [errorEmbed(
-          'Date/Time Mismatch',
-          'Both Date and Time must be provided, or both set to N/A.'
-        )],
-        ephemeral: true
-      });
     }
 
     // 3. Parse Duration
