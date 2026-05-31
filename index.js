@@ -59,21 +59,10 @@ for (const file of eventFiles) {
 }
 
 // ─── Ready Event ─────────────────────────────────────────────
-client.once('ready', async () => {
+client.once('ready', () => {
   console.log(`\n✅ Bot online as ${client.user.tag}`);
   console.log(`   Serving ${client.guilds.cache.size} guild(s)`);
   console.log('');
-
-  try {
-    const { db } = require('./database/db');
-    const row = db.prepare("SELECT * FROM daily_problems WHERE date_str = '05/31/2026'").get();
-    const channel = await client.channels.fetch('1505614835650658355').catch(() => null);
-    if (channel && row) {
-      await channel.send(`DEBUG DAILY PROBLEMS 05/31/2026: ${JSON.stringify(row)}`);
-    }
-  } catch (err) {
-    console.error('Debug query error:', err);
-  }
 
   // Set bot activity
   client.user.setActivity('CP Contests 🏆', { type: 3 }); // 3 = Watching
