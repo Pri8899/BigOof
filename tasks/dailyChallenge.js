@@ -55,20 +55,55 @@ async function postDailySuggestions(client) {
     weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Dhaka'
   });
 
-  // Fetch the solved problems set from all users to filter out recommendations
-  const solvedSet = await getMergedSolvedSet();
-
-  // Fetch CF problems for all tiers, excluding already solved ones
-  const cfResults = await Promise.all(CF_TIERS.map(tier => getCFProblems(tier.min, tier.max, null, 1, solvedSet)));
-
-  const p1 = cfResults[0]?.length > 0 ? cfResults[0][0] : null;
-  const p2 = cfResults[1]?.length > 0 ? cfResults[1][0] : null;
-  const p3 = cfResults[2]?.length > 0 ? cfResults[2][0] : null;
-
-  // Save to DB for First Blood tracking
   const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
   const todayDateStr = formatterDate.format(new Date());
-  setDailyProblems(todayDateStr, p1?.id || null, p2?.id || null, p3?.id || null);
+
+  // Check if today's suggestions are already generated in the database
+  const existingDaily = getDailyProblems(todayDateStr);
+  
+  let p1 = null;
+  let p2 = null;
+  let p3 = null;
+
+  if (existingDaily) {
+    console.log(`[Suggest] Today's suggestions already exist in DB. Re-using original problems...`);
+    try {
+      const res = await axios.get('https://codeforces.com/api/problemset.problems', { timeout: 10000 });
+      if (res && res.data && res.data.status === 'OK') {
+        const problems = res.data.result.problems;
+        const findProb = (id) => {
+          if (!id) return null;
+          const p = problems.find(prob => `${prob.contestId}${prob.index}` === id);
+          if (!p) return null;
+          return {
+            id,
+            name: p.name,
+            rating: p.rating ?? '?',
+            tags: (p.tags ?? []).slice(0, 4),
+            url: `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`
+          };
+        };
+        p1 = findProb(existingDaily.p1_id);
+        p2 = findProb(existingDaily.p2_id);
+        p3 = findProb(existingDaily.p3_id);
+      }
+    } catch (err) {
+      console.error('[Suggest] Failed to fetch existing problem details from Codeforces:', err.message);
+    }
+  }
+
+  // If they don't exist in DB (or if CF API failed to fetch details), generate new ones!
+  if (!p1 && !p2 && !p3) {
+    console.log(`[Suggest] Generating new daily recommendations...`);
+    const solvedSet = await getMergedSolvedSet();
+    const cfResults = await Promise.all(CF_TIERS.map(tier => getCFProblems(tier.min, tier.max, null, 1, solvedSet)));
+    p1 = cfResults[0]?.length > 0 ? cfResults[0][0] : null;
+    p2 = cfResults[1]?.length > 0 ? cfResults[1][0] : null;
+    p3 = cfResults[2]?.length > 0 ? cfResults[2][0] : null;
+    
+    // Save to DB
+    setDailyProblems(todayDateStr, p1?.id || null, p2?.id || null, p3?.id || null);
+  }
 
   // ── Codeforces Section ──
   const cfEmbed = new EmbedBuilder()
@@ -307,6 +342,18 @@ async function runOneTimeStartupReset(client) {
       // Set reset done flag
       setConfig('reset_0530_done', 'true');
       console.log('[Reset] One-time reset complete for 05/30/2026 daily suggestions.');
+    }
+
+    // Reset for 05/31/2026 Daily Suggestions reposting with new style
+    const resetDone0531_v3 = getConfig('reset_0531_v3');
+    if (resetDone0531_v3 !== 'true') {
+      console.log('[Reset] Starting one-time reset to force reposting of 05/31/2026 daily suggestions...');
+      
+      // Clear last_suggest_post_date so catch-up triggers immediately on boot
+      setConfig('last_suggest_post_date', '05/30/2026');
+      
+      setConfig('reset_0531_v3', 'true');
+      console.log('[Reset] One-time reset complete.');
     }
   } catch (err) {
     console.error('[Reset Error]', err);
