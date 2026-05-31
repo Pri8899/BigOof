@@ -44,7 +44,9 @@ module.exports = {
     const users   = getAllUsers();
     const ratings = getAllRatings();
     const rows    = computeLeaderboard(users, ratings);
-    const embed   = buildDashboardEmbed(rows);
+    const { getPlatformEmojis } = require('../utils/emojis');
+    const emojis  = await getPlatformEmojis(interaction.guild);
+    const embed   = buildDashboardEmbed(rows, [], emojis);
     return interaction.reply({ embeds: [embed] });
   },
 

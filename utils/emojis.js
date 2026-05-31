@@ -21,6 +21,23 @@ async function getPlatformEmojis(guild) {
     // Fetch emojis to populate cache
     await guild.emojis.fetch().catch(e => console.warn(`[Emojis] Fetch failed:`, e.message));
 
+    const { getConfig, setConfig } = require('../database/db');
+    const emojiReset = getConfig('reset_circle_emojis_v1');
+    if (emojiReset !== 'true') {
+      console.log(`[Emojis] Resetting guild emojis to upload circular versions...`);
+      const existingCf = guild.emojis.cache.find(e => e.name === 'codeforces');
+      if (existingCf) {
+        await existingCf.delete().catch(err => console.warn(`[Emojis] Failed to delete old CF emoji:`, err.message));
+      }
+      const existingAc = guild.emojis.cache.find(e => e.name === 'atcoder');
+      if (existingAc) {
+        await existingAc.delete().catch(err => console.warn(`[Emojis] Failed to delete old AC emoji:`, err.message));
+      }
+      // Re-fetch to clear cache
+      await guild.emojis.fetch().catch(() => {});
+      setConfig('reset_circle_emojis_v1', 'true');
+    }
+
     // 1. Search for existing emojis by name
     let cfEmoji = guild.emojis.cache.find(e => e.name === 'codeforces');
     if (!cfEmoji) {

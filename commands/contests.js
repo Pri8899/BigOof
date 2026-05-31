@@ -13,8 +13,8 @@ module.exports = {
         .setRequired(false)
         .addChoices(
           { name: 'All Platforms',  value: 'all' },
-          { name: 'Codeforces', value: 'codeforces' },
-          { name: 'AtCoder',    value: 'atcoder' }
+          { name: '🔵 Codeforces', value: 'codeforces' },
+          { name: '🔴 AtCoder',    value: 'atcoder' }
         )),
 
   async execute(interaction) {

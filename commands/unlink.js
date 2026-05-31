@@ -12,8 +12,8 @@ module.exports = {
         .setDescription('Platform to unlink')
         .setRequired(true)
         .addChoices(
-          { name: 'Codeforces', value: 'cf' },
-          { name: 'AtCoder',    value: 'ac' }
+          { name: '🔵 Codeforces', value: 'cf' },
+          { name: '🔴 AtCoder',    value: 'ac' }
         )),
 
   async execute(interaction) {

@@ -138,7 +138,7 @@ function buildProfileEmbed(member, user, ratings) {
  * @param {Array} rows  - from computeLeaderboard
  * @param {Array} streaks - from getAllStreaks()
  */
-function buildDashboardEmbed(rows, streaks = []) {
+function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '🔴' }) {
   const medals = ['🥇', '🥈', '🥉'];
 
   // Build streak lookup: discord_id -> max streak across platforms
@@ -170,9 +170,9 @@ function buildDashboardEmbed(rows, streaks = []) {
 
   return new EmbedBuilder()
     .setColor(0x2ECC71)
-    .setDescription(`#    🏅 CP Server Leaderboard\n\n${description}`)
+    .setDescription(`# \u2003\u2003\u2003🏅 CP Server Leaderboard\n\n${description}`)
     .addFields(
-      { name: '📊 Platforms',     value: `🔵 Codeforces · 🔴 AtCoder`, inline: false },
+      { name: '📊 Platforms',     value: `${emojis.cf} Codeforces · ${emojis.ac} AtCoder`, inline: false },
       { name: '🔢 Total Members', value: `${rows.length} ranked`,                     inline: true },
       { name: '🔥 Streak',        value: '⚡ = active  🔥 = 7+ days',                 inline: true }
     )

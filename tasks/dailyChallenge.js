@@ -8,9 +8,9 @@ const { getCFProblems }       = require('../utils/codeforces');
 
 // CF tiers as requested
 const CF_TIERS = [
-  { label: '🟢 Easy · Div. 3/4 A (Rating 800)',     min: 800,  max: 800 },
-  { label: '🔵 Medium · Div. 2 A / Div. 3 B (Rating 1000)', min: 1000, max: 1000 },
-  { label: '🔴 Hard · Div. 2 B / Div. 1 C (Rating 1200)',     min: 1200, max: 1200 }
+  { label: '🟢 Easy · Div. 3/4 A/B (Rating 800)',     min: 800,  max: 800 },
+  { label: '🔵 Medium · Div. 1 / 2 A (Rating 1000)', min: 1000, max: 1000 },
+  { label: '🔴 Hard · Div. 1/2B (Rating 1200)',     min: 1200, max: 1200 }
 ];
 
 // Helper to fetch solved problems from Codeforces for all server members
@@ -41,7 +41,7 @@ async function getMergedSolvedSet() {
 }
 
 // ─── Post Daily Problem Recommendations ──────────────────────
-async function postDailySuggestions(client) {
+async function postDailySuggestions(client, targetDate = null) {
   const channelId = getConfig('suggest_channel_id') || process.env.SUGGEST_CHANNEL_ID;
   if (!channelId) {
     console.log('[Suggest] No suggestions channel set. Use /set-suggest-channel');
@@ -51,14 +51,25 @@ async function postDailySuggestions(client) {
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel) return;
 
-  const today = new Date().toLocaleDateString('en-US', {
+  let activeDate = targetDate;
+  if (!activeDate) {
+    const now = new Date();
+    const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', hour: 'numeric', hour12: false });
+    const currentHour = parseInt(formatterHour.format(now), 10);
+    activeDate = now;
+    if (currentHour < 21) {
+      activeDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    }
+  }
+
+  const today = activeDate.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Dhaka'
   });
 
   const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
-  const todayDateStr = formatterDate.format(new Date());
+  const todayDateStr = formatterDate.format(activeDate);
 
-  // Check if today's suggestions are already generated in the database
+  // Check if suggestions are already generated in the database
   const existingDaily = getDailyProblems(todayDateStr);
   
   let p1 = null;
@@ -361,19 +372,23 @@ async function runOneTimeStartupReset(client) {
     }
 
     // Reset for 06/01/2026 Daily Suggestions reposting with correct logo
-    const resetDone0601_v1 = getConfig('reset_0601_v1');
-    if (resetDone0601_v1 !== 'true') {
-      console.log('[Reset] Starting one-time reset to force reposting of daily suggestions with correct logo...');
+    const resetDone0601_v2 = getConfig('reset_0601_v2');
+    if (resetDone0601_v2 !== 'true') {
+      console.log('[Reset] Starting one-time reset v2 to clean up early 06/01 entry and restore 05/31 suggestions...');
       try {
+        // 1. Delete accidental June 1 entry if it exists
+        db.prepare("DELETE FROM daily_problems WHERE date_str = '06/01/2026'").run();
+        console.log('[Reset] Cleared any accidental daily_problems entry for 06/01/2026.');
+
+        // 2. Repost daily suggestions. Since currentHour < 21, it will compute activeDate as 05/31/2026
+        // and fetch the May 31 problems from the DB.
         await postDailySuggestions(client);
         
-        const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
-        const todayDateStr = formatterDate.format(new Date());
-        setConfig('last_suggest_post_date', todayDateStr);
-        setConfig('reset_0601_v1', 'true');
-        console.log('[Reset] One-time reset complete for 06/01/2026.');
+        setConfig('last_suggest_post_date', '05/31/2026');
+        setConfig('reset_0601_v2', 'true');
+        console.log('[Reset] One-time reset v2 complete. Restored 05/31 suggestions.');
       } catch (err) {
-        console.error('[Reset Error 06/01/2026]', err.message);
+        console.error('[Reset Error 06/01/2026 v2]', err.message);
       }
     }
   } catch (err) {
