@@ -8,9 +8,9 @@ const { getCFProblems }       = require('../utils/codeforces');
 
 // CF tiers as requested
 const CF_TIERS = [
-  { label: '🟢 Easy · Div. 3/4 A/B (Rating 800)',     min: 800,  max: 800 },
-  { label: '🔵 Medium · Div. 1 / 2 A (Rating 1000)', min: 1000, max: 1000 },
-  { label: '🔴 Hard · Div. 1/2B (Rating 1200)',     min: 1200, max: 1200 }
+  { label: '🟢 Easy (Rating 800)',     min: 800,  max: 800 },
+  { label: '🔵 Medium (Rating 1000)', min: 1000, max: 1000 },
+  { label: '🔴 Hard (Rating 1200)',     min: 1200, max: 1200 }
 ];
 
 // Helper to fetch solved problems from Codeforces for all server members
@@ -122,11 +122,11 @@ async function postDailySuggestions(client, targetDate = null) {
 
   const cfEmbed = new EmbedBuilder()
     .setColor(0x1F8DD6)
-    .setDescription(`\u2003\u2003\u2003\u2003\u2003\u2003${emojis.cf} **Codeforces — Daily Practice Problems**\n### \u2003💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
+    .setDescription(`\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003${emojis.cf}\n# \u2003\u2003Codeforces — Daily Practice Problems\n### \u2003\u2003\u2003💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
 
-  if (p1) cfEmbed.addFields({ name: `${CF_TIERS[0].label}  ·  Rating ${p1.rating}`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
-  if (p2) cfEmbed.addFields({ name: `${CF_TIERS[1].label}  ·  Rating ${p2.rating}`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
-  if (p3) cfEmbed.addFields({ name: `${CF_TIERS[2].label}  ·  Rating ${p3.rating}`, value: `**[${p3.name}](${p3.url})**\n🏷️ ${p3.tags.join(', ') || 'N/A'}`, inline: false });
+  if (p1) cfEmbed.addFields({ name: `${CF_TIERS[0].label}`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
+  if (p2) cfEmbed.addFields({ name: `${CF_TIERS[1].label}`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
+  if (p3) cfEmbed.addFields({ name: `${CF_TIERS[2].label}`, value: `**[${p3.name}](${p3.url})**\n🏷️ ${p3.tags.join(', ') || 'N/A'}`, inline: false });
 
   cfEmbed
     .addFields({ name: '\u200b', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', inline: false })
@@ -389,6 +389,27 @@ async function runOneTimeStartupReset(client) {
         console.log('[Reset] One-time reset v4 complete. Restored 05/31 suggestions.');
       } catch (err) {
         console.error('[Reset Error 06/01/2026 v4]', err.message);
+      }
+    }
+
+    // Reset for 06/01/2026 Daily Suggestions reposting with clean levels and centered big title
+    const resetDone0601_v5 = getConfig('reset_0601_v5');
+    if (resetDone0601_v5 !== 'true') {
+      console.log('[Reset] Starting one-time reset v5 to delete and repost daily suggestions with new title/levels...');
+      try {
+        // 1. Delete accidental June 1 entry if it exists
+        db.prepare("DELETE FROM daily_problems WHERE date_str = '06/01/2026'").run();
+        console.log('[Reset] Cleared any accidental daily_problems entry for 06/01/2026.');
+
+        // 2. Repost daily suggestions. Force May 31 suggestions (active date 05/31/2026)
+        const targetDate = new Date('2026-05-31T21:00:00+06:00');
+        await postDailySuggestions(client, targetDate);
+        
+        setConfig('last_suggest_post_date', '05/31/2026');
+        setConfig('reset_0601_v5', 'true');
+        console.log('[Reset] One-time reset v5 complete. Restored and reposted 05/31 suggestions.');
+      } catch (err) {
+        console.error('[Reset Error 06/01/2026 v5]', err.message);
       }
     }
   } catch (err) {
