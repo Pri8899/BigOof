@@ -122,7 +122,7 @@ async function postDailySuggestions(client, targetDate = null) {
 
   const cfEmbed = new EmbedBuilder()
     .setColor(0x1F8DD6)
-    .setDescription(`# \u2003${emojis.cf} Codeforces — Daily Practice Problems\n### \u2003💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
+    .setDescription(`\u2003\u2003\u2003\u2003\u2003\u2003${emojis.cf} **Codeforces — Daily Practice Problems**\n### \u2003💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
 
   if (p1) cfEmbed.addFields({ name: `${CF_TIERS[0].label}  ·  Rating ${p1.rating}`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
   if (p2) cfEmbed.addFields({ name: `${CF_TIERS[1].label}  ·  Rating ${p2.rating}`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
@@ -372,9 +372,9 @@ async function runOneTimeStartupReset(client) {
     }
 
     // Reset for 06/01/2026 Daily Suggestions reposting with correct logo
-    const resetDone0601_v2 = getConfig('reset_0601_v2');
-    if (resetDone0601_v2 !== 'true') {
-      console.log('[Reset] Starting one-time reset v2 to clean up early 06/01 entry and restore 05/31 suggestions...');
+    const resetDone0601_v3 = getConfig('reset_0601_v3');
+    if (resetDone0601_v3 !== 'true') {
+      console.log('[Reset] Starting one-time reset v3 to clean up early 06/01 entry and restore 05/31 suggestions...');
       try {
         // 1. Delete accidental June 1 entry if it exists
         db.prepare("DELETE FROM daily_problems WHERE date_str = '06/01/2026'").run();
@@ -385,10 +385,10 @@ async function runOneTimeStartupReset(client) {
         await postDailySuggestions(client);
         
         setConfig('last_suggest_post_date', '05/31/2026');
-        setConfig('reset_0601_v2', 'true');
-        console.log('[Reset] One-time reset v2 complete. Restored 05/31 suggestions.');
+        setConfig('reset_0601_v3', 'true');
+        console.log('[Reset] One-time reset v3 complete. Restored 05/31 suggestions.');
       } catch (err) {
-        console.error('[Reset Error 06/01/2026 v2]', err.message);
+        console.error('[Reset Error 06/01/2026 v3]', err.message);
       }
     }
   } catch (err) {

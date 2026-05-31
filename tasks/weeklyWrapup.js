@@ -280,10 +280,10 @@ function getTargetWeeklyWrapupDate() {
 async function runOneTimeWeeklyReset(client) {
   try {
     const { getConfig, setConfig, db } = require('../database/db');
-    const resetWeeklyDone = getConfig('reset_weekly_0601_v2');
+    const resetWeeklyDone = getConfig('reset_weekly_0601_v3');
     if (resetWeeklyDone === 'true') return;
 
-    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 06/01 v2...');
+    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 06/01 v3...');
 
     // 1. Fetch channel and delete the previous wrap-up message
     const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id');
@@ -295,8 +295,11 @@ async function runOneTimeWeeklyReset(client) {
         const targetMessages = [...messages.values()].filter(m => 
           m.author.id === client.user.id &&
           m.embeds.length > 0 &&
-          ((m.embeds[0].title && (m.embeds[0].title.toUpperCase().includes('WEEKLY') || m.embeds[0].title.toUpperCase().includes('CHAMPIONS'))) ||
-           (m.embeds[0].description && (m.embeds[0].description.toUpperCase().includes('WEEKLY') || m.embeds[0].description.toUpperCase().includes('CHAMPIONS'))))
+          (
+            (m.embeds[0].title && /weekly|champion/i.test(m.embeds[0].title)) ||
+            (m.embeds[0].description && /weekly|champion/i.test(m.embeds[0].description)) ||
+            m.embeds[0].color === 0xD4AF37
+          )
         );
 
         for (const msg of targetMessages) {
@@ -307,10 +310,10 @@ async function runOneTimeWeeklyReset(client) {
     }
 
     // 2. Clear last_weekly_wrapup_date so catch-up triggers immediately
-    setConfig('last_weekly_wrapup_date', 'null_reset_0601_v2');
+    setConfig('last_weekly_wrapup_date', 'null_reset_0601_v3');
 
     // 3. Mark reset as done
-    setConfig('reset_weekly_0601_v2', 'true');
+    setConfig('reset_weekly_0601_v3', 'true');
     console.log('[WeeklyReset] One-time weekly wrap-up reset complete.');
   } catch (err) {
     console.error('[WeeklyReset Error]', err);
