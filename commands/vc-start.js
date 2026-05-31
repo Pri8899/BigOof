@@ -173,5 +173,6 @@ module.exports = {
     vcTimers.set(vcId, timer);
   },
 
-  concludeVC
+  concludeVC,
+  vcTimers
 };
