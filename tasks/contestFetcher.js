@@ -161,37 +161,28 @@ async function postContestSummary(client) {
     }
 
     if (msg) {
-      // Edit the existing message in-place to refresh contests silently
-      await msg.edit({ content: '', embeds: [embed] }).catch(async err => {
-        if (err.message && err.message.includes('GOAWAY')) {
-          console.warn('[ContestFetcher] Got GOAWAY on edit, retrying in 1 second...');
-          await new Promise(r => setTimeout(r, 1000));
-          return msg.edit({ content: '', embeds: [embed] }).catch(e => {
-            console.error('[ContestFetcher] Message edit retry error:', e.message);
-          });
-        }
-        console.error('[ContestFetcher] Message edit error:', err.message);
-      });
-      console.log('[ContestFetcher] Refreshed existing contest summary message.');
-    } else {
-      // Post fresh if no message exists (without @everyone ping)
-      const newMsg = await channel.send({ embeds: [embed] }).catch(async err => {
-        if (err.message && err.message.includes('GOAWAY')) {
-          console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
-          await new Promise(r => setTimeout(r, 1000));
-          return channel.send({ embeds: [embed] }).catch(e => {
-            console.error('[ContestFetcher] Message send retry error:', e.message);
-            return null;
-          });
-        }
-        console.error('[ContestFetcher] Message send error:', err.message);
-        return null;
-      });
+      // Delete the old message to keep the channel clean and updated
+      await msg.delete().catch(() => {});
+      console.log('[ContestFetcher] Deleted old contest summary message.');
+    }
 
-      if (newMsg) {
-        setConfig('contest_summary_msg_id', newMsg.id);
-        console.log('[ContestFetcher] Posted fresh contest summary.');
+    // Post fresh without @everyone ping
+    const newMsg = await channel.send({ embeds: [embed] }).catch(async err => {
+      if (err.message && err.message.includes('GOAWAY')) {
+        console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
+        await new Promise(r => setTimeout(r, 1000));
+        return channel.send({ embeds: [embed] }).catch(e => {
+          console.error('[ContestFetcher] Message send retry error:', e.message);
+          return null;
+        });
       }
+      console.error('[ContestFetcher] Message send error:', err.message);
+      return null;
+    });
+
+    if (newMsg) {
+      setConfig('contest_summary_msg_id', newMsg.id);
+      console.log('[ContestFetcher] Posted fresh contest summary.');
     }
 
     // Clean up any other messages in the channel to keep it strictly limited to the overview summary
