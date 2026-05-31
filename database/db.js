@@ -135,6 +135,13 @@ try {
   // Column already exists
 }
 
+// Run migration to add time_na column to notified_contests if it doesn't exist
+try {
+  db.exec("ALTER TABLE notified_contests ADD COLUMN time_na INTEGER DEFAULT 0;");
+} catch (e) {
+  // Column already exists
+}
+
 // ─── User Helpers ────────────────────────────────────────────
 function getUser(discordId) {
   return db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);

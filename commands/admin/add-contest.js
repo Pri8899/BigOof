@@ -107,9 +107,11 @@ module.exports = {
       }
     }
 
-    // 4. Construct Epoch if both are not N/A
-    if (!isDateNA && !isTimeNA) {
-      const utcDate = Date.UTC(year, month, day, hours, minutes, 0);
+    // 4. Construct Epoch if date is not N/A
+    if (!isDateNA) {
+      const hh = isTimeNA ? 0 : hours;
+      const mm = isTimeNA ? 0 : minutes;
+      const utcDate = Date.UTC(year, month, day, hh, mm, 0);
       if (isNaN(utcDate)) {
         return interaction.reply({
           embeds: [errorEmbed(
@@ -158,14 +160,17 @@ module.exports = {
     const contestId = `custom_${Date.now()}`;
     try {
       db.prepare(`
-        INSERT INTO notified_contests (contest_id, platform, name, start_time, duration_sec, url)
-        VALUES (?, 'Custom', ?, ?, ?, ?)
-      `).run(contestId, name, startTimeSec, durationSec, link);
+        INSERT INTO notified_contests (contest_id, platform, name, start_time, duration_sec, url, time_na)
+        VALUES (?, 'Custom', ?, ?, ?, ?, ?)
+      `).run(contestId, name, startTimeSec, durationSec, link, isTimeNA ? 1 : 0);
 
       // Refresh contest summary list in channel immediately!
       await postContestSummary(interaction.client);
 
-      const formattedStart = startTimeSec ? `<t:${startTimeSec}:F>` : 'N/A';
+      let formattedStart = 'N/A';
+      if (startTimeSec) {
+        formattedStart = isTimeNA ? `<t:${startTimeSec}:D> (Time: N/A)` : `<t:${startTimeSec}:F>`;
+      }
       let durString = 'N/A';
       if (durationSec !== null) {
         const durHours = Math.floor(durationSec / 3600);

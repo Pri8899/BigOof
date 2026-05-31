@@ -268,7 +268,11 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
         let dateLabel = 'N/A';
         let countdownLabel = '';
         if (start) {
-          dateLabel = `<t:${start}:F>`;
+          if (c.time_na === 1) {
+            dateLabel = `<t:${start}:D> (Time: N/A)`;
+          } else {
+            dateLabel = `<t:${start}:F>`;
+          }
           countdownLabel = `  •  <t:${start}:R>`;
         }
         
