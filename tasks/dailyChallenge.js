@@ -73,9 +73,7 @@ async function postDailySuggestions(client) {
   // ── Codeforces Section ──
   const cfEmbed = new EmbedBuilder()
     .setColor(0x1F8DD6)
-    .setAuthor({ name: '🔵 Codeforces — Daily Practice Problems' })
-    .setTitle(`💡 Daily Problem Suggestions — ${today}`)
-    .setDescription('Sharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b');
+    .setDescription(`#   🔵 Codeforces — Daily Practice Problems\n#  💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
 
   if (p1) cfEmbed.addFields({ name: `${CF_TIERS[0].label}  ·  Rating ${p1.rating}`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
   if (p2) cfEmbed.addFields({ name: `${CF_TIERS[1].label}  ·  Rating ${p2.rating}`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
