@@ -1,21 +1,16 @@
-// commands/announce.js — Broadcast an announcement with @everyone ping
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
+// commands/announce.js — Broadcast an announcement via a Modal
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const { getConfig }            = require('../database/db');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('announce')
-    .setDescription('Broadcast an announcement to the announcement channel with @everyone ping')
-    .setDefaultMemberPermissions(PermissionFlagsBits.MentionEveryone)
-    .addStringOption(opt =>
-      opt.setName('message')
-        .setDescription('The announcement message (supports markdown and newlines)')
-        .setRequired(true)),
+    .setDescription('Broadcast a formatted announcement to the announcement channel with @everyone ping')
+    .setDefaultMemberPermissions(PermissionFlagsBits.MentionEveryone),
 
   async execute(interaction) {
-    const messageText = interaction.options.getString('message');
-
+    // 1. Fetch the announcement channel first to fail early if missing
     let channelId = getConfig('announcement_channel_id');
     let channel = null;
 
@@ -41,12 +36,40 @@ module.exports = {
       });
     }
 
-    // Post the announcement with @everyone ping
+    // 2. Build the Modal
+    const modal = new ModalBuilder()
+      .setCustomId('announcementModal')
+      .setTitle('Broadcast Announcement');
+
+    const messageInput = new TextInputBuilder()
+      .setCustomId('announcementMessage')
+      .setLabel("Announcement Content")
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Paste or type your formatted message here... (Markdown, links, and newlines are fully supported)')
+      .setRequired(true);
+
+    const actionRow = new ActionRowBuilder().addComponents(messageInput);
+    modal.addComponents(actionRow);
+
+    // 3. Show the Modal
+    await interaction.showModal(modal);
+
+    // 4. Wait for the submission (timeout: 5 minutes)
+    const submitted = await interaction.awaitModalSubmit({
+      time: 300000,
+      filter: i => i.user.id === interaction.user.id && i.customId === 'announcementModal'
+    }).catch(() => null);
+
+    if (!submitted) {
+      return; // Timed out or cancelled
+    }
+
+    const messageText = submitted.fields.getTextInputValue('announcementMessage');
     const content = `@everyone\n\n${messageText}`;
-    
+
     try {
       await channel.send({ content });
-      return interaction.reply({
+      return submitted.reply({
         embeds: [successEmbed(
           'Announcement Broadcasted',
           `Successfully posted the announcement to ${channel}! 📢`
@@ -54,8 +77,8 @@ module.exports = {
         ephemeral: true
       });
     } catch (err) {
-      console.error('[Announce Command Error]', err);
-      return interaction.reply({
+      console.error('[Announce Modal Error]', err);
+      return submitted.reply({
         embeds: [errorEmbed(
           'Failed to Send Announcement',
           `An error occurred while sending the message: ${err.message}`

@@ -42,102 +42,119 @@ module.exports = {
       link = 'https://' + link;
     }
 
-    // 2. Parse Date
-    let year, month, day;
-    const datePattern1 = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/; // DD-MM-YYYY
-    const datePattern2 = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/; // YYYY-MM-DD
+    const isDateNA = dateStr.toLowerCase() === 'n/a' || dateStr.toLowerCase() === 'na';
+    const isTimeNA = timeStr.toLowerCase() === 'n/a' || timeStr.toLowerCase() === 'na';
+    const isDurationNA = durationStr.toLowerCase() === 'n/a' || durationStr.toLowerCase() === 'na';
 
-    let match = dateStr.match(datePattern1);
-    if (match) {
-      day = parseInt(match[1], 10);
-      month = parseInt(match[2], 10) - 1;
-      year = parseInt(match[3], 10);
-    } else {
-      match = dateStr.match(datePattern2);
+    let startTimeSec = null;
+    let durationSec = null;
+
+    // 2. Parse Date & Time
+    if (!isDateNA && !isTimeNA) {
+      let year, month, day;
+      const datePattern1 = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/; // DD-MM-YYYY
+      const datePattern2 = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/; // YYYY-MM-DD
+
+      let match = dateStr.match(datePattern1);
       if (match) {
-        year = parseInt(match[1], 10);
+        day = parseInt(match[1], 10);
         month = parseInt(match[2], 10) - 1;
-        day = parseInt(match[3], 10);
+        year = parseInt(match[3], 10);
       } else {
+        match = dateStr.match(datePattern2);
+        if (match) {
+          year = parseInt(match[1], 10);
+          month = parseInt(match[2], 10) - 1;
+          day = parseInt(match[3], 10);
+        } else {
+          return interaction.reply({
+            embeds: [errorEmbed(
+              'Invalid Date Format',
+              'Please use DD-MM-YYYY, YYYY-MM-DD or N/A format (e.g., 31-05-2026 or N/A).'
+            )],
+            ephemeral: true
+          });
+        }
+      }
+
+      const timePattern = /^(\d{1,2}):(\d{2})$/;
+      const timeMatch = timeStr.match(timePattern);
+      if (!timeMatch) {
         return interaction.reply({
           embeds: [errorEmbed(
-            'Invalid Date Format',
-            'Please use DD-MM-YYYY or YYYY-MM-DD format (e.g., 31-05-2026).'
+            'Invalid Time Format',
+            'Please use HH:MM 24h format or N/A (e.g., 20:30 or N/A).'
           )],
           ephemeral: true
         });
       }
-    }
+      const hours = parseInt(timeMatch[1], 10);
+      const minutes = parseInt(timeMatch[2], 10);
 
-    // 3. Parse Time
-    const timePattern = /^(\d{1,2}):(\d{2})$/;
-    const timeMatch = timeStr.match(timePattern);
-    if (!timeMatch) {
-      return interaction.reply({
-        embeds: [errorEmbed(
-          'Invalid Time Format',
-          'Please use HH:MM format in 24h clock (e.g., 20:30).'
-        )],
-        ephemeral: true
-      });
-    }
-    const hours = parseInt(timeMatch[1], 10);
-    const minutes = parseInt(timeMatch[2], 10);
-
-    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-      return interaction.reply({
-        embeds: [errorEmbed(
-          'Invalid Time Values',
-          'Hours must be 0-23 and minutes 0-59.'
-        )],
-        ephemeral: true
-      });
-    }
-
-    // 4. Parse Epoch (Dhaka time is UTC+6)
-    const utcDate = Date.UTC(year, month, day, hours, minutes, 0);
-    if (isNaN(utcDate)) {
-      return interaction.reply({
-        embeds: [errorEmbed(
-          'Invalid Date/Time Values',
-          'The provided date or time values are invalid.'
-        )],
-        ephemeral: true
-      });
-    }
-    const startTimeSec = Math.floor((utcDate - 6 * 3600 * 1000) / 1000);
-
-    // 5. Parse Duration
-    let durationSec = 0;
-    const hRegex = /(\d+)\s*h/i;
-    const mRegex = /(\d+)\s*m/i;
-    
-    const hMatch = durationStr.match(hRegex);
-    const mMatch = durationStr.match(mRegex);
-    
-    if (hMatch) {
-      durationSec += parseInt(hMatch[1], 10) * 3600;
-    }
-    if (mMatch) {
-      durationSec += parseInt(mMatch[1], 10) * 60;
-    }
-    
-    if (!hMatch && !mMatch) {
-      const plain = parseInt(durationStr, 10);
-      if (!isNaN(plain) && plain > 0) {
-        durationSec = plain * 60;
-      } else {
+      if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
         return interaction.reply({
           embeds: [errorEmbed(
-            'Invalid Duration Format',
-            'Please enter duration in a format like "2h", "120m", "2h 30m" or a plain number of minutes.'
+            'Invalid Time Values',
+            'Hours must be 0-23 and minutes 0-59.'
           )],
           ephemeral: true
         });
       }
+
+      const utcDate = Date.UTC(year, month, day, hours, minutes, 0);
+      if (isNaN(utcDate)) {
+        return interaction.reply({
+          embeds: [errorEmbed(
+            'Invalid Date/Time Values',
+            'The provided date or time values are invalid.'
+          )],
+          ephemeral: true
+        });
+      }
+      startTimeSec = Math.floor((utcDate - 6 * 3600 * 1000) / 1000);
+    } else if (isDateNA !== isTimeNA) {
+      return interaction.reply({
+        embeds: [errorEmbed(
+          'Date/Time Mismatch',
+          'Both Date and Time must be provided, or both set to N/A.'
+        )],
+        ephemeral: true
+      });
     }
 
-    // 6. Insert into database
+    // 3. Parse Duration
+    if (!isDurationNA) {
+      const hRegex = /(\d+)\s*h/i;
+      const mRegex = /(\d+)\s*m/i;
+      
+      const hMatch = durationStr.match(hRegex);
+      const mMatch = durationStr.match(mRegex);
+      
+      durationSec = 0;
+      if (hMatch) {
+        durationSec += parseInt(hMatch[1], 10) * 3600;
+      }
+      if (mMatch) {
+        durationSec += parseInt(mMatch[1], 10) * 60;
+      }
+      
+      if (!hMatch && !mMatch) {
+        const plain = parseInt(durationStr, 10);
+        if (!isNaN(plain) && plain > 0) {
+          durationSec = plain * 60;
+        } else {
+          return interaction.reply({
+            embeds: [errorEmbed(
+              'Invalid Duration Format',
+              'Please enter duration in a format like "2h", "120m", "2h 30m" or N/A.'
+            )],
+            ephemeral: true
+          });
+        }
+      }
+    }
+
+    // 4. Insert into database
     const contestId = `custom_${Date.now()}`;
     try {
       db.prepare(`
@@ -148,10 +165,13 @@ module.exports = {
       // Refresh contest summary list in channel immediately!
       await postContestSummary(interaction.client);
 
-      const formattedStart = `<t:${startTimeSec}:F>`;
-      const durHours = Math.floor(durationSec / 3600);
-      const durMins = Math.floor((durationSec % 3600) / 60);
-      const durString = durMins > 0 ? `${durHours}h ${durMins}m` : `${durHours}h`;
+      const formattedStart = startTimeSec ? `<t:${startTimeSec}:F>` : 'N/A';
+      let durString = 'N/A';
+      if (durationSec !== null) {
+        const durHours = Math.floor(durationSec / 3600);
+        const durMins = Math.floor((durationSec % 3600) / 60);
+        durString = durMins > 0 ? `${durHours}h ${durMins}m` : `${durHours}h`;
+      }
 
       return interaction.reply({
         embeds: [successEmbed(

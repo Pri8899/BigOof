@@ -202,8 +202,8 @@ function getUpcomingContests(maxSeconds = 7 * 24 * 3600) {
   const now = Math.floor(Date.now() / 1000);
   return db.prepare(`
     SELECT * FROM notified_contests
-    WHERE (start_time + duration_sec) > ? AND start_time < ?
-    ORDER BY start_time ASC
+    WHERE ((start_time + COALESCE(duration_sec, 0)) > ? AND start_time < ?) OR start_time IS NULL
+    ORDER BY COALESCE(start_time, 9999999999) ASC
   `).all(now, now + maxSeconds);
 }
 

@@ -264,10 +264,22 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}) {
       const lines = sliced.map((c, i) => {
         const start    = c.startTime ?? c.start_time;
         const durSec   = c.durationSec ?? c.duration_sec;
-        const dh       = Math.floor(durSec / 3600);
-        const dm       = Math.floor((durSec % 3600) / 60);
-        const durLabel = dm > 0 ? `${dh}h ${dm}m` : `${dh}h`;
-        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n      📅 <t:${start}:F>\n      ⏱️ ${durLabel}  •  <t:${start}:R>`;
+        
+        let dateLabel = 'N/A';
+        let countdownLabel = '';
+        if (start) {
+          dateLabel = `<t:${start}:F>`;
+          countdownLabel = `  •  <t:${start}:R>`;
+        }
+        
+        let durLabel = 'N/A';
+        if (durSec) {
+          const dh       = Math.floor(durSec / 3600);
+          const dm       = Math.floor((durSec % 3600) / 60);
+          durLabel = dm > 0 ? `${dh}h ${dm}m` : `${dh}h`;
+        }
+        
+        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n      📅 ${dateLabel}\n      ⏱️ ${durLabel}${countdownLabel}`;
       });
       sections.push(`${header}\n${lines.join('\n\n')}`);
     }
