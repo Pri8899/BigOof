@@ -86,9 +86,14 @@ module.exports = {
     const diff  = lastR - ratings[0];
     const sign  = diff >= 0 ? `+${diff}` : `${diff}`;
 
+    const embedColor = parseInt(PLATFORM_COLORS[platform].replace('#', ''), 16);
+    const { getPlatformEmojis } = require('../utils/emojis');
+    const emojis = await getPlatformEmojis(interaction.guild);
+    const platformEmoji = platform === 'cf' ? emojis.cf : emojis.ac;
+
     const embed = new EmbedBuilder()
-      .setColor(parseInt(PLATFORM_COLORS[platform].replace('#', ''), 16))
-      .setTitle(`📈 ${PLATFORM_NAMES[platform]} Rating History — ${target.displayName}`)
+      .setColor(embedColor)
+      .setTitle(`${platformEmoji} ${PLATFORM_NAMES[platform]} Rating History — ${target.displayName}`)
       .setImage(chartUrl)
       .addFields(
         { name: '📊 Current',  value: `**${lastR}**`,  inline: true },

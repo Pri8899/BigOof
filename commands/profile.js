@@ -31,7 +31,9 @@ module.exports = {
       });
     }
 
-    const embed = buildProfileEmbed(target, user, ratings);
+    const { getPlatformEmojis } = require('../utils/emojis');
+    const emojis = await getPlatformEmojis(interaction.guild);
+    const embed = buildProfileEmbed(target, user, ratings, emojis);
     return interaction.reply({ embeds: [embed] });
   }
 };

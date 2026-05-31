@@ -86,7 +86,7 @@ function buildContestEmbed(contest, timeUntilLabel) {
 /**
  * Build user profile embed
  */
-function buildProfileEmbed(member, user, ratings) {
+function buildProfileEmbed(member, user, ratings, emojis = { cf: '🔵', ac: '🔴' }) {
   const ratingMap = {};
   for (const r of ratings) ratingMap[r.platform] = r;
 
@@ -103,27 +103,27 @@ function buildProfileEmbed(member, user, ratings) {
 
   if (user?.cf_handle) {
     fields.push({
-      name: '🔵 Codeforces',
+      name: `${emojis.cf} Codeforces`,
       value: cf
         ? `Handle: \`${user.cf_handle}\`\nRating: **${cf.rating}** (Max: ${cf.max_rating})\nRank: ${cf.rank_title}\nSolved: ${cf.solved}`
         : `Handle: \`${user.cf_handle}\`\n_Stats loading..._`,
       inline: true
     });
   } else {
-    fields.push({ name: '🔵 Codeforces', value: '_Not linked_\nUse `/link codeforces <handle>`', inline: true });
+    fields.push({ name: `${emojis.cf} Codeforces`, value: '_Not linked_\nUse `/link codeforces <handle>`', inline: true });
   }
 
 
   if (user?.ac_handle) {
     fields.push({
-      name: '🔴 AtCoder',
+      name: `${emojis.ac} AtCoder`,
       value: ac
         ? `Handle: \`${user.ac_handle}\`\nRating: **${ac.rating}** (Max: ${ac.max_rating})\nRank: ${ac.rank_title}\nSolved: ${ac.solved}`
         : `Handle: \`${user.ac_handle}\`\n_Stats loading..._`,
       inline: true
     });
   } else {
-    fields.push({ name: '🔴 AtCoder', value: '_Not linked_\nUse `/link atcoder <handle>`', inline: true });
+    fields.push({ name: `${emojis.ac} AtCoder`, value: '_Not linked_\nUse `/link atcoder <handle>`', inline: true });
   }
 
   embed.addFields(fields);

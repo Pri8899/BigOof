@@ -20,7 +20,9 @@ module.exports = {
   async execute(interaction) {
     const platform = interaction.options.getString('platform') ?? 'all';
     const contests = getUpcomingContests(7 * 24 * 3600);
-    const embed    = buildContestListEmbed(contests, platform);
+    const { getPlatformEmojis } = require('../utils/emojis');
+    const emojis = await getPlatformEmojis(interaction.guild);
+    const embed    = buildContestListEmbed(contests, platform, {}, emojis);
     return interaction.reply({ embeds: [embed] });
   }
 };
