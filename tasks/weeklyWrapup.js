@@ -235,11 +235,11 @@ function getTargetWeeklyWrapupDate() {
 async function runOneTimeWeeklyReset(client) {
   try {
     const { getConfig, setConfig, db } = require('../database/db');
-    const resetWeeklyDone = getConfig('reset_weekly_0531_v4');
+    const resetWeeklyDone = getConfig('reset_weekly_0531_v5');
     if (resetWeeklyDone === 'true') return;
 
-    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 05/31 v4...');
-
+    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 05/31 v5...');
+    
     // 1. Fetch channel and delete the previous wrap-up message
     const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id');
     if (channelId) {
@@ -249,7 +249,8 @@ async function runOneTimeWeeklyReset(client) {
         const targetMessages = [...messages.values()].filter(m => 
           m.author.id === client.user.id &&
           m.embeds.length > 0 &&
-          (m.embeds[0].title?.includes('WEEKLY CP HALL OF FAME') || m.embeds[0].title?.includes('Weekly CP Wrap-Up') || m.embeds[0].title?.includes('CP SERVER WEEKLY CHAMPIONS'))
+          ((m.embeds[0].title && (m.embeds[0].title.includes('WEEKLY') || m.embeds[0].title.includes('Weekly') || m.embeds[0].title.includes('CHAMPIONS'))) ||
+           (m.embeds[0].description && (m.embeds[0].description.includes('WEEKLY') || m.embeds[0].description.includes('Weekly') || m.embeds[0].description.includes('CHAMPIONS'))))
         );
 
         for (const msg of targetMessages) {
@@ -260,10 +261,10 @@ async function runOneTimeWeeklyReset(client) {
     }
 
     // 2. Clear last_weekly_wrapup_date so catch-up triggers immediately
-    setConfig('last_weekly_wrapup_date', 'null_reset_0531_v4');
+    setConfig('last_weekly_wrapup_date', 'null_reset_0531_v5');
 
     // 3. Mark reset as done
-    setConfig('reset_weekly_0531_v4', 'true');
+    setConfig('reset_weekly_0531_v5', 'true');
     console.log('[WeeklyReset] One-time weekly wrap-up reset complete.');
   } catch (err) {
     console.error('[WeeklyReset Error]', err);

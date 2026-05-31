@@ -108,7 +108,7 @@ async function postDailySuggestions(client) {
   // ── Codeforces Section ──
   const cfEmbed = new EmbedBuilder()
     .setColor(0x1F8DD6)
-    .setDescription(`#   🔵 Codeforces — Daily Practice Problems\n#  💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
+    .setDescription(`# \u2003🔵 Codeforces — Daily Practice Problems\n# \u2003💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
 
   if (p1) cfEmbed.addFields({ name: `${CF_TIERS[0].label}  ·  Rating ${p1.rating}`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
   if (p2) cfEmbed.addFields({ name: `${CF_TIERS[1].label}  ·  Rating ${p2.rating}`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
@@ -125,7 +125,8 @@ async function postDailySuggestions(client) {
     const oldMessages = [...messages.values()].filter(m => 
       m.author.id === client.user.id && 
       m.embeds.length > 0 && 
-      m.embeds[0].title?.includes('Daily Problem Suggestions')
+      ((m.embeds[0].title && m.embeds[0].title.includes('Daily Problem Suggestions')) ||
+       (m.embeds[0].description && m.embeds[0].description.includes('Daily Problem Suggestions')))
     );
     for (const msg of oldMessages) {
       await msg.delete().catch(() => {});
@@ -345,14 +346,14 @@ async function runOneTimeStartupReset(client) {
     }
 
     // Reset for 05/31/2026 Daily Suggestions reposting with new style
-    const resetDone0531_v3 = getConfig('reset_0531_v3');
-    if (resetDone0531_v3 !== 'true') {
+    const resetDone0531_v4 = getConfig('reset_0531_v4');
+    if (resetDone0531_v4 !== 'true') {
       console.log('[Reset] Starting one-time reset to force reposting of 05/31/2026 daily suggestions...');
       
       // Clear last_suggest_post_date so catch-up triggers immediately on boot
       setConfig('last_suggest_post_date', '05/30/2026');
       
-      setConfig('reset_0531_v3', 'true');
+      setConfig('reset_0531_v4', 'true');
       console.log('[Reset] One-time reset complete.');
     }
   } catch (err) {

@@ -167,11 +167,12 @@ async function updateDashboard(client) {
     let existingMessages = [];
     try {
       const messages = await channel.messages.fetch({ limit: 50 });
-      // Filter for messages sent by the bot that have the dashboard/leaderboard embed title
+      // Filter for messages sent by the bot that have the dashboard/leaderboard embed title or description
       existingMessages = [...messages.values()].filter(m => 
         m.author.id === client.user.id && 
         m.embeds.length > 0 && 
-        (m.embeds[0].title?.includes('Leaderboard') || m.embeds[0].title?.includes('🏅 CP Server Leaderboard'))
+        ((m.embeds[0].title && (m.embeds[0].title.includes('Leaderboard') || m.embeds[0].title.includes('🏅 CP Server Leaderboard'))) ||
+         (m.embeds[0].description && (m.embeds[0].description.includes('Leaderboard') || m.embeds[0].description.includes('🏅 CP Server Leaderboard'))))
       );
     } catch (err) {
       console.warn('[Dashboard] Failed to fetch recent channel messages:', err.message);

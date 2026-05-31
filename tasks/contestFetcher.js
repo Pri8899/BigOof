@@ -166,12 +166,12 @@ async function postContestSummary(client) {
       console.log('[ContestFetcher] Deleted old contest summary message.');
     }
 
-    // Post fresh without @everyone ping
-    const newMsg = await channel.send({ embeds: [embed] }).catch(async err => {
+    // Post fresh with @everyone ping
+    const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(async err => {
       if (err.message && err.message.includes('GOAWAY')) {
         console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
         await new Promise(r => setTimeout(r, 1000));
-        return channel.send({ embeds: [embed] }).catch(e => {
+        return channel.send({ content: '@everyone', embeds: [embed] }).catch(e => {
           console.error('[ContestFetcher] Message send retry error:', e.message);
           return null;
         });
