@@ -280,10 +280,10 @@ function getTargetWeeklyWrapupDate() {
 async function runOneTimeWeeklyReset(client) {
   try {
     const { getConfig, setConfig, db } = require('../database/db');
-    const resetWeeklyDone = getConfig('reset_weekly_0531_v6');
+    const resetWeeklyDone = getConfig('reset_weekly_0531_v7');
     if (resetWeeklyDone === 'true') return;
 
-    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 05/31 v6...');
+    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 05/31 v7...');
 
     // 1. Fetch channel and delete the previous wrap-up message
     const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id');
@@ -306,10 +306,10 @@ async function runOneTimeWeeklyReset(client) {
     }
 
     // 2. Clear last_weekly_wrapup_date so catch-up triggers immediately
-    setConfig('last_weekly_wrapup_date', 'null_reset_0531_v6');
+    setConfig('last_weekly_wrapup_date', 'null_reset_0531_v7');
 
     // 3. Mark reset as done
-    setConfig('reset_weekly_0531_v6', 'true');
+    setConfig('reset_weekly_0531_v7', 'true');
     console.log('[WeeklyReset] One-time weekly wrap-up reset complete.');
   } catch (err) {
     console.error('[WeeklyReset Error]', err);

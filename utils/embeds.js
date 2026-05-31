@@ -399,14 +399,13 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵'
     const coChamps = allSolved.filter(u => u.solved_this_week === maxSolved);
     const mentions = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
     
-    const details = coChamps.map(u => {
-      const parts = [];
-      parts.push(`> 🔵 **Codeforces**: \`${u.cf_solved}\` solved`);
-      parts.push(`> 🔴 **AtCoder**: \`${u.ac_solved}\` solved`);
-      return parts.join('\n');
+    const lines = coChamps.map(u => {
+      return `🎉 Huge congratulations to ${mentions} for an outstanding performance this week!
+> ${emojis.cf} **Codeforces**: \`${u.cf_solved}\` solved  ·  ${emojis.ac} **AtCoder**: \`${u.ac_solved}\` solved
+> 📊 **Total Solved**: **${maxSolved}** problems solved this week! Absolute beast mode! 🚀`;
     }).join('\n\n');
 
-    solvedValue = `🏆 **Weekly Solves Champion**\n\n🎉 Huge congratulations to ${mentions} for solving **${maxSolved}** problems this week! Absolute beast mode! 🚀\n${details}`;
+    solvedValue = `🏆 **Weekly Solves Champion**\n\n${lines}`;
   } else {
     solvedValue = `🏆 **Weekly Solves Champion**\n\n_No one solved any problems this week. Let's get active next week!_`;
   }
@@ -419,24 +418,15 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵'
     const coChamps = allRatingGains.filter(u => u.rating_gained === maxRating);
     const mentions = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
 
-    const details = coChamps.map(u => {
-      const parts = [];
-      if (u.cf_linked) {
-        const gainStr = u.cf_gain > 0 ? `+${u.cf_gain}` : `0`;
-        parts.push(`> 🔵 **Codeforces**: \`${gainStr}\` (${u.cf_start} → ${u.cf_end})`);
-      } else {
-        parts.push(`> 🔵 **Codeforces**: _Not linked_`);
-      }
-      if (u.ac_linked) {
-        const gainStr = u.ac_gain > 0 ? `+${u.ac_gain}` : `0`;
-        parts.push(`> 🔴 **AtCoder**: \`${gainStr}\` (${u.ac_start} → ${u.ac_end})`);
-      } else {
-        parts.push(`> 🔴 **AtCoder**: _Not linked_`);
-      }
-      return parts.join('\n');
+    const lines = coChamps.map(u => {
+      const cfText = u.cf_linked ? `\`+${u.cf_gain}\` (${u.cf_start} → ${u.cf_end})` : `_Not linked_`;
+      const acText = u.ac_linked ? `\`+${u.ac_gain}\` (${u.ac_start} → ${u.ac_end})` : `_Not linked_`;
+      return `🎉 Amazing job by ${mentions} for showing incredible skill and progress!
+> ${emojis.cf} **Codeforces**: ${cfText}  ·  ${emojis.ac} **AtCoder**: ${acText}
+> 📈 **Total Gain**: **+${maxRating}** rating points this week! Incredible progress and skill! 📈`;
     }).join('\n\n');
 
-    ratingValue = `📈 **Weekly Rating Champion**\n\n🎉 Amazing job by ${mentions} for gaining **+${maxRating}** rating points this week! Incredible progress and skill! 📈\n${details}`;
+    ratingValue = `📈 **Weekly Rating Champion**\n\n${lines}`;
   } else {
     ratingValue = `📈 **Weekly Rating Champion**\n\n_No rating gains recorded this week._`;
   }

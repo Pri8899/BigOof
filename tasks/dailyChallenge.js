@@ -10,7 +10,7 @@ const { getCFProblems }       = require('../utils/codeforces');
 const CF_TIERS = [
   { label: '🟢 Easy · Div. 3/4 A (Rating 800)',     min: 800,  max: 800 },
   { label: '🔵 Medium · Div. 2 A / Div. 3 B (Rating 1000)', min: 1000, max: 1000 },
-  { label: '🔴 Hard · Div. 2 B / Div. 3 C (Rating 1200)',     min: 1200, max: 1200 }
+  { label: '🔴 Hard · Div. 2 B / Div. 1 C (Rating 1200)',     min: 1200, max: 1200 }
 ];
 
 // Helper to fetch solved problems from Codeforces for all server members
@@ -349,14 +349,14 @@ async function runOneTimeStartupReset(client) {
     }
 
     // Reset for 05/31/2026 Daily Suggestions reposting with new style
-    const resetDone0531_v6 = getConfig('reset_0531_v6');
-    if (resetDone0531_v6 !== 'true') {
+    const resetDone0531_v7 = getConfig('reset_0531_v7');
+    if (resetDone0531_v7 !== 'true') {
       console.log('[Reset] Starting one-time reset to force reposting of 05/31/2026 daily suggestions...');
       
       // Clear last_suggest_post_date so catch-up triggers immediately on boot
       setConfig('last_suggest_post_date', '05/30/2026');
       
-      setConfig('reset_0531_v6', 'true');
+      setConfig('reset_0531_v7', 'true');
       console.log('[Reset] One-time reset complete.');
     }
   } catch (err) {
