@@ -372,9 +372,9 @@ async function runOneTimeStartupReset(client) {
     }
 
     // Reset for 06/01/2026 Daily Suggestions reposting with correct logo
-    const resetDone0601_v3 = getConfig('reset_0601_v3');
-    if (resetDone0601_v3 !== 'true') {
-      console.log('[Reset] Starting one-time reset v3 to clean up early 06/01 entry and restore 05/31 suggestions...');
+    const resetDone0601_v4 = getConfig('reset_0601_v4');
+    if (resetDone0601_v4 !== 'true') {
+      console.log('[Reset] Starting one-time reset v4 to clean up early 06/01 entry and restore 05/31 suggestions...');
       try {
         // 1. Delete accidental June 1 entry if it exists
         db.prepare("DELETE FROM daily_problems WHERE date_str = '06/01/2026'").run();
@@ -385,10 +385,10 @@ async function runOneTimeStartupReset(client) {
         await postDailySuggestions(client);
         
         setConfig('last_suggest_post_date', '05/31/2026');
-        setConfig('reset_0601_v3', 'true');
-        console.log('[Reset] One-time reset v3 complete. Restored 05/31 suggestions.');
+        setConfig('reset_0601_v4', 'true');
+        console.log('[Reset] One-time reset v4 complete. Restored 05/31 suggestions.');
       } catch (err) {
-        console.error('[Reset Error 06/01/2026 v3]', err.message);
+        console.error('[Reset Error 06/01/2026 v4]', err.message);
       }
     }
   } catch (err) {
