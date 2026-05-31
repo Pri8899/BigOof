@@ -73,6 +73,10 @@ client.once('ready', () => {
   const { startDailyChallenge } = require('./tasks/dailyChallenge');
   const { startSubmissionFeed } = require('./tasks/submissionFeed');
   const { startWeeklyWrapup }   = require('./tasks/weeklyWrapup');
+  const { initializeProblemCache } = require('./utils/codeforces');
+
+  // Asynchronously warm up the CF problem cache on startup
+  initializeProblemCache().catch(err => console.error('[Startup] Failed to warm up CF problem cache:', err.message));
 
   startContestFetcher(client);
   startRatingSync(client);

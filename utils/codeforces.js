@@ -96,6 +96,25 @@ async function validateCFHandle(handle) {
   }
 }
 
+let cachedProblems = null;
+let lastCacheFetchTime = 0;
+const CACHE_DURATION = 6 * 3600 * 1000; // 6 hours
+
+// Pre-populate problemset cache on boot
+async function initializeProblemCache() {
+  console.log('[CF] Warming up Codeforces problem set cache...');
+  try {
+    const res = await axios.get(`${CF_BASE}/problemset.problems`, { timeout: 20000 });
+    if (res.data && res.data.status === 'OK' && res.data.result && Array.isArray(res.data.result.problems)) {
+      cachedProblems = res.data.result.problems;
+      lastCacheFetchTime = Date.now();
+      console.log(`[CF] Problem set cache warmed up successfully: ${cachedProblems.length} problems loaded.`);
+    }
+  } catch (err) {
+    console.warn('[CF] Failed to warm up problem set cache on startup:', err.message);
+  }
+}
+
 /**
  * Fetch CF problems filtered by rating range and optional tag
  * @param {number} minRating
@@ -105,21 +124,51 @@ async function validateCFHandle(handle) {
  */
 async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, count = 5, excludeIds = new Set()) {
   try {
-    const url = tag
-      ? `${CF_BASE}/problemset.problems?tags=${encodeURIComponent(tag)}`
-      : `${CF_BASE}/problemset.problems`;
-    const res = await axios.get(url, { timeout: 10000 });
-    if (res.data.status !== 'OK') return [];
+    const now = Date.now();
+    if (!cachedProblems || (now - lastCacheFetchTime > CACHE_DURATION)) {
+      console.log('[CF] Cache expired or empty. Fetching full problemset from Codeforces API...');
+      const res = await axios.get(`${CF_BASE}/problemset.problems`, { timeout: 15000 });
+      if (res.data && res.data.status === 'OK' && res.data.result && Array.isArray(res.data.result.problems)) {
+        cachedProblems = res.data.result.problems;
+        lastCacheFetchTime = now;
+        console.log(`[CF] Successfully cached ${cachedProblems.length} problems.`);
+      }
+    }
 
-    let problems = res.data.result.problems.filter(p => {
+    if (!cachedProblems || cachedProblems.length === 0) {
+      console.error('[CF] Problem cache is empty and API fetch failed.');
+      return [];
+    }
+
+    // Filter locally from cache
+    let filtered = cachedProblems.filter(p => {
       const pId = `${p.contestId}${p.index}`;
-      return p.rating >= minRating && p.rating <= maxRating && !excludeIds.has(pId);
+      
+      // Check rating
+      if (p.rating === undefined || p.rating === null || p.rating < minRating || p.rating > maxRating) {
+        return false;
+      }
+      
+      // Check exclusions (solved problems)
+      if (excludeIds.has(pId)) {
+        return false;
+      }
+      
+      // Check tag if provided
+      if (tag) {
+        const lowerTag = tag.toLowerCase();
+        if (!p.tags || !p.tags.some(t => t.toLowerCase() === lowerTag)) {
+          return false;
+        }
+      }
+      
+      return true;
     });
 
     // Shuffle and pick
-    problems = problems.sort(() => Math.random() - 0.5).slice(0, count);
+    filtered = filtered.sort(() => Math.random() - 0.5).slice(0, count);
 
-    return problems.map(p => ({
+    return filtered.map(p => ({
       id:         `${p.contestId}${p.index}`,
       name:       p.name,
       rating:     p.rating ?? '?',
@@ -129,7 +178,31 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
       index:      p.index
     }));
   } catch (err) {
-    console.error('[CF] Problem fetch error:', err.message);
+    console.error('[CF] getCFProblems error:', err.message);
+    // If the API call fails but we have cached problems, fall back to the cache!
+    if (cachedProblems && cachedProblems.length > 0) {
+      console.log('[CF] Falling back to existing problem cache...');
+      let filtered = cachedProblems.filter(p => {
+        const pId = `${p.contestId}${p.index}`;
+        if (p.rating === undefined || p.rating === null || p.rating < minRating || p.rating > maxRating) return false;
+        if (excludeIds.has(pId)) return false;
+        if (tag) {
+          const lowerTag = tag.toLowerCase();
+          if (!p.tags || !p.tags.some(t => t.toLowerCase() === lowerTag)) return false;
+        }
+        return true;
+      });
+      filtered = filtered.sort(() => Math.random() - 0.5).slice(0, count);
+      return filtered.map(p => ({
+        id:         `${p.contestId}${p.index}`,
+        name:       p.name,
+        rating:     p.rating ?? '?',
+        tags:       (p.tags ?? []).slice(0, 4),
+        url:        `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`,
+        contestId:  p.contestId,
+        index:      p.index
+      }));
+    }
     return [];
   }
 }
@@ -161,5 +234,5 @@ async function checkCFSolved(handle, problems) {
   }
 }
 
-module.exports = { getCFUser, getCFContests, validateCFHandle, getCFProblems, checkCFSolved };
+module.exports = { getCFUser, getCFContests, validateCFHandle, getCFProblems, checkCFSolved, initializeProblemCache };
 
