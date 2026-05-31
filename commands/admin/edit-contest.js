@@ -10,9 +10,10 @@ module.exports = {
     .setDescription('Edit a manually added custom contest (Admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addStringOption(opt =>
-      opt.setName('search_name')
-        .setDescription('Name (or part of name) of the custom contest to edit')
-        .setRequired(true))
+      opt.setName('id')
+        .setDescription('Select the custom contest to edit')
+        .setRequired(true)
+        .setAutocomplete(true))
     .addStringOption(opt =>
       opt.setName('new_name')
         .setDescription('New name for the contest (optional)')
@@ -34,37 +35,92 @@ module.exports = {
         .setDescription('New duration (e.g. 2h, 120m or N/A) (optional)')
         .setRequired(false)),
 
+  async autocomplete(interaction) {
+    const focusedValue = interaction.options.getFocused().toLowerCase();
+    
+    // Fetch all custom contests
+    const contests = db.prepare(`
+      SELECT contest_id, name, start_time, time_na FROM notified_contests 
+      WHERE platform = 'Custom'
+    `).all();
+
+    // Map to choices
+    const choices = contests.map(c => {
+      let dateLabel = 'Date: N/A';
+      if (c.start_time) {
+        const d = new Date(c.start_time * 1000);
+        // Format to Dhaka time string manually for autocomplete
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Dhaka',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        });
+        dateLabel = formatter.format(d);
+        if (c.time_na === 1) {
+          dateLabel += ' (Time: N/A)';
+        } else {
+          const timeFormatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Dhaka',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          });
+          dateLabel += ` @ ${timeFormatter.format(d)}`;
+        }
+      }
+      return {
+        name: `${c.name} (${dateLabel})`,
+        value: c.contest_id
+      };
+    });
+
+    const filtered = choices.filter(choice => 
+      choice.name.toLowerCase().includes(focusedValue)
+    );
+
+    await interaction.respond(filtered.slice(0, 25));
+  },
+
   async execute(interaction) {
-    const queryName = interaction.options.getString('search_name').trim();
+    const id = interaction.options.getString('id');
 
-    // 1. Find matches in DB
-    const matches = db.prepare(`
+    // Find the contest by ID
+    let target = db.prepare(`
       SELECT * FROM notified_contests 
-      WHERE platform = 'Custom' AND name LIKE ?
-    `).all(`%${queryName}%`);
+      WHERE contest_id = ?
+    `).get(id);
 
-    if (matches.length === 0) {
-      return interaction.reply({
-        embeds: [errorEmbed(
-          'No Contests Found',
-          `Could not find any manual custom contests matching "${queryName}".`
-        )],
-        ephemeral: true
-      });
+    if (!target) {
+      // Fallback: search by name wildcard
+      const matches = db.prepare(`
+        SELECT * FROM notified_contests 
+        WHERE platform = 'Custom' AND name LIKE ?
+      `).all(`%${id}%`);
+
+      if (matches.length === 0) {
+        return interaction.reply({
+          embeds: [errorEmbed(
+            'Contest Not Found',
+            'Could not find the selected contest. Please make sure to choose an option from the auto-complete dropdown.'
+          )],
+          ephemeral: true
+        });
+      }
+
+      if (matches.length > 1) {
+        const listStr = matches.map((c, idx) => `**${idx + 1}.** ${c.name} (${c.start_time ? `<t:${c.start_time}:d>` : 'Date: N/A'})`).join('\n');
+        return interaction.reply({
+          embeds: [errorEmbed(
+            'Multiple Contests Found',
+            `Multiple contests matched your search. Please use the autocomplete menu to select the exact contest:\n\n${listStr}`
+          )],
+          ephemeral: true
+        });
+      }
+
+      target = matches[0];
     }
-
-    if (matches.length > 1) {
-      const listStr = matches.map((c, idx) => `**${idx + 1}.** ${c.name} (${c.start_time ? `<t:${c.start_time}:d>` : 'Date: N/A'})`).join('\n');
-      return interaction.reply({
-        embeds: [errorEmbed(
-          'Multiple Contests Found',
-          `Multiple contests matched "${queryName}". Please be more specific:\n\n${listStr}`
-        )],
-        ephemeral: true
-      });
-    }
-
-    const target = matches[0];
 
     // 2. Extract existing date & time in Dhaka timezone
     let existingDateStr = 'N/A';
