@@ -30,13 +30,16 @@ async function runWeeklyWrapup(client) {
   const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
   const todayStr = formatterDate.format(new Date());
 
-  const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 3600;
-
-  for (const user of users) {
+  const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 3600;  for (const user of users) {
     const ratings = getRatings(user.discord_id);
     let userTotalSolved = 0;
     let userTotalRatingGain = 0;
     
+    let cfStart = 0;
+    let cfEnd = 0;
+    let acStart = 0;
+    let acEnd = 0;
+
     // CF stats
     let cfSolved = null;
     let cfGain = null;
@@ -72,8 +75,12 @@ async function runWeeklyWrapup(client) {
             }
             const currentRating = history[history.length - 1].newRating;
             cfGain = Math.max(0, currentRating - ratingSevenDaysAgo);
+            cfStart = ratingSevenDaysAgo;
+            cfEnd = currentRating;
           } else {
             cfGain = 0;
+            cfStart = 0;
+            cfEnd = 0;
           }
         }
       } catch (err) {
@@ -112,6 +119,8 @@ async function runWeeklyWrapup(client) {
           const currentRating = acDbRating.rating;
           const ratingSevenDaysAgo = oldRatingRow ? oldRatingRow.rating : 0;
           acGain = Math.max(0, currentRating - ratingSevenDaysAgo);
+          acStart = ratingSevenDaysAgo;
+          acEnd = currentRating;
         }
       } catch (err) {
         console.error(`[WeeklyWrapUp] AtCoder Local History error for ${user.username}:`, err.message);
@@ -126,13 +135,25 @@ async function runWeeklyWrapup(client) {
       if (cfSolved !== null) {
         userTotalSolved += cfSolved;
       } else if (cfDbRating && snap) {
-        userTotalSolved += Math.max(0, cfDbRating.solved - snap.solved);
+        cfSolved = Math.max(0, cfDbRating.solved - snap.solved);
+        userTotalSolved += cfSolved;
+      } else {
+        cfSolved = 0;
       }
       
       if (cfGain !== null) {
         userTotalRatingGain += cfGain;
       } else if (cfDbRating && snap) {
-        userTotalRatingGain += Math.max(0, cfDbRating.rating - snap.rating);
+        cfGain = Math.max(0, cfDbRating.rating - snap.rating);
+        userTotalRatingGain += cfGain;
+        cfStart = snap.rating;
+        cfEnd = cfDbRating.rating;
+      } else if (cfDbRating) {
+        cfGain = 0;
+        cfStart = cfDbRating.rating;
+        cfEnd = cfDbRating.rating;
+      } else {
+        cfGain = 0;
       }
     }
     
@@ -143,13 +164,25 @@ async function runWeeklyWrapup(client) {
       if (acSolved !== null) {
         userTotalSolved += acSolved;
       } else if (acDbRating && snap) {
-        userTotalSolved += Math.max(0, acDbRating.solved - snap.solved);
+        acSolved = Math.max(0, acDbRating.solved - snap.solved);
+        userTotalSolved += acSolved;
+      } else {
+        acSolved = 0;
       }
       
       if (acGain !== null) {
         userTotalRatingGain += acGain;
       } else if (acDbRating && snap) {
-        userTotalRatingGain += Math.max(0, acDbRating.rating - snap.rating);
+        acGain = Math.max(0, acDbRating.rating - snap.rating);
+        userTotalRatingGain += acGain;
+        acStart = snap.rating;
+        acEnd = acDbRating.rating;
+      } else if (acDbRating) {
+        acGain = 0;
+        acStart = acDbRating.rating;
+        acEnd = acDbRating.rating;
+      } else {
+        acGain = 0;
       }
     }
     
@@ -160,12 +193,22 @@ async function runWeeklyWrapup(client) {
     
     allSolved.push({
       discord_id: user.discord_id,
-      solved_this_week: userTotalSolved
+      solved_this_week: userTotalSolved,
+      cf_solved: cfSolved || 0,
+      ac_solved: acSolved || 0
     });
     
     allRatingGains.push({
       discord_id: user.discord_id,
-      rating_gained: userTotalRatingGain
+      rating_gained: userTotalRatingGain,
+      cf_gain: cfGain || 0,
+      cf_start: cfStart,
+      cf_end: cfEnd,
+      cf_linked: !!user.cf_handle,
+      ac_gain: acGain || 0,
+      ac_start: acStart,
+      ac_end: acEnd,
+      ac_linked: !!user.ac_handle
     });
   }
 
@@ -235,11 +278,11 @@ function getTargetWeeklyWrapupDate() {
 async function runOneTimeWeeklyReset(client) {
   try {
     const { getConfig, setConfig, db } = require('../database/db');
-    const resetWeeklyDone = getConfig('reset_weekly_0531_v5');
+    const resetWeeklyDone = getConfig('reset_weekly_0531_v6');
     if (resetWeeklyDone === 'true') return;
 
-    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 05/31 v5...');
-    
+    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 05/31 v6...');
+
     // 1. Fetch channel and delete the previous wrap-up message
     const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id');
     if (channelId) {
@@ -261,10 +304,10 @@ async function runOneTimeWeeklyReset(client) {
     }
 
     // 2. Clear last_weekly_wrapup_date so catch-up triggers immediately
-    setConfig('last_weekly_wrapup_date', 'null_reset_0531_v5');
+    setConfig('last_weekly_wrapup_date', 'null_reset_0531_v6');
 
     // 3. Mark reset as done
-    setConfig('reset_weekly_0531_v5', 'true');
+    setConfig('reset_weekly_0531_v6', 'true');
     console.log('[WeeklyReset] One-time weekly wrap-up reset complete.');
   } catch (err) {
     console.error('[WeeklyReset Error]', err);

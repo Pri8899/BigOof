@@ -388,7 +388,7 @@ function buildSubmissionEmbed(user, problem, platform) {
 function buildWeeklyWrapupEmbed(allSolved, allRatingGains) {
   const embed = new EmbedBuilder()
     .setColor(0xD4AF37) // Legendary Gold
-    .setDescription(`#   👑 CP SERVER WEEKLY CHAMPIONS 👑\n\nHappy Sunday! Let's celebrate the top performers who dominated the competitive programming charts this week!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+    .setDescription(`# \u2003\u2003\u2003👑 CP SERVER WEEKLY CHAMPIONS 👑\n\nHappy Sunday! Let's celebrate the top performers who dominated the competitive programming charts this week!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
     .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png') // Gold trophy icon
     .setTimestamp();
 
@@ -398,7 +398,15 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains) {
     const maxSolved = allSolved[0].solved_this_week;
     const coChamps = allSolved.filter(u => u.solved_this_week === maxSolved);
     const mentions = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
-    solvedValue = `🏆 **Weekly Solves Champion**\n\n🎉 Huge congratulations to ${mentions} for solving **${maxSolved}** problems this week! Absolute beast mode! 🚀`;
+    
+    const details = coChamps.map(u => {
+      const parts = [];
+      parts.push(`> 🔵 **Codeforces**: \`${u.cf_solved}\` solved`);
+      parts.push(`> 🔴 **AtCoder**: \`${u.ac_solved}\` solved`);
+      return parts.join('\n');
+    }).join('\n\n');
+
+    solvedValue = `🏆 **Weekly Solves Champion**\n\n🎉 Huge congratulations to ${mentions} for solving **${maxSolved}** problems this week! Absolute beast mode! 🚀\n${details}`;
   } else {
     solvedValue = `🏆 **Weekly Solves Champion**\n\n_No one solved any problems this week. Let's get active next week!_`;
   }
@@ -410,7 +418,25 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains) {
     const maxRating = allRatingGains[0].rating_gained;
     const coChamps = allRatingGains.filter(u => u.rating_gained === maxRating);
     const mentions = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
-    ratingValue = `📈 **Weekly Rating Champion**\n\n🎉 Amazing job by ${mentions} for gaining **+${maxRating}** rating points this week! Incredible progress and skill! 📈`;
+
+    const details = coChamps.map(u => {
+      const parts = [];
+      if (u.cf_linked) {
+        const gainStr = u.cf_gain > 0 ? `+${u.cf_gain}` : `0`;
+        parts.push(`> 🔵 **Codeforces**: \`${gainStr}\` (${u.cf_start} → ${u.cf_end})`);
+      } else {
+        parts.push(`> 🔵 **Codeforces**: _Not linked_`);
+      }
+      if (u.ac_linked) {
+        const gainStr = u.ac_gain > 0 ? `+${u.ac_gain}` : `0`;
+        parts.push(`> 🔴 **AtCoder**: \`${gainStr}\` (${u.ac_start} → ${u.ac_end})`);
+      } else {
+        parts.push(`> 🔴 **AtCoder**: _Not linked_`);
+      }
+      return parts.join('\n');
+    }).join('\n\n');
+
+    ratingValue = `📈 **Weekly Rating Champion**\n\n🎉 Amazing job by ${mentions} for gaining **+${maxRating}** rating points this week! Incredible progress and skill! 📈\n${details}`;
   } else {
     ratingValue = `📈 **Weekly Rating Champion**\n\n_No rating gains recorded this week._`;
   }
