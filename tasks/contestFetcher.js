@@ -126,7 +126,7 @@ async function postContestSummary(client) {
     console.log(`[ContestFetcher] API status - CF: ${cfStatus}, AC: ${acStatus}`);
 
     const embed = buildContestListEmbed(contests, 'all', { cf: cfStatus, ac: acStatus });
-    embed.setTitle('📅  Upcoming Contests — Full Overview');
+    embed.setTitle('     📅  Upcoming Contests — Full Overview');
 
     // Fetch recent messages in the channel to find any existing summary messages sent by the bot
     let existingMessages = [];
