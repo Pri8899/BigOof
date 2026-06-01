@@ -163,38 +163,28 @@ async function postContestSummary(client) {
     }
 
     if (msg) {
-      // Try to EDIT the existing message in-place (safe — keeps message if send fails)
+      // Delete the old message — new one will be posted below
+      await msg.delete().catch(() => {});
+      console.log('[ContestFetcher] Deleted old contest summary message.');
+    }
+
+    // Post fresh with @everyone ping — retry until it succeeds so the channel is never left empty
+    let newMsg = null;
+    for (let attempt = 1; attempt <= 10; attempt++) {
       try {
-        await msg.edit({ content: '@everyone', embeds: [embed] });
-        setConfig('contest_summary_msg_id', msg.id);
-        console.log('[ContestFetcher] Edited existing contest summary message in-place.');
-      } catch (editErr) {
-        console.warn('[ContestFetcher] Could not edit existing message, will delete and repost:', editErr.message);
-        // Edit failed — delete old and post fresh below
-        await msg.delete().catch(() => {});
-        msg = null; // fall through to the "post fresh" block
+        newMsg = await channel.send({ content: '@everyone', embeds: [embed] });
+        break; // success
+      } catch (err) {
+        console.warn(`[ContestFetcher] Send attempt ${attempt}/10 failed: ${err.message}`);
+        if (attempt < 10) await new Promise(r => setTimeout(r, 5000)); // wait 5s before retry
       }
     }
 
-    if (!msg) {
-      // Post fresh (first time or after failed edit)
-      const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(async err => {
-        if (err.message && err.message.includes('GOAWAY')) {
-          console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
-          await new Promise(r => setTimeout(r, 1000));
-          return channel.send({ content: '@everyone', embeds: [embed] }).catch(e => {
-            console.error('[ContestFetcher] Message send retry error:', e.message);
-            return null;
-          });
-        }
-        console.error('[ContestFetcher] Message send error:', err.message);
-        return null;
-      });
-
-      if (newMsg) {
-        setConfig('contest_summary_msg_id', newMsg.id);
-        console.log('[ContestFetcher] Posted fresh contest summary.');
-      }
+    if (newMsg) {
+      setConfig('contest_summary_msg_id', newMsg.id);
+      console.log('[ContestFetcher] Posted fresh contest summary.');
+    } else {
+      console.error('[ContestFetcher] Failed to post contest summary after 10 attempts!');
     }
   } catch (err) {
     console.error('[ContestFetcher] postContestSummary critical error:', err);

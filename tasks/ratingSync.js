@@ -201,37 +201,28 @@ async function updateDashboard(client) {
     }
 
     if (msg) {
-      // Try to EDIT the existing message in-place (safe — keeps message if send fails)
+      // Delete the old message — new one will be posted below
+      await msg.delete().catch(() => {});
+      console.log('[Dashboard] Deleted old dashboard message.');
+    }
+
+    // Post fresh — retry until it succeeds so the channel is never left empty
+    let newMsg = null;
+    for (let attempt = 1; attempt <= 10; attempt++) {
       try {
-        await msg.edit({ embeds: [embed] });
-        setConfig('dashboard_message_id', msg.id);
-        console.log('[Dashboard] Edited existing dashboard message in-place.');
-      } catch (editErr) {
-        console.warn('[Dashboard] Could not edit existing message, will delete and repost:', editErr.message);
-        await msg.delete().catch(() => {});
-        msg = null; // fall through to the "post fresh" block
+        newMsg = await channel.send({ embeds: [embed] });
+        break; // success
+      } catch (err) {
+        console.warn(`[Dashboard] Send attempt ${attempt}/10 failed: ${err.message}`);
+        if (attempt < 10) await new Promise(r => setTimeout(r, 5000)); // wait 5s before retry
       }
     }
 
-    if (!msg) {
-      // Send a new message (without @everyone ping)
-      const newMsg = await channel.send({ embeds: [embed] }).catch(async err => {
-        if (err.message && err.message.includes('GOAWAY')) {
-          console.warn('[Dashboard] Got GOAWAY on send, retrying in 1 second...');
-          await new Promise(r => setTimeout(r, 1000));
-          return channel.send({ embeds: [embed] }).catch(e => {
-              console.error('[Dashboard] Message send retry error:', e.message);
-              return null;
-            });
-          }
-          console.error('[Dashboard] Message send error:', err.message);
-          return null;
-        });
-
-        if (newMsg) {
-          setConfig('dashboard_message_id', newMsg.id);
-          console.log('[Dashboard] Created new dashboard message.');
-        }
+    if (newMsg) {
+      setConfig('dashboard_message_id', newMsg.id);
+      console.log('[Dashboard] Created new dashboard message.');
+    } else {
+      console.error('[Dashboard] Failed to post dashboard after 10 attempts!');
     }
   } catch (err) {
     console.error('[Dashboard] updateDashboard critical error:', err);
