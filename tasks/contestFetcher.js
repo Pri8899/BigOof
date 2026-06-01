@@ -163,45 +163,38 @@ async function postContestSummary(client) {
     }
 
     if (msg) {
-      // Delete the old message to keep the channel clean and updated
-      await msg.delete().catch(() => {});
-      console.log('[ContestFetcher] Deleted old contest summary message.');
-    }
-
-    // Post fresh with @everyone ping
-    const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(async err => {
-      if (err.message && err.message.includes('GOAWAY')) {
-        console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
-        await new Promise(r => setTimeout(r, 1000));
-        return channel.send({ content: '@everyone', embeds: [embed] }).catch(e => {
-          console.error('[ContestFetcher] Message send retry error:', e.message);
-          return null;
-        });
+      // Try to EDIT the existing message in-place (safe — keeps message if send fails)
+      try {
+        await msg.edit({ content: '@everyone', embeds: [embed] });
+        setConfig('contest_summary_msg_id', msg.id);
+        console.log('[ContestFetcher] Edited existing contest summary message in-place.');
+      } catch (editErr) {
+        console.warn('[ContestFetcher] Could not edit existing message, will delete and repost:', editErr.message);
+        // Edit failed — delete old and post fresh below
+        await msg.delete().catch(() => {});
+        msg = null; // fall through to the "post fresh" block
       }
-      console.error('[ContestFetcher] Message send error:', err.message);
-      return null;
-    });
-
-    if (newMsg) {
-      setConfig('contest_summary_msg_id', newMsg.id);
-      console.log('[ContestFetcher] Posted fresh contest summary.');
     }
 
-    // Clean up any other messages in the channel to keep it strictly limited to the overview summary
-    try {
-      const allMessages = await channel.messages.fetch({ limit: 50 });
-      const summaryMsgId = (typeof newMsg !== 'undefined' && newMsg) ? newMsg.id : null;
-      if (summaryMsgId) {
-        const toDelete = [...allMessages.values()].filter(m => m.id !== summaryMsgId);
-        if (toDelete.length > 0) {
-          console.log(`[ContestFetcher] Cleaning up ${toDelete.length} non-summary messages from contest channel...`);
-          for (const m of toDelete) {
-            await m.delete().catch(() => {});
-          }
+    if (!msg) {
+      // Post fresh (first time or after failed edit)
+      const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(async err => {
+        if (err.message && err.message.includes('GOAWAY')) {
+          console.warn('[ContestFetcher] Got GOAWAY on send, retrying in 1 second...');
+          await new Promise(r => setTimeout(r, 1000));
+          return channel.send({ content: '@everyone', embeds: [embed] }).catch(e => {
+            console.error('[ContestFetcher] Message send retry error:', e.message);
+            return null;
+          });
         }
+        console.error('[ContestFetcher] Message send error:', err.message);
+        return null;
+      });
+
+      if (newMsg) {
+        setConfig('contest_summary_msg_id', newMsg.id);
+        console.log('[ContestFetcher] Posted fresh contest summary.');
       }
-    } catch (err) {
-      console.warn('[ContestFetcher] Failed to clean up non-summary messages:', err.message);
     }
   } catch (err) {
     console.error('[ContestFetcher] postContestSummary critical error:', err);
