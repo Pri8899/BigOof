@@ -8,6 +8,8 @@ const CF_BASE = 'https://codeforces.com/api';
 
 let contestListCache = null;
 let lastContestListFetchTime = 0;
+let gymContestListCache = null;
+let lastGymContestListFetchTime = 0;
 
 async function getOrFetchContestName(contestId) {
   if (!contestId) return null;
@@ -36,6 +38,31 @@ async function getOrFetchContestName(contestId) {
       name = contest.name;
       cacheContestName(contestId, name);
       return name;
+    }
+  }
+
+  // Fetch gym contest list if the ID looks like a Gym contest (usually >= 100000)
+  if (Number(contestId) >= 100000) {
+    if (!gymContestListCache || (now - lastGymContestListFetchTime > 3600000)) {
+      try {
+        console.log('[SubmissionFeed] Fetching Codeforces gym contest list for cache...');
+        const res = await axios.get(`${CF_BASE}/contest.list?gym=true`, { timeout: 15000 });
+        if (res.data.status === 'OK') {
+          gymContestListCache = res.data.result;
+          lastGymContestListFetchTime = now;
+        }
+      } catch (err) {
+        console.error('[SubmissionFeed] Failed to fetch gym contest list:', err.message);
+      }
+    }
+
+    if (gymContestListCache) {
+      const contest = gymContestListCache.find(c => c.id === Number(contestId));
+      if (contest) {
+        name = contest.name;
+        cacheContestName(contestId, name);
+        return name;
+      }
     }
   }
 
@@ -74,9 +101,14 @@ async function fetchCFSubmissions(user) {
         highestId = Math.max(highestId, sub.id);
         if (sub.verdict === 'OK' && sub.problem) {
           const contestName = await getOrFetchContestName(sub.problem.contestId);
+          const isGym = Number(sub.problem.contestId) >= 100000;
+          const problemUrl = isGym
+            ? `https://codeforces.com/gym/${sub.problem.contestId}/problem/${sub.problem.index}`
+            : `https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`;
+
           newAc.push({
             name: sub.problem.name,
-            url: `https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`,
+            url: problemUrl,
             rating: sub.problem.rating,
             tags: sub.problem.tags,
             contestName: contestName
