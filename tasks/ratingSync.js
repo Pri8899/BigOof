@@ -1,6 +1,7 @@
 // tasks/ratingSync.js — Hourly rating sync + dashboard update + rating change alerts
 const cron = require('node-cron');
 const { EmbedBuilder } = require('discord.js');
+const axios = require('axios');
 const {
   getAllUsers, upsertRating, getAllRatings,
   getRatings, getConfig, setConfig,
@@ -10,6 +11,15 @@ const { getCFUser }              = require('../utils/codeforces');
 const { getACUser }              = require('../utils/atcoder');
 const { buildDashboardEmbed } = require('../utils/embeds');
 const { computeLeaderboard }  = require('../commands/leaderboard');
+
+const CF_BASE = 'https://codeforces.com/api';
+
+const STREAK_ROLES = [
+  { name: '💫 30+ Day Streak', min: 30, color: 0xE0115F }, // Ruby
+  { name: '👑 15+ Day Streak', min: 15, color: 0xF1C40F }, // Gold
+  { name: '🔥 7+ Day Streak',  min: 7,  color: 0xE67E22 }, // Orange
+  { name: '⚡ 3+ Day Streak',  min: 3,  color: 0x3498DB }  // Blue
+];
 
 const CF_ROLES = [
   { name: 'Legendary Grandmaster', min: 3000, color: 0xFF0000 },
@@ -99,7 +109,7 @@ async function postRatingChange(client, discordId, username, platform, oldRating
 // ─── Sync All Ratings ────────────────────────────────────────
 async function syncAllRatings(client) {
   const users = getAllUsers();
-  console.log(`[RatingSync] Syncing ratings for ${users.length} users...`);
+  console.log(`[RatingSync] Syncing ratings and streaks for ${users.length} users...`);
 
   for (const user of users) {
     const existing = {};
@@ -120,6 +130,17 @@ async function syncAllRatings(client) {
             if (hasExisting && oldRating !== stats.rating) {
               await postRatingChange(client, user.discord_id, user.username, 'cf', oldRating, stats.rating, stats.rank_title, stats.lastContest);
             }
+          }
+
+          // Sync real Codeforces streak and update role
+          try {
+            const streakInfo = await calculateCFStreak(user.cf_handle);
+            upsertStreak(user.discord_id, 'cf', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+            if (client) {
+              await updateDiscordStreakRole(client, user.discord_id, streakInfo.current);
+            }
+          } catch (err) {
+            console.error(`[RatingSync] CF streak error for ${user.cf_handle}:`, err.message);
           }
         }).catch(err => console.error(`[RatingSync] CF error ${user.cf_handle}:`, err.message))
       );
@@ -265,6 +286,151 @@ function startRatingSync(client) {
   }, { timezone: 'Asia/Dhaka' });
 
   console.log('[RatingSync] Strict cron scheduler started (Hourly rating sync + 9 AM Dashboard update).');
+}
+
+/**
+ * Calculate the current and maximum consecutive days a Codeforces user has solved at least one problem.
+ * Dates are calculated in Asia/Dhaka timezone.
+ */
+async function calculateCFStreak(handle) {
+  try {
+    const res = await axios.get(`${CF_BASE}/user.status?handle=${handle}&from=1&count=2000`, { timeout: 12000 });
+    if (res.data.status !== 'OK') return { current: 0, max: 0 };
+
+    const solvedDates = new Set();
+    for (const sub of res.data.result) {
+      if (sub.verdict === 'OK' && sub.problem) {
+        // Convert to Dhaka time (UTC+6)
+        const date = new Date((sub.creationTimeSeconds + 6 * 3600) * 1000);
+        const yyyy = date.getUTCFullYear();
+        const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(date.getUTCDate()).padStart(2, '0');
+        solvedDates.add(`${yyyy}-${mm}-${dd}`);
+      }
+    }
+
+    if (solvedDates.size === 0) return { current: 0, max: 0 };
+
+    const sortedDates = Array.from(solvedDates).sort();
+
+    // Helper to format a Date object as YYYY-MM-DD in UTC
+    const formatDate = (d) => {
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    // Calculate current streak
+    const nowDhaka = new Date(Date.now() + 6 * 3600 * 1000);
+    const todayStr = formatDate(nowDhaka);
+    
+    const yesterday = new Date(Date.now() + 6 * 3600 * 1000);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const yesterdayStr = formatDate(yesterday);
+
+    let currentStreak = 0;
+    let checkDate = new Date(Date.now() + 6 * 3600 * 1000);
+
+    if (solvedDates.has(todayStr)) {
+      // Start counting from today
+      while (true) {
+        const checkStr = formatDate(checkDate);
+        if (solvedDates.has(checkStr)) {
+          currentStreak++;
+          checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+        } else {
+          break;
+        }
+      }
+    } else if (solvedDates.has(yesterdayStr)) {
+      // Start counting from yesterday
+      checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+      while (true) {
+        const checkStr = formatDate(checkDate);
+        if (solvedDates.has(checkStr)) {
+          currentStreak++;
+          checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+        } else {
+          break;
+        }
+      }
+    } else {
+      currentStreak = 0;
+    }
+
+    // Calculate max streak in history
+    let maxStreak = 0;
+    let tempStreak = 0;
+    let prevTime = null;
+
+    for (const dateStr of sortedDates) {
+      const parts = dateStr.split('-');
+      const currTime = Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+
+      if (prevTime === null) {
+        tempStreak = 1;
+      } else {
+        const diffDays = Math.round((currTime - prevTime) / (24 * 3600 * 1000));
+        if (diffDays === 1) {
+          tempStreak++;
+        } else if (diffDays > 1) {
+          maxStreak = Math.max(maxStreak, tempStreak);
+          tempStreak = 1;
+        }
+      }
+      prevTime = currTime;
+    }
+    maxStreak = Math.max(maxStreak, tempStreak);
+
+    return { current: currentStreak, max: maxStreak };
+  } catch (err) {
+    console.error(`[StreakCalc] Error calculating streak for ${handle}:`, err.message);
+    return { current: 0, max: 0 };
+  }
+}
+
+/**
+ * Assign the target streak milestone role to a Discord member and remove any others to avoid duplicates.
+ */
+async function updateDiscordStreakRole(client, discordId, currentStreak) {
+  const targetRoleData = STREAK_ROLES.find(r => currentStreak >= r.min);
+  
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      const member = await guild.members.fetch(discordId).catch(() => null);
+      if (!member) continue;
+
+      let targetRole = null;
+      if (targetRoleData) {
+        targetRole = guild.roles.cache.find(r => r.name === targetRoleData.name);
+        if (!targetRole) {
+          targetRole = await guild.roles.create({
+            name: targetRoleData.name,
+            color: targetRoleData.color,
+            reason: 'Auto-created Streak Role'
+          });
+        }
+      }
+
+      // Add target role if they don't have it
+      if (targetRole && !member.roles.cache.has(targetRole.id)) {
+        await member.roles.add(targetRole).catch(() => {});
+      }
+
+      // Remove all other streak roles (prevent duplicates)
+      for (const roleDef of STREAK_ROLES) {
+        if (!targetRoleData || roleDef.name !== targetRoleData.name) {
+          const roleToRemove = guild.roles.cache.find(r => r.name === roleDef.name);
+          if (roleToRemove && member.roles.cache.has(roleToRemove.id)) {
+            await member.roles.remove(roleToRemove).catch(() => {});
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[StreakRoleSync] Error syncing roles for ${discordId} in guild ${guild.id}:`, err.message);
+    }
+  }
 }
 
 module.exports = { startRatingSync, syncAllRatings, updateDashboard };
