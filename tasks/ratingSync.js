@@ -143,7 +143,12 @@ async function postRatingChange(client, discordId, username, platform, oldRating
 
   const centeredTitle = centerHeader(`${headerArrow} ${statusTitle} ${headerArrow}`, 1, 24);
   const centeredUser  = centerHeader(`👤 ${username}`, 3, 24);
-  const centeredPlatform = centerHeader(`${platform === 'cf' ? 'Codeforces' : 'AtCoder'} ${emojis[platform] ?? ''}`, 3, 24);
+  
+  // Pad normal text platform to center it without header tags (so custom emojis render)
+  const platformLabel = platform === 'cf' ? 'Codeforces' : 'AtCoder';
+  const platformText = `**${platformLabel}** ${emojis[platform] ?? ''}`;
+  const platSpaces = '\u2003'.repeat(platform === 'cf' ? 7 : 8);
+  const centeredPlatform = `${platSpaces}${platformText}`;
   
   const transitionText = `${oldRating} ➔ ${newRating}`;
   const centeredTransition = centerHeader(transitionText, 1, 24);
@@ -153,10 +158,10 @@ async function postRatingChange(client, discordId, username, platform, oldRating
 
   let description = `${centeredTitle}\n` +
     `${centeredUser}\n` +
-    `${centeredPlatform}\n\n` +
-    `${divider}\n\n` +
+    `${centeredPlatform}\n` +
+    `${divider}\n` +
     `${centeredTransition}\n` +
-    `${centeredDiff}\n\n` +
+    `${centeredDiff}\n` +
     `${divider}\n\n` +
     `🏅 **Current Rank**: ${rankEmoji} \`${finalRankTitle}\`\n`;
 
@@ -537,4 +542,4 @@ async function updateDiscordStreakRole(client, discordId, currentStreak) {
   }
 }
 
-module.exports = { startRatingSync, syncAllRatings, updateDashboard };
+module.exports = { startRatingSync, syncAllRatings, updateDashboard, postRatingChange };
