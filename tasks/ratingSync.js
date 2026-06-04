@@ -289,8 +289,8 @@ function startRatingSync(client) {
 }
 
 /**
- * Calculate the current and maximum consecutive days a Codeforces user has solved at least one problem.
- * Dates are calculated in Asia/Dhaka timezone.
+ * Calculate the current and maximum consecutive days a Codeforces user has submitted at least one problem (any verdict).
+ * Dates are calculated in UTC time to match Codeforces profile activity calendar and streaks.
  */
 async function calculateCFStreak(handle) {
   try {
@@ -299,9 +299,9 @@ async function calculateCFStreak(handle) {
 
     const solvedDates = new Set();
     for (const sub of res.data.result) {
-      if (sub.verdict === 'OK' && sub.problem) {
-        // Convert to Dhaka time (UTC+6)
-        const date = new Date((sub.creationTimeSeconds + 6 * 3600) * 1000);
+      if (sub.problem) {
+        // Codeforces activity calendar and streaks count ANY submission (all verdicts) in UTC
+        const date = new Date(sub.creationTimeSeconds * 1000);
         const yyyy = date.getUTCFullYear();
         const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
         const dd = String(date.getUTCDate()).padStart(2, '0');
@@ -321,16 +321,16 @@ async function calculateCFStreak(handle) {
       return `${yyyy}-${mm}-${dd}`;
     };
 
-    // Calculate current streak
-    const nowDhaka = new Date(Date.now() + 6 * 3600 * 1000);
-    const todayStr = formatDate(nowDhaka);
+    // Calculate current streak in UTC
+    const nowUTC = new Date();
+    const todayStr = formatDate(nowUTC);
     
-    const yesterday = new Date(Date.now() + 6 * 3600 * 1000);
+    const yesterday = new Date();
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     const yesterdayStr = formatDate(yesterday);
 
     let currentStreak = 0;
-    let checkDate = new Date(Date.now() + 6 * 3600 * 1000);
+    let checkDate = new Date();
 
     if (solvedDates.has(todayStr)) {
       // Start counting from today
