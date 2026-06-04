@@ -46,13 +46,15 @@ function computeLeaderboard(users, ratings, streaks = []) {
       if (aTotalRating !== bTotalRating) {
         return bTotalRating - aTotalRating;
       }
-      // 2. Total Solves (CF Solves + AtCoder Solves)
-      const aTotalSolved = a.cf_solved + a.ac_solved;
-      const bTotalSolved = b.cf_solved + b.ac_solved;
-      if (aTotalSolved !== bTotalSolved) {
-        return bTotalSolved - aTotalSolved;
+      // 2. CF Solve Total
+      if (a.cf_solved !== b.cf_solved) {
+        return b.cf_solved - a.cf_solved;
       }
-      // 3. CF Streak
+      // 3. AC Solve Total
+      if (a.ac_solved !== b.ac_solved) {
+        return b.ac_solved - a.ac_solved;
+      }
+      // 4. CF Streak
       return b.cf_streak - a.cf_streak;
     });
 
