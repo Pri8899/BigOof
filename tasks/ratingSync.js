@@ -183,7 +183,7 @@ async function updateDashboard(client) {
     const users   = getAllUsers();
     const ratings = getAllRatings();
     const streaks = getAllStreaks();
-    const rows    = computeLeaderboard(users, ratings);
+    const rows    = computeLeaderboard(users, ratings, streaks);
     const { getPlatformEmojis } = require('../utils/emojis');
     const emojis  = await getPlatformEmojis(channel.guild);
     const embed   = buildDashboardEmbed(rows, streaks, emojis);
