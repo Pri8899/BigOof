@@ -4,6 +4,12 @@ const {
 } = require('../database/db');
 const { buildLobbyEmbed } = require('../utils/vsHandlers');
 
+const CF_TAGS = [
+  'implementation', 'math', 'greedy', 'dp', 'data structures',
+  'graphs', 'strings', 'binary search', 'constructive algorithms',
+  'number theory'
+];
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('vs')
@@ -14,11 +20,13 @@ module.exports = {
         .setRequired(true)
         .setMinValue(800)
         .setMaxValue(3500)
+        .setAutocomplete(true)
     )
     .addStringOption(opt =>
       opt.setName('tag')
-        .setDescription('Optional Codeforces topic tag (e.g. dp, math, greedy)')
+        .setDescription('Optional Codeforces topic tag')
         .setRequired(false)
+        .addChoices(...CF_TAGS.map(t => ({ name: t, value: t })))
     )
     .addIntegerOption(opt =>
       opt.setName('duration')
@@ -45,6 +53,22 @@ module.exports = {
           { name: 'Div. 4', value: 'div4' }
         )
     ),
+
+  async autocomplete(interaction) {
+    const focusedValue = interaction.options.getFocused();
+    const allRatings = [];
+    for (let r = 800; r <= 3500; r += 100) {
+      allRatings.push(r.toString());
+    }
+
+    const filtered = allRatings
+      .filter(choice => choice.startsWith(focusedValue))
+      .slice(0, 25);
+
+    await interaction.respond(
+      filtered.map(choice => ({ name: choice, value: parseInt(choice, 10) }))
+    ).catch(() => {});
+  },
 
   async execute(interaction) {
     const rating    = interaction.options.getInteger('rating');

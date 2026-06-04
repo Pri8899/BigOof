@@ -71,6 +71,19 @@ async function concludeVC(client, vcId, channelId, problems) {
   await channel.send({ content: '🏁 **Virtual Contest Ended!**', embeds: [embed] }).catch(() => {});
 }
 
+const CF_TAGS = [
+  'implementation', 'math', 'greedy', 'dp', 'data structures',
+  'graphs', 'strings', 'binary search', 'constructive algorithms',
+  'number theory'
+];
+
+const DIV_CHOICES = [
+  { name: 'Div. 1', value: 'div1' },
+  { name: 'Div. 2', value: 'div2' },
+  { name: 'Div. 3', value: 'div3' },
+  { name: 'Div. 4', value: 'div4' }
+];
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('vc-start')
@@ -80,7 +93,8 @@ module.exports = {
         .setDescription('Target problem rating (e.g. 1500)')
         .setRequired(true)
         .setMinValue(800)
-        .setMaxValue(3000))
+        .setMaxValue(3000)
+        .setAutocomplete(true))
     .addIntegerOption(opt =>
       opt.setName('duration')
         .setDescription('Duration in minutes (default: 90)')
@@ -92,7 +106,33 @@ module.exports = {
         .setDescription('Number of problems (default: 4)')
         .setRequired(false)
         .setMinValue(1)
-        .setMaxValue(6)),
+        .setMaxValue(6))
+    .addStringOption(opt =>
+      opt.setName('tag')
+        .setDescription('Filter by topic tag')
+        .setRequired(false)
+        .addChoices(...CF_TAGS.map(t => ({ name: t, value: t }))))
+    .addStringOption(opt =>
+      opt.setName('division')
+        .setDescription('Filter by Codeforces division')
+        .setRequired(false)
+        .addChoices(...DIV_CHOICES)),
+
+  async autocomplete(interaction) {
+    const focusedValue = interaction.options.getFocused();
+    const allRatings = [];
+    for (let r = 800; r <= 3000; r += 100) {
+      allRatings.push(r.toString());
+    }
+
+    const filtered = allRatings
+      .filter(choice => choice.startsWith(focusedValue))
+      .slice(0, 25);
+
+    await interaction.respond(
+      filtered.map(choice => ({ name: choice, value: parseInt(choice, 10) }))
+    ).catch(() => {});
+  },
 
   async execute(interaction) {
     await interaction.deferReply();
@@ -103,6 +143,8 @@ module.exports = {
     const targetRating = interaction.options.getInteger('difficulty');
     const durationMin  = interaction.options.getInteger('duration') ?? 90;
     const problemCount = interaction.options.getInteger('problems') ?? 4;
+    const tag          = interaction.options.getString('tag') || null;
+    const division     = interaction.options.getString('division') || null;
     const durationSec  = durationMin * 60;
 
     // Check if a VC is already running
@@ -116,11 +158,11 @@ module.exports = {
     // Pick problems
     const minR = Math.max(800, targetRating - 100);
     const maxR = Math.min(3000, targetRating + 100);
-    const problems = await getCFProblems(minR, maxR, null, problemCount);
+    const problems = await getCFProblems(minR, maxR, tag, problemCount, new Set(), division);
 
     if (problems.length < 1) {
       return interaction.editReply({
-        embeds: [errorEmbed('No Problems Found', 'Could not fetch CF problems. Try again.')]
+        embeds: [errorEmbed('No Problems Found', 'Could not fetch CF problems with these filters. Try again.')]
       });
     }
 
