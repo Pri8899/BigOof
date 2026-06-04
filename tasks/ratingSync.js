@@ -17,8 +17,7 @@ const CF_BASE = 'https://codeforces.com/api';
 const STREAK_ROLES = [
   { name: '💫 30+ Day Streak', min: 30, color: 0xE0115F }, // Ruby
   { name: '👑 15+ Day Streak', min: 15, color: 0xF1C40F }, // Gold
-  { name: '🔥 7+ Day Streak',  min: 7,  color: 0xE67E22 }, // Orange
-  { name: '⚡ 3+ Day Streak',  min: 3,  color: 0x3498DB }  // Blue
+  { name: '🔥 7+ Day Streak',  min: 7,  color: 0xE67E22 }  // Orange
 ];
 
 const CF_ROLES = [
