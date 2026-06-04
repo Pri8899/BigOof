@@ -308,9 +308,9 @@ module.exports = {
         ))
     .addIntegerOption(opt =>
       opt.setName('teams')
-        .setDescription('Number of teams for team battle (default: 2)')
+        .setDescription('Number of teams for team battle (set 1 for single-team coop)')
         .setRequired(false)
-        .setMinValue(2)
+        .setMinValue(1)
         .setMaxValue(10)),
 
   async autocomplete(interaction) {
