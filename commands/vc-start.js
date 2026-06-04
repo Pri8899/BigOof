@@ -8,6 +8,19 @@ const crypto = require('crypto');
 // Active VC timers (in-memory, lost on restart but DB is the source of truth)
 const vcTimers = new Map();
 
+const TEAM_NAMES = [
+  { name: 'Team A', emoji: '🔴' },
+  { name: 'Team B', emoji: '🔵' },
+  { name: 'Team C', emoji: '🟢' },
+  { name: 'Team D', emoji: '🟡' },
+  { name: 'Team E', emoji: '🟣' },
+  { name: 'Team F', emoji: '🟠' },
+  { name: 'Team G', emoji: '🟤' },
+  { name: 'Team H', emoji: '⚫' },
+  { name: 'Team I', emoji: '⚪' },
+  { name: 'Team J', emoji: '🟩' }
+];
+
 /**
  * Fetch Codeforces status for a user to see their solved keys
  */
@@ -37,7 +50,12 @@ async function getCFUserSolvedKeys(handle) {
  */
 function buildVCEmbed(vc, problems, participants = [], ended = false, individualSolves = null) {
   const endsAt = vc.ends_at ?? (vc.started_at + vc.duration_sec);
-  const isTeam = vc.type === 'team';
+  const isTeam = vc.type && vc.type.startsWith('team');
+
+  let teamsCount = 2;
+  if (vc.type && vc.type.startsWith('team_')) {
+    teamsCount = parseInt(vc.type.split('_')[1], 10) || 2;
+  }
 
   // Elegant, moody themes
   let embedColor = 0x5865F2; // Discord Blurple
@@ -51,11 +69,11 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
 
   const embed  = new EmbedBuilder()
     .setColor(embedColor)
-    .setTitle(`${ended ? '🏁' : '⚔️'} Virtual Contest${isTeam ? ' (Team Battle)' : ''}${ended ? ' — Results' : ''}`)
+    .setTitle(`${ended ? '🏁' : '⚔️'} Virtual Contest${isTeam ? ` (Team Battle - ${teamsCount} Teams)` : ''}${ended ? ' — Results' : ''}`)
     .setDescription(
       ended
         ? `**Contest Over!** Final results for this **${isTeam ? 'Team Battle' : 'Individual Battle'}**:`
-        : `Contest is **live**! This is a **${isTeam ? '👥 Team Battle' : '👤 Individual Battle'}**.\nSolve as many problems as you can before time runs out.\n\nEnds: <t:${endsAt}:R>`
+        : `Contest is **live**! This is a **${isTeam ? `👥 Team Battle (${teamsCount} Teams)` : '👤 Individual Battle'}**.\nSolve as many problems as you can before time runs out.\n\nEnds: <t:${endsAt}:R>`
     );
 
   problems.forEach((p, i) => {
@@ -69,22 +87,19 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
   if (!ended) {
     if (participants.length > 0) {
       if (isTeam) {
-        const teamA = participants.filter(p => p.team === 'Team A');
-        const teamB = participants.filter(p => p.team === 'Team B');
-        const formatMember = p => `• <@${p.discord_id}> (\`${p.cf_handle}\`)`;
+        const fields = [];
+        for (let i = 0; i < teamsCount; i++) {
+          const tInfo = TEAM_NAMES[i] || { name: `Team ${String.fromCharCode(65 + i)}`, emoji: '👥' };
+          const members = participants.filter(p => p.team === tInfo.name);
+          const formatMember = p => `• <@${p.discord_id}> (\`${p.cf_handle}\`)`;
 
-        embed.addFields(
-          {
-            name: `🔴 Team A (${teamA.length})`,
-            value: teamA.map(formatMember).join('\n') || '*No members yet*',
+          fields.push({
+            name: `${tInfo.emoji} ${tInfo.name} (${members.length})`,
+            value: members.map(formatMember).join('\n') || '*No members yet*',
             inline: true
-          },
-          {
-            name: `🔵 Team B (${teamB.length})`,
-            value: teamB.map(formatMember).join('\n') || '*No members yet*',
-            inline: true
-          }
-        );
+          });
+        }
+        embed.addFields(fields);
       } else {
         const lines = participants.map(p => `• <@${p.discord_id}> (\`${p.cf_handle}\`)`);
         embed.addFields({
@@ -97,19 +112,19 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
   } else {
     if (participants.length > 0) {
       if (isTeam) {
-        const teamA = participants.filter(p => p.team === 'Team A');
-        const teamB = participants.filter(p => p.team === 'Team B');
-        const scoreA = teamA[0]?.solved ?? 0;
-        const scoreB = teamB[0]?.solved ?? 0;
+        const teamsData = [];
+        for (let i = 0; i < teamsCount; i++) {
+          const tInfo = TEAM_NAMES[i] || { name: `Team ${String.fromCharCode(65 + i)}`, emoji: '👥' };
+          const members = participants.filter(p => p.team === tInfo.name);
+          const score = members[0]?.solved ?? 0;
+          teamsData.push({ ...tInfo, score, members });
+        }
 
-        const teamsSorted = [
-          { name: 'Team A', emoji: '🔴', score: scoreA, members: teamA },
-          { name: 'Team B', emoji: '🔵', score: scoreB, members: teamB }
-        ].sort((a, b) => b.score - a.score);
+        const teamsSorted = teamsData.sort((a, b) => b.score - a.score);
 
-        const medals = ['🥇', '🥈'];
+        const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
         const leaderboardLines = teamsSorted.map((t, idx) => {
-          return `${medals[idx]} **${t.emoji} ${t.name}** — **${t.score}** solved`;
+          return `${medals[idx] || `${idx + 1}.`} **${t.emoji} ${t.name}** — **${t.score}** solved`;
         });
 
         embed.addFields({
@@ -182,17 +197,25 @@ async function concludeVC(client, vcId, channelId, problems) {
     await new Promise(r => setTimeout(r, 300)); // be gentle with CF API
   }
 
-  const isTeam = vc && vc.type === 'team';
+  const isTeam = vc && vc.type && vc.type.startsWith('team');
+  let teamsCount = 2;
+  if (vc && vc.type && vc.type.startsWith('team_')) {
+    teamsCount = parseInt(vc.type.split('_')[1], 10) || 2;
+  }
 
   if (isTeam) {
-    const teamSolvedProblems = {
-      'Team A': new Set(),
-      'Team B': new Set()
-    };
+    const teamSolvedProblems = {};
+    for (let i = 0; i < teamsCount; i++) {
+      const tName = TEAM_NAMES[i]?.name || `Team ${String.fromCharCode(65 + i)}`;
+      teamSolvedProblems[tName] = new Set();
+    }
 
     // Calculate union for each team
     for (const p of participants) {
       const teamName = p.team || 'Team A';
+      if (!teamSolvedProblems[teamName]) {
+        teamSolvedProblems[teamName] = new Set();
+      }
       const pSolves = participantSolvedSets.get(p.discord_id) || new Set();
       for (const key of pSolves) {
         teamSolvedProblems[teamName].add(key);
@@ -202,7 +225,7 @@ async function concludeVC(client, vcId, channelId, problems) {
     // Update each participant's solved count in the DB to their team's union count
     for (const p of participants) {
       const teamName = p.team || 'Team A';
-      const teamScore = teamSolvedProblems[teamName].size;
+      const teamScore = teamSolvedProblems[teamName]?.size ?? 0;
       updateVCSolved(vcId, p.discord_id, teamScore);
     }
   } else {
@@ -282,7 +305,13 @@ module.exports = {
         .addChoices(
           { name: '👤 Individual', value: 'individual' },
           { name: '👥 Team', value: 'team' }
-        )),
+        ))
+    .addIntegerOption(opt =>
+      opt.setName('teams')
+        .setDescription('Number of teams for team battle (default: 2)')
+        .setRequired(false)
+        .setMinValue(2)
+        .setMaxValue(10)),
 
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
@@ -342,8 +371,20 @@ module.exports = {
     const problemCount = interaction.options.getInteger('problems') ?? 5;
     const tag          = interaction.options.getString('tag') || null;
     const division     = interaction.options.getString('division') || null;
-    const type         = interaction.options.getString('type') || 'individual';
+    let type           = interaction.options.getString('type') || 'individual';
+    const teamsCountOption = interaction.options.getInteger('teams');
     const durationSec  = durationMin * 60;
+
+    if (teamsCountOption && type === 'individual') {
+      type = 'team';
+    }
+
+    let dbType = type;
+    let teamsCount = 2;
+    if (type === 'team') {
+      teamsCount = teamsCountOption || 2;
+      dbType = `team_${teamsCount}`;
+    }
 
     // Check if a VC is already running
     const existing = getActiveVCForChannel(channelId);
@@ -366,12 +407,12 @@ module.exports = {
 
     // Create VC in DB
     const vcId = crypto.randomBytes(4).toString('hex').toUpperCase();
-    createVC(vcId, channelId, guildId, userId, String(targetRating), durationSec, problems, type);
+    createVC(vcId, channelId, guildId, userId, String(targetRating), durationSec, problems, dbType);
 
     // Auto-join the creator if they have CF linked
     const user = getUser(userId);
     if (user?.cf_handle) {
-      const teamVal = type === 'team' ? 'Team A' : null;
+      const teamVal = type === 'team' ? TEAM_NAMES[0].name : null;
       joinVC(vcId, userId, user.cf_handle, teamVal);
     }
 
@@ -383,9 +424,9 @@ module.exports = {
     const row = new ActionRowBuilder().addComponents(joinBtn);
 
     const embed = buildVCEmbed(
-      { id: vcId, ends_at: Math.floor(Date.now() / 1000) + durationSec, started_at: Math.floor(Date.now() / 1000), duration_sec: durationSec, difficulty: targetRating, type: type },
+      { id: vcId, ends_at: Math.floor(Date.now() / 1000) + durationSec, started_at: Math.floor(Date.now() / 1000), duration_sec: durationSec, difficulty: targetRating, type: dbType },
       problems,
-      user?.cf_handle ? [{ discord_id: userId, cf_handle: user.cf_handle, team: type === 'team' ? 'Team A' : null }] : []
+      user?.cf_handle ? [{ discord_id: userId, cf_handle: user.cf_handle, team: type === 'team' ? TEAM_NAMES[0].name : null }] : []
     );
 
     await interaction.editReply({ embeds: [embed], components: [row] });
@@ -421,7 +462,8 @@ module.exports = {
 
       let teamVal = null;
       if (type === 'team') {
-        teamVal = participants.length % 2 === 0 ? 'Team A' : 'Team B';
+        const teamIndex = participants.length % teamsCount;
+        teamVal = TEAM_NAMES[teamIndex]?.name || `Team ${String.fromCharCode(65 + teamIndex)}`;
       }
 
       joinVC(vcId, btnInteraction.user.id, clicker.cf_handle, teamVal);
@@ -429,7 +471,7 @@ module.exports = {
       // Get updated list of participants to update the lobby embed
       const updatedParts = getVCParticipants(vcId);
       const updatedEmbed = buildVCEmbed(
-        { id: vcId, ends_at: Math.floor(Date.now() / 1000) + durationSec, started_at: Math.floor(Date.now() / 1000), duration_sec: durationSec, difficulty: targetRating, type: type },
+        { id: vcId, ends_at: Math.floor(Date.now() / 1000) + durationSec, started_at: Math.floor(Date.now() / 1000), duration_sec: durationSec, difficulty: targetRating, type: dbType },
         problems,
         updatedParts,
         false
