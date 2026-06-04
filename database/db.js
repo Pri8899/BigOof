@@ -6,8 +6,12 @@ const path = require('path');
 let defaultDbPath = path.join(__dirname, '..', 'cpbot.db');
 
 // If deployed on Railway and the /data volume exists, use it automatically!
-if (process.env.RAILWAY_ENVIRONMENT && fs.existsSync('/data')) {
-  defaultDbPath = '/data/cpbot.db';
+if (process.env.RAILWAY_ENVIRONMENT) {
+  if (fs.existsSync('/data')) {
+    defaultDbPath = '/data/cpbot.db';
+  } else {
+    console.warn('[Database] WARNING: Running on Railway but /data directory does not exist. SQLite database will be ephemeral and reset on every deploy! Please attach a persistent volume and mount it at /data.');
+  }
 }
 
 const DB_PATH = process.env.DATABASE_PATH || defaultDbPath;

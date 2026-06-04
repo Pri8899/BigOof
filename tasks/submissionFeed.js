@@ -126,6 +126,7 @@ async function fetchCFSubmissions(user) {
     
     return newAc;
   } catch (err) {
+    console.error(`[SubmissionFeed] Error fetching Codeforces submissions for ${user.cf_handle}:`, err.message);
     return [];
   }
 }
@@ -174,16 +175,23 @@ async function fetchACSubmissions(user) {
     
     return newAc;
   } catch (err) {
+    console.error(`[SubmissionFeed] Error fetching AtCoder submissions for ${user.ac_handle}:`, err.message);
     return [];
   }
 }
 
 async function runSubmissionFeed(client) {
-  const channelId = getConfig('feed_channel_id');
-  if (!channelId) return;
+  const channelId = getConfig('feed_channel_id') || process.env.FEED_CHANNEL_ID || process.env.GENERAL_CHANNEL_ID;
+  if (!channelId) {
+    console.warn('[SubmissionFeed] No live feed channel configured. Please set one using /set-feed-channel or define FEED_CHANNEL_ID / GENERAL_CHANNEL_ID in .env.');
+    return;
+  }
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel) return;
+  if (!channel) {
+    console.warn(`[SubmissionFeed] Configured channel ID ${channelId} could not be fetched.`);
+    return;
+  }
 
   const users = getAllUsers();
   
