@@ -155,15 +155,21 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
   } else {
     const lines = rows.map((row, i) => {
       const medal   = medals[i] ?? `\`${String(i + 1).padStart(2, ' ')}\``;
-      const cfStr   = row.cf_linked
-        ? (row.cf_rating > 0 ? `CF: **${row.cf_rating}** (Solved: **${row.cf_solved}**)` : `CF: Unrated (Solved: **${row.cf_solved}**)`)
-        : `CF: —`;
-      const acStr   = row.ac_linked
-        ? (row.ac_rating > 0 ? `AC: **${row.ac_rating}** (Solved: **${row.ac_solved}**)` : `AC: Unrated (Solved: **${row.ac_solved}**)`)
-        : `AC: —`;
+      const totalRating = row.cf_rating + row.ac_rating;
+      const totalSolved = row.cf_solved + row.ac_solved;
+
+      const details = [];
+      if (row.cf_linked) {
+        details.push(`CF: **${row.cf_rating}** (Solved: **${row.cf_solved}**)`);
+      }
+      if (row.ac_linked) {
+        details.push(`AC: **${row.ac_rating}** (Solved: **${row.ac_solved}**)`);
+      }
+      const detailsStr = details.length > 0 ? ` [${details.join(' | ')}]` : '';
+
       const streak  = streakMap[row.discord_id];
       const fire    = streak >= 7 ? ` 🔥${streak}d` : streak >= 1 ? ` ⚡${streak}d` : '';
-      return `${medal} **${row.username ?? 'Unknown'}**${fire} — ${cfStr} | ${acStr}`;
+      return `${medal} **${row.username ?? 'Unknown'}**${fire} — **${totalRating}** (Solved: **${totalSolved}**)${detailsStr}`;
     });
     description = lines.join('\n');
   }
