@@ -81,103 +81,25 @@ async function postRatingChange(client, discordId, username, platform, oldRating
   const diff   = newRating - oldRating;
   const arrow  = diff > 0 ? '📈' : '📉';
   const sign   = diff > 0 ? `+${diff}` : `${diff}`;
-  const baseColor  = diff > 0 ? 0x2ECC71 : 0xE74C3C;
+  const color  = diff > 0 ? 0x2ECC71 : 0xE74C3C;
 
   const { getPlatformEmojis } = require('../utils/emojis');
   const emojis = await getPlatformEmojis(channel.guild);
   const platformName = { cf: `Codeforces ${emojis.cf}`, ac: `AtCoder ${emojis.ac}` }[platform] ?? platform;
 
-  // Custom Rank definitions with branding colors and matching emojis
-  const CF_RANKS = {
-    'legendary grandmaster': { name: 'Legendary Grandmaster', color: 0xFF0000, emoji: '👑' },
-    'international grandmaster': { name: 'International Grandmaster', color: 0xFF0000, emoji: '🔴' },
-    'grandmaster': { name: 'Grandmaster', color: 0xFF0000, emoji: '🔴' },
-    'international master': { name: 'International Master', color: 0xFF8C00, emoji: '🟠' },
-    'master': { name: 'Master', color: 0xFF8C00, emoji: '🟠' },
-    'candidate master': { name: 'Candidate Master', color: 0xAA00AA, emoji: '🟣' },
-    'expert': { name: 'Expert', color: 0x0000FF, emoji: '🔵' },
-    'specialist': { name: 'Specialist', color: 0x03A89E, emoji: '💎' },
-    'pupil': { name: 'Pupil', color: 0x008000, emoji: '🟢' },
-    'newbie': { name: 'Newbie', color: 0x808080, emoji: '⚫' },
-    'unrated': { name: 'Unrated', color: 0x808080, emoji: '⚪' }
-  };
-
-  const AC_RANKS = {
-    'red': { name: 'Red', color: 0xFF0000, emoji: '🔴' },
-    'orange': { name: 'Orange', color: 0xFF8C00, emoji: '🟠' },
-    'yellow': { name: 'Yellow', color: 0xF1C40F, emoji: '🟡' },
-    'blue': { name: 'Blue', color: 0x0000FF, emoji: '🔵' },
-    'cyan': { name: 'Cyan', color: 0x03A89E, emoji: '💎' },
-    'green': { name: 'Green', color: 0x008000, emoji: '🟢' },
-    'brown': { name: 'Brown', color: 0x8B4513, emoji: '🟤' },
-    'gray': { name: 'Gray', color: 0x808080, emoji: '⚫' },
-    'unrated': { name: 'Unrated', color: 0x808080, emoji: '⚪' }
-  };
-
-  const rankKey = rankTitle ? rankTitle.toLowerCase().trim() : 'unrated';
-  let rankInfo = null;
-  if (platform === 'cf') {
-    rankInfo = CF_RANKS[rankKey];
-  } else if (platform === 'ac') {
-    rankInfo = AC_RANKS[rankKey];
-  }
-
-  const finalRankTitle = rankInfo ? rankInfo.name : (rankTitle ?? 'Unrated');
-  const rankEmoji = rankInfo ? rankInfo.emoji : '🏅';
-  const embedColor = rankInfo ? rankInfo.color : baseColor;
-
-  // Center-alignment helper using em-spaces
-  function centerHeader(text, headerLevel = 1, totalWidth = 24) {
-    const prefix = '#'.repeat(headerLevel);
-    const spacesCount = Math.max(0, Math.floor((totalWidth - text.length) / 2));
-    const spaces = '\u2003'.repeat(spacesCount);
-    return `${prefix} ${spaces}${text}`;
-  }
-
-  // Retrieve user avatar URL if they are in the guild
-  const member = await channel.guild.members.fetch(discordId).catch(() => null);
-  const avatarUrl = member ? member.user.displayAvatarURL({ forceStatic: false, size: 256 }) : null;
-
-  const statusTitle = diff > 0 ? 'RATING UP' : 'RATING DOWN';
-  const headerArrow = diff > 0 ? '🚀' : '📉';
-
-  const centeredTitle = centerHeader(`${headerArrow} ${statusTitle} ${headerArrow}`, 1, 24);
-  const centeredUser  = centerHeader(`👤 ${username}`, 3, 24);
-  
-  // Pad normal text platform to center it without header tags (so custom emojis render)
-  const platformLabel = platform === 'cf' ? 'Codeforces' : 'AtCoder';
-  const platformText = `**${platformLabel}** ${emojis[platform] ?? ''}`;
-  const platSpaces = '\u2003'.repeat(platform === 'cf' ? 7 : 8);
-  const centeredPlatform = `${platSpaces}${platformText}`;
-  
-  const transitionText = `${oldRating} ➔ ${newRating}`;
-  const centeredTransition = centerHeader(transitionText, 1, 24);
-  const centeredDiff = centerHeader(`(${sign})`, 2, 24);
-
-  const divider = '⚡ ────────────────────────────── ⚡';
-
-  let description = `${centeredTitle}\n` +
-    `${centeredUser}\n` +
-    `${centeredPlatform}\n` +
-    `${divider}\n` +
-    `${centeredTransition}\n` +
-    `${centeredDiff}\n` +
-    `${divider}\n\n` +
-    `🏅 **Current Rank**: ${rankEmoji} \`${finalRankTitle}\`\n`;
-
-  if (lastContest) {
-    description += `🏆 **Last Contest Details**:\n` +
-      `> 📝 **Contest**: _${lastContest.contestName}_\n` +
-      `> 🏅 **Standing**: \`#${lastContest.rank}\`\n`;
-  }
-
   const embed = new EmbedBuilder()
-    .setColor(embedColor)
-    .setDescription(description)
+    .setColor(color)
+    .setTitle(`${arrow} Rating Update — ${username}`)
+    .setDescription(`**${platformName}**\n\`\`\`diff\n${oldRating} → ${newRating}  (${sign})\n\`\`\``)
+    .addFields({ name: '🏅 Current Rank', value: rankTitle ?? 'Unrated', inline: true })
     .setTimestamp();
 
-  if (avatarUrl) {
-    embed.setThumbnail(avatarUrl);
+  if (lastContest) {
+    embed.addFields({
+      name: '🏆 Last Contest',
+      value: `**${lastContest.contestName}**\nPlace: \`#${lastContest.rank}\``,
+      inline: false
+    });
   }
 
   await channel.send({ content: `<@${discordId}>`, embeds: [embed] }).catch(() => {});
@@ -542,4 +464,4 @@ async function updateDiscordStreakRole(client, discordId, currentStreak) {
   }
 }
 
-module.exports = { startRatingSync, syncAllRatings, updateDashboard, postRatingChange };
+module.exports = { startRatingSync, syncAllRatings, updateDashboard };
