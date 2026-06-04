@@ -209,34 +209,32 @@ module.exports = {
       // Construct Embed Card
       const embed = new EmbedBuilder()
         .setColor(0x5E35B1) // Moody Deep Violet
-        .setTitle(`⚔️ CP RPG Character Sheet — ${dbUser.cf_handle}`)
         .setDescription(
+          `# \u2003\u2003⚔️ CP CHARACTER SHEET ⚔️\n` +
+          `### \u2003\u2003\u2003\u2003👤 ${dbUser.cf_handle}\n` +
+          `⚡ ────────────────────────────── ⚡\n` +
           `> 🏆 **Title**: \`${title}\`\n` +
           `> 📊 **Overall Level**: \`Lvl ${overallLevelInfo.level}\`  (EXP: \`${overallLevelInfo.currentExp}/${overallLevelInfo.nextLevelExp}\`)\n` +
           `> ${drawProgressBar(overallLevelInfo.currentExp, overallLevelInfo.nextLevelExp, 12)}\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+          `⚡ ────────────────────────────── ⚡`
         )
         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
         .addFields(
           {
-            name: '🗡️ Combat Skills',
+            name: '⚔️ Combat & Core Skills',
             value: `🗡️ **Greedy/BF**: Lvl ${classLevels.attack.level}\n${drawProgressBar(classLevels.attack.currentExp, classLevels.attack.nextLevelExp, 8)} (\`${classLevels.attack.currentExp}/${classLevels.attack.nextLevelExp}\`)\n\n` +
                    `🛡️ **Implementation**: Lvl ${classLevels.defense.level}\n${drawProgressBar(classLevels.defense.currentExp, classLevels.defense.nextLevelExp, 8)} (\`${classLevels.defense.currentExp}/${classLevels.defense.nextLevelExp}\`)\n\n` +
-                   `🏹 **Binary Search**: Lvl ${classLevels.precision.level}\n${drawProgressBar(classLevels.precision.currentExp, classLevels.precision.nextLevelExp, 8)} (\`${classLevels.precision.currentExp}/${classLevels.precision.nextLevelExp}\`)`,
+                   `🏹 **Binary Search**: Lvl ${classLevels.precision.level}\n${drawProgressBar(classLevels.precision.currentExp, classLevels.precision.nextLevelExp, 8)} (\`${classLevels.precision.currentExp}/${classLevels.precision.nextLevelExp}\`)\n\n` +
+                   `✍️ **Strings & Hash**: Lvl ${classLevels.runes.level}\n${drawProgressBar(classLevels.runes.currentExp, classLevels.runes.nextLevelExp, 8)} (\`${classLevels.runes.currentExp}/${classLevels.runes.nextLevelExp}\`)`,
             inline: true
           },
           {
-            name: '🔮 Arcane & Inventory',
+            name: '🔮 Arcane & Advanced',
             value: `🧙‍♂️ **Math & Theory**: Lvl ${classLevels.magic.level}\n${drawProgressBar(classLevels.magic.currentExp, classLevels.magic.nextLevelExp, 8)} (\`${classLevels.magic.currentExp}/${classLevels.magic.nextLevelExp}\`)\n\n` +
                    `🌀 **Dynamic Prog.**: Lvl ${classLevels.chrono.level}\n${drawProgressBar(classLevels.chrono.currentExp, classLevels.chrono.nextLevelExp, 8)} (\`${classLevels.chrono.currentExp}/${classLevels.chrono.nextLevelExp}\`)\n\n` +
-                   `📦 **Data Structures**: Lvl ${classLevels.inventory.level}\n${drawProgressBar(classLevels.inventory.currentExp, classLevels.inventory.nextLevelExp, 8)} (\`${classLevels.inventory.currentExp}/${classLevels.inventory.nextLevelExp}\`)`,
+                   `📦 **Data Structures**: Lvl ${classLevels.inventory.level}\n${drawProgressBar(classLevels.inventory.currentExp, classLevels.inventory.nextLevelExp, 8)} (\`${classLevels.inventory.currentExp}/${classLevels.inventory.nextLevelExp}\`)\n\n` +
+                   `🗺️ **Graphs & Trees**: Lvl ${classLevels.exploration.level}\n${drawProgressBar(classLevels.exploration.currentExp, classLevels.exploration.nextLevelExp, 8)} (\`${classLevels.exploration.currentExp}/${classLevels.exploration.nextLevelExp}\`)`,
             inline: true
-          },
-          {
-            name: '🗺️ Exploration & Runes',
-            value: `🗺️ **Graphs & Trees**: Lvl ${classLevels.exploration.level}\n${drawProgressBar(classLevels.exploration.currentExp, classLevels.exploration.nextLevelExp, 8)} (\`${classLevels.exploration.currentExp}/${classLevels.exploration.nextLevelExp}\`)\n\n` +
-                   `✍️ **Strings & Hash**: Lvl ${classLevels.runes.level}\n${drawProgressBar(classLevels.runes.currentExp, classLevels.runes.nextLevelExp, 8)} (\`${classLevels.runes.currentExp}/${classLevels.runes.nextLevelExp}\`)`,
-            inline: false
           },
           {
             name: '📊 Platform Achievements',
