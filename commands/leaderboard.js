@@ -29,6 +29,8 @@ function computeLeaderboard(users, ratings, streaks = []) {
       return {
         discord_id: u.discord_id,
         username:   u.username ?? 'Unknown',
+        cf_handle:  u.cf_handle,
+        ac_handle:  u.ac_handle,
         cf_rating:  cfR,
         cf_solved:  cfS,
         cf_linked:  !!u.cf_handle,
