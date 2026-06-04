@@ -1,6 +1,6 @@
 // commands/vc-start.js — Virtual Contest: start, join, end
 const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ComponentType } = require('discord.js');
-const { getUser, getActiveVCForChannel, createVC, joinVC, getVCParticipants, endVC, updateVCSolved, getRatings } = require('../database/db');
+const { getUser, getActiveVCForChannel, createVC, getVC, joinVC, getVCParticipants, endVC, updateVCSolved, getRatings } = require('../database/db');
 const { getCFProblems, checkCFSolved } = require('../utils/codeforces');
 const { errorEmbed, successEmbed }     = require('../utils/embeds');
 const crypto = require('crypto');
@@ -9,17 +9,53 @@ const crypto = require('crypto');
 const vcTimers = new Map();
 
 /**
+ * Fetch Codeforces status for a user to see their solved keys
+ */
+async function getCFUserSolvedKeys(handle) {
+  try {
+    const axios = require('axios');
+    const res = await axios.get(
+      `https://codeforces.com/api/user.status?handle=${handle}&from=1&count=200`,
+      { timeout: 10000 }
+    );
+    if (res.data.status !== 'OK') return new Set();
+    const solved = new Set();
+    for (const sub of res.data.result) {
+      if (sub.verdict === 'OK' && sub.problem) {
+        solved.add(`${sub.problem.contestId}-${sub.problem.index}`);
+      }
+    }
+    return solved;
+  } catch (err) {
+    console.error(`[CF] Error fetching submissions for ${handle}:`, err.message);
+    return new Set();
+  }
+}
+
+/**
  * Build the VC embed showing problems + participants
  */
-function buildVCEmbed(vc, problems, participants = [], ended = false) {
+function buildVCEmbed(vc, problems, participants = [], ended = false, individualSolves = null) {
   const endsAt = vc.ends_at ?? (vc.started_at + vc.duration_sec);
+  const isTeam = vc.type === 'team';
+
+  // Elegant, moody themes
+  let embedColor = 0x5865F2; // Discord Blurple
+  if (ended) {
+    embedColor = 0x2F3136; // Sleek Dark Theme
+  } else if (isTeam) {
+    embedColor = 0x00D2FF; // Vibrant Team Cyan
+  } else {
+    embedColor = 0xFF3E55; // Crimson Individual Red
+  }
+
   const embed  = new EmbedBuilder()
-    .setColor(ended ? 0x95A5A6 : 0xE74C3C)
-    .setTitle(`${ended ? '🏁' : '⚔️'} Virtual Contest${ended ? ' — Results' : ''}`)
+    .setColor(embedColor)
+    .setTitle(`${ended ? '🏁' : '⚔️'} Virtual Contest${isTeam ? ' (Team Battle)' : ''}${ended ? ' — Results' : ''}`)
     .setDescription(
       ended
-        ? '**Contest Over!** Final results:'
-        : `Contest is **live**! Solve as many problems as you can before time runs out.\n\nEnds: <t:${endsAt}:R>`
+        ? `**Contest Over!** Final results for this **${isTeam ? 'Team Battle' : 'Individual Battle'}**:`
+        : `Contest is **live**! This is a **${isTeam ? '👥 Team Battle' : '👤 Individual Battle'}**.\nSolve as many problems as you can before time runs out.\n\nEnds: <t:${endsAt}:R>`
     );
 
   problems.forEach((p, i) => {
@@ -30,16 +66,86 @@ function buildVCEmbed(vc, problems, participants = [], ended = false) {
     });
   });
 
-  if (participants.length > 0 && ended) {
-    const medals = ['🥇', '🥈', '🥉'];
-    const sorted = [...participants].sort((a, b) => {
-      if (b.solved !== a.solved) return b.solved - a.solved;
-      return (a.finish_time ?? Infinity) - (b.finish_time ?? Infinity);
-    });
-    const lines = sorted.map((p, i) =>
-      `${medals[i] ?? `${i + 1}.`} <@${p.discord_id}> — **${p.solved}** solved`
-    );
-    embed.addFields({ name: '🏆 Leaderboard', value: lines.join('\n') || 'No solves recorded', inline: false });
+  if (!ended) {
+    if (participants.length > 0) {
+      if (isTeam) {
+        const teamA = participants.filter(p => p.team === 'Team A');
+        const teamB = participants.filter(p => p.team === 'Team B');
+        const formatMember = p => `• <@${p.discord_id}> (\`${p.cf_handle}\`)`;
+
+        embed.addFields(
+          {
+            name: `🔴 Team A (${teamA.length})`,
+            value: teamA.map(formatMember).join('\n') || '*No members yet*',
+            inline: true
+          },
+          {
+            name: `🔵 Team B (${teamB.length})`,
+            value: teamB.map(formatMember).join('\n') || '*No members yet*',
+            inline: true
+          }
+        );
+      } else {
+        const lines = participants.map(p => `• <@${p.discord_id}> (\`${p.cf_handle}\`)`);
+        embed.addFields({
+          name: `👥 Participants (${participants.length})`,
+          value: lines.join('\n') || '*No participants yet*',
+          inline: false
+        });
+      }
+    }
+  } else {
+    if (participants.length > 0) {
+      if (isTeam) {
+        const teamA = participants.filter(p => p.team === 'Team A');
+        const teamB = participants.filter(p => p.team === 'Team B');
+        const scoreA = teamA[0]?.solved ?? 0;
+        const scoreB = teamB[0]?.solved ?? 0;
+
+        const teamsSorted = [
+          { name: 'Team A', emoji: '🔴', score: scoreA, members: teamA },
+          { name: 'Team B', emoji: '🔵', score: scoreB, members: teamB }
+        ].sort((a, b) => b.score - a.score);
+
+        const medals = ['🥇', '🥈'];
+        const leaderboardLines = teamsSorted.map((t, idx) => {
+          return `${medals[idx]} **${t.emoji} ${t.name}** — **${t.score}** solved`;
+        });
+
+        embed.addFields({
+          name: '🏆 Team Rankings',
+          value: leaderboardLines.join('\n'),
+          inline: false
+        });
+
+        for (const t of teamsSorted) {
+          const memberLines = t.members.map(m => {
+            let indSolvedText = '';
+            if (individualSolves && individualSolves[m.discord_id] !== undefined) {
+              indSolvedText = ` (contributed ${individualSolves[m.discord_id]} solves)`;
+            }
+            return `• <@${m.discord_id}> (\`${m.cf_handle}\`)${indSolvedText}`;
+          });
+          embed.addFields({
+            name: `${t.emoji} ${t.name} Members`,
+            value: memberLines.join('\n') || '*No members*',
+            inline: false
+          });
+        }
+      } else {
+        const medals = ['🥇', '🥈', '🥉'];
+        const sorted = [...participants].sort((a, b) => {
+          if (b.solved !== a.solved) return b.solved - a.solved;
+          return (a.finish_time ?? Infinity) - (b.finish_time ?? Infinity);
+        });
+        const lines = sorted.map((p, i) =>
+          `${medals[i] ?? `${i + 1}.`} <@${p.discord_id}> (\`${p.cf_handle}\`) — **${p.solved}** solved`
+        );
+        embed.addFields({ name: '🏆 Leaderboard', value: lines.join('\n') || 'No solves recorded', inline: false });
+      }
+    } else {
+      embed.addFields({ name: '🏆 Leaderboard', value: 'No participants joined.', inline: false });
+    }
   }
 
   embed.setFooter({ text: `VC ID: ${vc.id} · Difficulty: ~${vc.difficulty}` }).setTimestamp();
@@ -50,15 +156,61 @@ function buildVCEmbed(vc, problems, participants = [], ended = false) {
  * End a VC: grade all participants and post results
  */
 async function concludeVC(client, vcId, channelId, problems) {
+  const vc = getVC(vcId);
   const participants = getVCParticipants(vcId);
+
+  const individualSolves = {};
+  const participantSolvedSets = new Map();
 
   // Grade each participant
   for (const p of participants) {
     if (p.cf_handle) {
-      const count = await checkCFSolved(p.cf_handle, problems);
-      updateVCSolved(vcId, p.discord_id, count);
+      const solvedKeys = await getCFUserSolvedKeys(p.cf_handle);
+      const solvedContestProblems = new Set();
+      for (const prob of problems) {
+        const key = `${prob.contestId}-${prob.index}`;
+        if (solvedKeys.has(key)) {
+          solvedContestProblems.add(key);
+        }
+      }
+      participantSolvedSets.set(p.discord_id, solvedContestProblems);
+      individualSolves[p.discord_id] = solvedContestProblems.size;
+    } else {
+      participantSolvedSets.set(p.discord_id, new Set());
+      individualSolves[p.discord_id] = 0;
     }
     await new Promise(r => setTimeout(r, 300)); // be gentle with CF API
+  }
+
+  const isTeam = vc && vc.type === 'team';
+
+  if (isTeam) {
+    const teamSolvedProblems = {
+      'Team A': new Set(),
+      'Team B': new Set()
+    };
+
+    // Calculate union for each team
+    for (const p of participants) {
+      const teamName = p.team || 'Team A';
+      const pSolves = participantSolvedSets.get(p.discord_id) || new Set();
+      for (const key of pSolves) {
+        teamSolvedProblems[teamName].add(key);
+      }
+    }
+
+    // Update each participant's solved count in the DB to their team's union count
+    for (const p of participants) {
+      const teamName = p.team || 'Team A';
+      const teamScore = teamSolvedProblems[teamName].size;
+      updateVCSolved(vcId, p.discord_id, teamScore);
+    }
+  } else {
+    // Individual contest: update each participant's solved count to their individual count
+    for (const p of participants) {
+      const pScore = individualSolves[p.discord_id] || 0;
+      updateVCSolved(vcId, p.discord_id, pScore);
+    }
   }
 
   endVC(vcId);
@@ -67,7 +219,13 @@ async function concludeVC(client, vcId, channelId, problems) {
   if (!channel) return;
 
   const updatedParts = getVCParticipants(vcId);
-  const embed = buildVCEmbed({ id: vcId, ends_at: 0, started_at: 0, duration_sec: 0, difficulty: problems[0]?.rating ?? '?' }, problems, updatedParts, true);
+  const embed = buildVCEmbed(
+    vc || { id: vcId, ends_at: 0, started_at: 0, duration_sec: 0, difficulty: problems[0]?.rating ?? '?', type: 'individual' },
+    problems,
+    updatedParts,
+    true,
+    individualSolves
+  );
   await channel.send({ content: '🏁 **Virtual Contest Ended!**', embeds: [embed] }).catch(() => {});
 }
 
@@ -116,7 +274,15 @@ module.exports = {
       opt.setName('division')
         .setDescription('Filter by Codeforces division')
         .setRequired(false)
-        .addChoices(...DIV_CHOICES)),
+        .addChoices(...DIV_CHOICES))
+    .addStringOption(opt =>
+      opt.setName('type')
+        .setDescription('Contest type (Individual or Team)')
+        .setRequired(false)
+        .addChoices(
+          { name: '👤 Individual', value: 'individual' },
+          { name: '👥 Team', value: 'team' }
+        )),
 
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
@@ -176,6 +342,7 @@ module.exports = {
     const problemCount = interaction.options.getInteger('problems') ?? 5;
     const tag          = interaction.options.getString('tag') || null;
     const division     = interaction.options.getString('division') || null;
+    const type         = interaction.options.getString('type') || 'individual';
     const durationSec  = durationMin * 60;
 
     // Check if a VC is already running
@@ -199,11 +366,14 @@ module.exports = {
 
     // Create VC in DB
     const vcId = crypto.randomBytes(4).toString('hex').toUpperCase();
-    createVC(vcId, channelId, guildId, userId, String(targetRating), durationSec, problems);
+    createVC(vcId, channelId, guildId, userId, String(targetRating), durationSec, problems, type);
 
     // Auto-join the creator if they have CF linked
     const user = getUser(userId);
-    if (user?.cf_handle) joinVC(vcId, userId, user.cf_handle);
+    if (user?.cf_handle) {
+      const teamVal = type === 'team' ? 'Team A' : null;
+      joinVC(vcId, userId, user.cf_handle, teamVal);
+    }
 
     // Build join button
     const joinBtn = new ButtonBuilder()
@@ -213,8 +383,9 @@ module.exports = {
     const row = new ActionRowBuilder().addComponents(joinBtn);
 
     const embed = buildVCEmbed(
-      { id: vcId, ends_at: Math.floor(Date.now() / 1000) + durationSec, started_at: Math.floor(Date.now() / 1000), duration_sec: durationSec, difficulty: targetRating },
-      problems
+      { id: vcId, ends_at: Math.floor(Date.now() / 1000) + durationSec, started_at: Math.floor(Date.now() / 1000), duration_sec: durationSec, difficulty: targetRating, type: type },
+      problems,
+      user?.cf_handle ? [{ discord_id: userId, cf_handle: user.cf_handle, team: type === 'team' ? 'Team A' : null }] : []
     );
 
     await interaction.editReply({ embeds: [embed], components: [row] });
@@ -248,9 +419,26 @@ module.exports = {
         });
       }
 
-      joinVC(vcId, btnInteraction.user.id, clicker.cf_handle);
+      let teamVal = null;
+      if (type === 'team') {
+        teamVal = participants.length % 2 === 0 ? 'Team A' : 'Team B';
+      }
+
+      joinVC(vcId, btnInteraction.user.id, clicker.cf_handle, teamVal);
+
+      // Get updated list of participants to update the lobby embed
+      const updatedParts = getVCParticipants(vcId);
+      const updatedEmbed = buildVCEmbed(
+        { id: vcId, ends_at: Math.floor(Date.now() / 1000) + durationSec, started_at: Math.floor(Date.now() / 1000), duration_sec: durationSec, difficulty: targetRating, type: type },
+        problems,
+        updatedParts,
+        false
+      );
+
+      await interaction.editReply({ embeds: [updatedEmbed] }).catch(err => console.error(err));
+
       await btnInteraction.reply({
-        content: `✅ You've joined the contest! Solve the problems on Codeforces and your score will be recorded automatically when time ends.`,
+        content: `✅ You've joined the contest! ${type === 'team' ? `You have been assigned to **${teamVal}**.` : ''} Solve the problems on Codeforces and your score will be recorded automatically when time ends.`,
         ephemeral: true
       });
     });

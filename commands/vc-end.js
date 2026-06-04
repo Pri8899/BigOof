@@ -26,7 +26,7 @@ module.exports = {
     }
 
     // 2. Only the creator or someone with Manage Server can end it
-    const isCreator = vc.created_by === userId;
+    const isCreator = vc.started_by === userId;
     const isAdmin   = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
 
     if (!isCreator && !isAdmin) {

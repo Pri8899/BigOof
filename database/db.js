@@ -118,7 +118,8 @@ db.exec(`
     started_at   INTEGER NOT NULL,
     ends_at      INTEGER NOT NULL,
     ended        INTEGER DEFAULT 0,
-    problems     TEXT
+    problems     TEXT,
+    type         TEXT DEFAULT 'individual'
   );
 
   CREATE TABLE IF NOT EXISTS vc_participants (
@@ -127,6 +128,7 @@ db.exec(`
     cf_handle   TEXT,
     solved      INTEGER DEFAULT 0,
     finish_time INTEGER,
+    team        TEXT DEFAULT NULL,
     PRIMARY KEY (vc_id, discord_id)
   );
 
@@ -157,6 +159,18 @@ db.exec(`
     PRIMARY KEY (discord_id, platform)
   );
 `);
+
+// Add new columns to existing database tables if they do not exist
+try {
+  db.exec("ALTER TABLE virtual_contests ADD COLUMN type TEXT DEFAULT 'individual'");
+} catch (e) {
+  // Column already exists, safe to ignore
+}
+try {
+  db.exec("ALTER TABLE vc_participants ADD COLUMN team TEXT DEFAULT NULL");
+} catch (e) {
+  // Column already exists, safe to ignore
+}
 
 // Run migration to add sweep_announced column to daily_problems if it doesn't exist
 try {
@@ -300,13 +314,13 @@ function getAllStreaks() {
 }
 
 // ─── Virtual Contest Helpers ──────────────────────────────────
-function createVC(id, channelId, guildId, startedBy, difficulty, durationSec, problems) {
+function createVC(id, channelId, guildId, startedBy, difficulty, durationSec, problems, type = 'individual') {
   const now    = Math.floor(Date.now() / 1000);
   const endsAt = now + durationSec;
   db.prepare(`
-    INSERT INTO virtual_contests (id, channel_id, guild_id, started_by, difficulty, duration_sec, started_at, ends_at, problems)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, channelId, guildId, startedBy, difficulty, durationSec, now, endsAt, JSON.stringify(problems));
+    INSERT INTO virtual_contests (id, channel_id, guild_id, started_by, difficulty, duration_sec, started_at, ends_at, problems, type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, channelId, guildId, startedBy, difficulty, durationSec, now, endsAt, JSON.stringify(problems), type);
 }
 
 function getVC(id) {
@@ -324,10 +338,10 @@ function endVC(id) {
   db.prepare('UPDATE virtual_contests SET ended = 1 WHERE id = ?').run(id);
 }
 
-function joinVC(vcId, discordId, cfHandle) {
+function joinVC(vcId, discordId, cfHandle, team = null) {
   db.prepare(`
-    INSERT OR IGNORE INTO vc_participants (vc_id, discord_id, cf_handle) VALUES (?, ?, ?)
-  `).run(vcId, discordId, cfHandle);
+    INSERT OR REPLACE INTO vc_participants (vc_id, discord_id, cf_handle, team) VALUES (?, ?, ?, ?)
+  `).run(vcId, discordId, cfHandle, team);
 }
 
 function getVCParticipants(vcId) {
