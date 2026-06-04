@@ -73,6 +73,7 @@ client.once('ready', () => {
   const { startDailyChallenge } = require('./tasks/dailyChallenge');
   const { startSubmissionFeed } = require('./tasks/submissionFeed');
   const { startWeeklyWrapup }   = require('./tasks/weeklyWrapup');
+  const { startVSPoller }       = require('./tasks/vsPoller');
   const { initializeProblemCache } = require('./utils/codeforces');
 
   // Asynchronously warm up the CF problem cache on startup
@@ -83,6 +84,7 @@ client.once('ready', () => {
   startDailyChallenge(client);
   startSubmissionFeed(client);
   startWeeklyWrapup(client);
+  startVSPoller(client);
 });
 
 // ─── Error Handling ───────────────────────────────────────────

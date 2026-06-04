@@ -15,6 +15,25 @@ module.exports = {
       return;
     }
 
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith('vs-')) {
+        const { handleVSButton } = require('../utils/vsHandlers');
+        try {
+          await handleVSButton(interaction, client);
+        } catch (err) {
+          console.error('[VS Button Error]', err);
+          try {
+            if (interaction.replied || interaction.deferred) {
+              await interaction.followUp({ content: `❌ Error: ${err.message}`, flags: 64 });
+            } else {
+              await interaction.reply({ content: `❌ Error: ${err.message}`, flags: 64 });
+            }
+          } catch (_) {}
+        }
+      }
+      return;
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     const command = client.commands.get(interaction.commandName);

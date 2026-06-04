@@ -82,6 +82,31 @@ db.exec(`
     PRIMARY KEY (discord_id, platform)
   );
 
+  CREATE TABLE IF NOT EXISTS vs_matches (
+    id             TEXT PRIMARY KEY,
+    channel_id     TEXT NOT NULL,
+    guild_id       TEXT NOT NULL,
+    creator_id     TEXT NOT NULL,
+    rating         INTEGER NOT NULL,
+    tag            TEXT,
+    duration_min   INTEGER NOT NULL,
+    problems_count INTEGER NOT NULL,
+    problems       TEXT,
+    status         TEXT NOT NULL DEFAULT 'lobby',
+    started_at     INTEGER,
+    ends_at        INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS vs_participants (
+    match_id       TEXT NOT NULL,
+    discord_id     TEXT NOT NULL,
+    cf_handle      TEXT NOT NULL,
+    score          INTEGER DEFAULT 0,
+    solves         TEXT DEFAULT '{}',
+    wrong_attempts TEXT DEFAULT '{}',
+    PRIMARY KEY (match_id, discord_id)
+  );
+
   CREATE TABLE IF NOT EXISTS virtual_contests (
     id           TEXT PRIMARY KEY,
     channel_id   TEXT NOT NULL,
@@ -396,6 +421,65 @@ function cacheContestName(contestId, name) {
   db.prepare('INSERT OR REPLACE INTO cf_contest_cache (contest_id, name) VALUES (?, ?)').run(String(contestId), name);
 }
 
+// ─── Versus Match Helpers ─────────────────────────────────────
+function createVSMatch(id, channelId, guildId, creatorId, rating, tag, durationMin, problemsCount) {
+  db.prepare(`
+    INSERT INTO vs_matches (id, channel_id, guild_id, creator_id, rating, tag, duration_min, problems_count, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'lobby')
+  `).run(id, channelId, guildId, creatorId, rating, tag, durationMin, problemsCount);
+}
+
+function getVSMatch(id) {
+  const row = db.prepare('SELECT * FROM vs_matches WHERE id = ?').get(id);
+  if (row && row.problems) row.problems = JSON.parse(row.problems);
+  return row;
+}
+
+function updateVSMatchStatus(id, status, startedAt = null, endsAt = null) {
+  db.prepare(`
+    UPDATE vs_matches SET status = ?, started_at = ?, ends_at = ? WHERE id = ?
+  `).run(status, startedAt, endsAt, id);
+}
+
+function updateVSMatchProblems(id, problems) {
+  db.prepare('UPDATE vs_matches SET problems = ? WHERE id = ?').run(JSON.stringify(problems), id);
+}
+
+function joinVSMatch(matchId, discordId, cfHandle) {
+  db.prepare(`
+    INSERT OR IGNORE INTO vs_participants (match_id, discord_id, cf_handle) VALUES (?, ?, ?)
+  `).run(matchId, discordId, cfHandle);
+}
+
+function getVSParticipants(matchId) {
+  const rows = db.prepare('SELECT * FROM vs_participants WHERE match_id = ?').all(matchId);
+  return rows.map(r => {
+    r.solves = JSON.parse(r.solves || '{}');
+    r.wrong_attempts = JSON.parse(r.wrong_attempts || '{}');
+    return r;
+  });
+}
+
+function updateVSParticipantScore(matchId, discordId, score, solvesJson, wrongAttemptsJson) {
+  db.prepare(`
+    UPDATE vs_participants SET score = ?, solves = ?, wrong_attempts = ?
+    WHERE match_id = ? AND discord_id = ?
+  `).run(score, solvesJson, wrongAttemptsJson, matchId, discordId);
+}
+
+function getActiveVSMatches() {
+  const rows = db.prepare("SELECT * FROM vs_matches WHERE status = 'active'").all();
+  return rows.map(r => {
+    if (r.problems) r.problems = JSON.parse(r.problems);
+    return r;
+  });
+}
+
+function removeVSMatch(id) {
+  db.prepare('DELETE FROM vs_matches WHERE id = ?').run(id);
+  db.prepare('DELETE FROM vs_participants WHERE match_id = ?').run(id);
+}
+
 module.exports = {
   db,
   getUser, upsertUser, linkPlatform, unlinkPlatform, getAllUsers,
@@ -408,5 +492,7 @@ module.exports = {
   setDailyProblems, getDailyProblems, setFirstBlood, setSweepAnnounced,
   getLastSubmission, setLastSubmission,
   getWeeklySnapshot, setWeeklySnapshot, getAllWeeklySnapshots,
-  getCachedContestName, cacheContestName
+  getCachedContestName, cacheContestName,
+  createVSMatch, getVSMatch, updateVSMatchStatus, updateVSMatchProblems,
+  joinVSMatch, getVSParticipants, updateVSParticipantScore, getActiveVSMatches, removeVSMatch
 };
