@@ -89,6 +89,7 @@ db.exec(`
     creator_id     TEXT NOT NULL,
     rating         INTEGER NOT NULL,
     tag            TEXT,
+    division       TEXT,
     duration_min   INTEGER NOT NULL,
     problems_count INTEGER NOT NULL,
     problems       TEXT,
@@ -167,6 +168,13 @@ try {
 // Run migration to add time_na column to notified_contests if it doesn't exist
 try {
   db.exec("ALTER TABLE notified_contests ADD COLUMN time_na INTEGER DEFAULT 0;");
+} catch (e) {
+  // Column already exists
+}
+
+// Run migration to add division column to vs_matches if it doesn't exist
+try {
+  db.exec("ALTER TABLE vs_matches ADD COLUMN division TEXT;");
 } catch (e) {
   // Column already exists
 }
@@ -422,11 +430,11 @@ function cacheContestName(contestId, name) {
 }
 
 // ─── Versus Match Helpers ─────────────────────────────────────
-function createVSMatch(id, channelId, guildId, creatorId, rating, tag, durationMin, problemsCount) {
+function createVSMatch(id, channelId, guildId, creatorId, rating, tag, division, durationMin, problemsCount) {
   db.prepare(`
-    INSERT INTO vs_matches (id, channel_id, guild_id, creator_id, rating, tag, duration_min, problems_count, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'lobby')
-  `).run(id, channelId, guildId, creatorId, rating, tag, durationMin, problemsCount);
+    INSERT INTO vs_matches (id, channel_id, guild_id, creator_id, rating, tag, division, duration_min, problems_count, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'lobby')
+  `).run(id, channelId, guildId, creatorId, rating, tag, division, durationMin, problemsCount);
 }
 
 function getVSMatch(id) {

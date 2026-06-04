@@ -205,10 +205,13 @@ function buildVSMatchEmbed(match, participants) {
     return `${medal} <@${p.discord_id}> (${p.cf_handle}): **${p.score} pts**\n> ${solvesList}`;
   }).join('\n');
 
+  const divLabels = { div1: 'Div. 1', div2: 'Div. 2', div3: 'Div. 3', div4: 'Div. 4' };
+  const divStr = match.division ? ` · **Division**: \`${divLabels[match.division] ?? match.division}\`` : '';
+
   return new EmbedBuilder()
     .setColor(0x1F8DD6)
     .setTitle(`⚔️ Versus Match Active!`)
-    .setDescription(`**Match ID**: \`${match.id}\`\n**Problem Rating**: \`${match.rating}\`${match.tag ? ` · **Tag**: \`${match.tag}\`` : ''}\n**Time Remaining**: <t:${match.ends_at}:R>`)
+    .setDescription(`**Match ID**: \`${match.id}\`\n**Problem Rating**: \`${match.rating}\`${match.tag ? ` · **Tag**: \`${match.tag}\`` : ''}${divStr}\n**Time Remaining**: <t:${match.ends_at}:R>`)
     .addFields(
       { name: '📅 Problems', value: problemsListText, inline: false },
       { name: '📊 Live Standings', value: standingsText, inline: false }

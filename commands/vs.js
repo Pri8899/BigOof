@@ -33,6 +33,17 @@ module.exports = {
         .setRequired(false)
         .setMinValue(1)
         .setMaxValue(5)
+    )
+    .addStringOption(opt =>
+      opt.setName('division')
+        .setDescription('Optional Codeforces division filter')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Div. 1', value: 'div1' },
+          { name: 'Div. 2', value: 'div2' },
+          { name: 'Div. 3', value: 'div3' },
+          { name: 'Div. 4', value: 'div4' }
+        )
     ),
 
   async execute(interaction) {
@@ -40,6 +51,7 @@ module.exports = {
     const tag       = interaction.options.getString('tag')?.toLowerCase().trim() || null;
     const duration  = interaction.options.getInteger('duration') ?? 30;
     const problems  = interaction.options.getInteger('problems') ?? 3;
+    const division  = interaction.options.getString('division') || null;
     const creatorId = interaction.user.id;
 
     // 1. Verify Codeforces linkage
@@ -71,7 +83,7 @@ module.exports = {
     const guildId = interaction.guildId;
 
     // 4. Save match and insert creator as first participant
-    createVSMatch(matchId, channelId, guildId, creatorId, rating, tag, duration, problems);
+    createVSMatch(matchId, channelId, guildId, creatorId, rating, tag, division, duration, problems);
     joinVSMatch(matchId, creatorId, user.cf_handle);
 
     const participants = getVSParticipants(matchId);
@@ -82,6 +94,7 @@ module.exports = {
       creator_id: creatorId,
       rating,
       tag,
+      division,
       duration_min: duration,
       problems_count: problems
     }, participants);

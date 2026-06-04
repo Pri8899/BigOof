@@ -147,12 +147,12 @@ async function handleVSStart(interaction, matchId, client) {
   }
 
   // 2. Fetch unsolved problems for rating
-  let problems = await getCFProblems(match.rating, match.rating, match.tag, match.problems_count, excludeSet);
+  let problems = await getCFProblems(match.rating, match.rating, match.tag, match.problems_count, excludeSet, match.division);
   
   // If count is not enough, fall back to rating +/- 100 range
   if (problems.length < match.problems_count) {
     console.log(`[VS-Start] Not enough problems at rating ${match.rating}. Falling back to rating +/- 100 range...`);
-    problems = await getCFProblems(match.rating - 100, match.rating + 100, match.tag, match.problems_count, excludeSet);
+    problems = await getCFProblems(match.rating - 100, match.rating + 100, match.tag, match.problems_count, excludeSet, match.division);
   }
 
   if (problems.length < match.problems_count) {
@@ -250,6 +250,9 @@ function buildLobbyEmbed(match, participants) {
     return `\`${idx + 1}.\` <@${p.discord_id}> (${p.cf_handle})`;
   }).join('\n');
 
+  const divLabels = { div1: 'Div. 1', div2: 'Div. 2', div3: 'Div. 3', div4: 'Div. 4' };
+  const divValue = match.division ? `\`${divLabels[match.division] ?? match.division}\`` : '`None`';
+
   return new EmbedBuilder()
     .setColor(0x3498DB)
     .setTitle('⚔️ Versus Match Lobby')
@@ -258,6 +261,7 @@ function buildLobbyEmbed(match, participants) {
       { name: '👤 Host', value: `<@${match.creator_id}>`, inline: true },
       { name: '🏅 Rating', value: `\`${match.rating}\``, inline: true },
       { name: '🏷️ Tag', value: match.tag ? `\`${match.tag}\`` : '`None`', inline: true },
+      { name: '🏆 Division', value: divValue, inline: true },
       { name: '⏱️ Duration', value: `\`${match.duration_min} minutes\``, inline: true },
       { name: '🔢 Problems', value: `\`${match.problems_count}\``, inline: true },
       { name: '👥 Joined Participants', value: pList || '_No one has joined yet._', inline: false }
