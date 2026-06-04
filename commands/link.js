@@ -65,7 +65,9 @@ module.exports = {
       if (platform === 'ac') stats = await getACUser(handle);
       if (stats) {
         upsertRating(userId, platform, stats);
-        const { updateDashboard } = require('../tasks/ratingSync');
+        const { syncAllRatings, updateDashboard } = require('../tasks/ratingSync');
+        // Immediately sync ratings, streaks, and roles for the newly linked user
+        await syncAllRatings(interaction.client).catch(() => {});
         await updateDashboard(interaction.client).catch(err => console.error('[link] Dashboard update failed:', err.message));
       }
     } catch (err) {
