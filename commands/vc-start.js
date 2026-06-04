@@ -93,7 +93,7 @@ module.exports = {
         .setDescription('Target problem rating (e.g. 1500)')
         .setRequired(true)
         .setMinValue(800)
-        .setMaxValue(3000)
+        .setMaxValue(3500)
         .setAutocomplete(true))
     .addIntegerOption(opt =>
       opt.setName('duration')
@@ -103,10 +103,10 @@ module.exports = {
         .setMaxValue(240))
     .addIntegerOption(opt =>
       opt.setName('problems')
-        .setDescription('Number of problems (default: 4)')
+        .setDescription('Number of problems (default: 5)')
         .setRequired(false)
         .setMinValue(1)
-        .setMaxValue(6))
+        .setMaxValue(10))
     .addStringOption(opt =>
       opt.setName('tag')
         .setDescription('Filter by topic tag')
@@ -121,7 +121,7 @@ module.exports = {
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
     const allRatings = [];
-    for (let r = 800; r <= 3000; r += 100) {
+    for (let r = 800; r <= 3500; r += 100) {
       allRatings.push(r.toString());
     }
 
@@ -142,7 +142,7 @@ module.exports = {
     const userId       = interaction.user.id;
     const targetRating = interaction.options.getInteger('difficulty');
     const durationMin  = interaction.options.getInteger('duration') ?? 90;
-    const problemCount = interaction.options.getInteger('problems') ?? 4;
+    const problemCount = interaction.options.getInteger('problems') ?? 5;
     const tag          = interaction.options.getString('tag') || null;
     const division     = interaction.options.getString('division') || null;
     const durationSec  = durationMin * 60;
@@ -157,7 +157,7 @@ module.exports = {
 
     // Pick problems
     const minR = Math.max(800, targetRating - 100);
-    const maxR = Math.min(3000, targetRating + 100);
+    const maxR = Math.min(3500, targetRating + 100);
     const problems = await getCFProblems(minR, maxR, tag, problemCount, new Set(), division);
 
     if (problems.length < 1) {

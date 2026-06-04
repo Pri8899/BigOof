@@ -36,7 +36,13 @@ module.exports = {
       opt.setName('div')
         .setDescription('Filter by Codeforces division')
         .setRequired(false)
-        .addChoices(...DIV_CHOICES)),
+        .addChoices(...DIV_CHOICES))
+    .addIntegerOption(opt =>
+      opt.setName('problems')
+        .setDescription('Number of problems to suggest (default: 5, min: 1, max: 10)')
+        .setRequired(false)
+        .setMinValue(1)
+        .setMaxValue(10)),
 
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
@@ -60,6 +66,7 @@ module.exports = {
     const tag          = interaction.options.getString('tag');
     const ratingOption = interaction.options.getInteger('rating');
     const division     = interaction.options.getString('div');
+    const problemCount = interaction.options.getInteger('problems') ?? 5;
     const userId       = interaction.user.id;
 
     const user    = getUser(userId);
@@ -93,7 +100,7 @@ module.exports = {
       }
     }
 
-    const problems = await getCFProblems(minR, maxR, tag, 5, excludeIds, division);
+    const problems = await getCFProblems(minR, maxR, tag, problemCount, excludeIds, division);
 
     if (problems.length === 0) {
       return interaction.editReply({

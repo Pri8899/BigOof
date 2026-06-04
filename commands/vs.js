@@ -37,10 +37,10 @@ module.exports = {
     )
     .addIntegerOption(opt =>
       opt.setName('problems')
-        .setDescription('Number of problems to solve (default: 3, min: 1, max: 5)')
+        .setDescription('Number of problems to solve (default: 5, min: 1, max: 10)')
         .setRequired(false)
         .setMinValue(1)
-        .setMaxValue(5)
+        .setMaxValue(10)
     )
     .addStringOption(opt =>
       opt.setName('division')
@@ -74,7 +74,7 @@ module.exports = {
     const rating    = interaction.options.getInteger('rating');
     const tag       = interaction.options.getString('tag')?.toLowerCase().trim() || null;
     const duration  = interaction.options.getInteger('duration') ?? 30;
-    const problems  = interaction.options.getInteger('problems') ?? 3;
+    const problems  = interaction.options.getInteger('problems') ?? 5;
     const division  = interaction.options.getString('division') || null;
     const creatorId = interaction.user.id;
 
