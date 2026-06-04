@@ -3,15 +3,11 @@
 const cron = require('node-cron');
 const axios = require('axios');
 const { EmbedBuilder } = require('discord.js');
-const { getConfig, setDailyProblems, getDailyProblems, setFirstBlood, getAllUsers, setSweepAnnounced } = require('../database/db');
+const { getConfig, setDailyProblems, getDailyProblems, setFirstBlood, getAllUsers, setSweepAnnounced, getRatings } = require('../database/db');
 const { getCFProblems }       = require('../utils/codeforces');
 
 // CF tiers as requested
-const CF_TIERS = [
-  { label: '🟢 Easy (Rating 800)',     min: 800,  max: 800 },
-  { label: '🔵 Medium (Rating 1000)', min: 1000, max: 1000 },
-  { label: '🔴 Hard (Rating 1200)',     min: 1200, max: 1200 }
-];
+// Removed CF_TIERS global array to calculate tiers dynamically based on user ratings
 
 // Helper to fetch solved problems from Codeforces for all server members
 async function getMergedSolvedSet() {
@@ -107,7 +103,48 @@ async function postDailySuggestions(client, targetDate = null) {
   if (!p1 && !p2 && !p3) {
     console.log(`[Suggest] Generating new daily recommendations...`);
     const solvedSet = await getMergedSolvedSet();
-    const cfResults = await Promise.all(CF_TIERS.map(tier => getCFProblems(tier.min, tier.max, null, 1, solvedSet)));
+
+    // Determine dynamic ratings based on linked users' ratings
+    let baseRating = 1200;
+    const users = getAllUsers().filter(u => u.cf_handle);
+    const ratedUsers = [];
+    for (const u of users) {
+      const userRatings = getRatings(u.discord_id);
+      const cf = userRatings.find(r => r.platform === 'cf');
+      if (cf && cf.rating > 0) {
+        ratedUsers.push(cf.rating);
+      }
+    }
+    if (ratedUsers.length > 0) {
+      const avgRating = ratedUsers.reduce((sum, r) => sum + r, 0) / ratedUsers.length;
+      baseRating = Math.round(avgRating / 100) * 100;
+    }
+
+    let easyRating = 800;
+    let mediumRating = 1000;
+    let hardRating = 1200;
+
+    if (baseRating <= 900) {
+      easyRating = 800;
+      mediumRating = 900;
+      hardRating = 1000;
+    } else if (baseRating === 1000) {
+      easyRating = 800;
+      mediumRating = 1000;
+      hardRating = 1100;
+    } else {
+      easyRating = Math.max(800, baseRating - 200);
+      mediumRating = Math.max(800, baseRating);
+      hardRating = Math.max(800, baseRating + 200);
+    }
+
+    const tiers = [
+      { min: easyRating, max: easyRating },
+      { min: mediumRating, max: mediumRating },
+      { min: hardRating, max: hardRating }
+    ];
+
+    const cfResults = await Promise.all(tiers.map(tier => getCFProblems(tier.min, tier.max, null, 1, solvedSet)));
     p1 = cfResults[0]?.length > 0 ? cfResults[0][0] : null;
     p2 = cfResults[1]?.length > 0 ? cfResults[1][0] : null;
     p3 = cfResults[2]?.length > 0 ? cfResults[2][0] : null;
@@ -124,9 +161,9 @@ async function postDailySuggestions(client, targetDate = null) {
     .setColor(0x1F8DD6)
     .setDescription(`# \u2003\u2003${emojis.cf} Codeforces — Daily Practice Problems\n### \u2003\u2003\u2003💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
 
-  if (p1) cfEmbed.addFields({ name: `${CF_TIERS[0].label}`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
-  if (p2) cfEmbed.addFields({ name: `${CF_TIERS[1].label}`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
-  if (p3) cfEmbed.addFields({ name: `${CF_TIERS[2].label}`, value: `**[${p3.name}](${p3.url})**\n🏷️ ${p3.tags.join(', ') || 'N/A'}`, inline: false });
+  if (p1) cfEmbed.addFields({ name: `🟢 Easy (Rating ${p1.rating})`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
+  if (p2) cfEmbed.addFields({ name: `🔵 Medium (Rating ${p2.rating})`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
+  if (p3) cfEmbed.addFields({ name: `🔴 Hard (Rating ${p3.rating})`, value: `**[${p3.name}](${p3.url})**\n🏷️ ${p3.tags.join(', ') || 'N/A'}`, inline: false });
 
   cfEmbed
     .addFields({ name: '\u200b', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', inline: false })
@@ -190,9 +227,9 @@ async function checkFirstBloods(client) {
 
     const users = getAllUsers().filter(u => u.cf_handle);
     const problemsToCheck = [
-      { id: daily.p1_id, bloodField: 'first_blood_1', currentBlood: daily.first_blood_1, label: CF_TIERS[0].label },
-      { id: daily.p2_id, bloodField: 'first_blood_2', currentBlood: daily.first_blood_2, label: CF_TIERS[1].label },
-      { id: daily.p3_id, bloodField: 'first_blood_3', currentBlood: daily.first_blood_3, label: CF_TIERS[2].label }
+      { id: daily.p1_id, bloodField: 'first_blood_1', currentBlood: daily.first_blood_1, label: '🟢 Easy' },
+      { id: daily.p2_id, bloodField: 'first_blood_2', currentBlood: daily.first_blood_2, label: '🔵 Medium' },
+      { id: daily.p3_id, bloodField: 'first_blood_3', currentBlood: daily.first_blood_3, label: '🔴 Hard' }
     ];
 
     const problemDetails = {};
