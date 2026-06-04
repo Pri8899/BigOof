@@ -174,7 +174,7 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
     .addFields(
       { name: '📊 Platforms',     value: `${emojis.cf} Codeforces · ${emojis.ac} AtCoder`, inline: false },
       { name: '🔢 Total Members', value: `${rows.length} ranked`,                     inline: true },
-      { name: '🔥 Streak',        value: '⚡ = active  🔥 = 7+ days',                 inline: true }
+      { name: '🔥 Streak',        value: '⚡ 3+ Day Streak\n🔥 7+ Day Streak\n👑 15+ Day Streak\n💫 30+ Day Streak', inline: true }
     )
     .setFooter({ text: `Last updated` })
     .setTimestamp();
