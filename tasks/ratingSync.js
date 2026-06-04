@@ -89,15 +89,20 @@ async function postRatingChange(client, discordId, username, platform, oldRating
 
   const embed = new EmbedBuilder()
     .setColor(color)
-    .setTitle(`${arrow} Rating Update — ${username}`)
-    .setDescription(`**${platformName}**\n\`\`\`diff\n${oldRating} → ${newRating}  (${sign})\n\`\`\``)
-    .addFields({ name: '🏅 Current Rank', value: rankTitle ?? 'Unrated', inline: true })
+    .setDescription(
+      `# \u2003\u2003\u2003${arrow} RATING UPDATE ${arrow}\n` +
+      `### \u2003\u2003\u2003\u2003👤 ${username}\n` +
+      `⚡ ────────────────────────────── ⚡\n\n` +
+      `**Platform**: ${platformName}\n` +
+      `**Current Rank**: 🏅 \`${rankTitle ?? 'Unrated'}\`\n\n` +
+      `\`\`\`diff\n${diff > 0 ? '+' : '-'}- Rating Transition -\n${oldRating} ➔ ${newRating} (${sign})\n\`\`\``
+    )
     .setTimestamp();
 
   if (lastContest) {
     embed.addFields({
-      name: '🏆 Last Contest',
-      value: `**${lastContest.contestName}**\nPlace: \`#${lastContest.rank}\``,
+      name: '🏆 Last Contest Details',
+      value: `**Contest**: ${lastContest.contestName}\n**Standing**: \`#${lastContest.rank}\``,
       inline: false
     });
   }
