@@ -217,15 +217,15 @@ async function runSubmissionFeed(client) {
 }
 
 function startSubmissionFeed(client) {
-  // Run every 2 minutes
-  cron.schedule('*/2 * * * *', async () => {
+  // Run every 1 minute
+  cron.schedule('* * * * *', async () => {
     try {
       await runSubmissionFeed(client);
     } catch (err) {
       console.error('[SubmissionFeed] Error:', err.message);
     }
   });
-  console.log('[SubmissionFeed] Started 2-minute live feed poller.');
+  console.log('[SubmissionFeed] Started 1-minute live feed poller.');
 }
 
 module.exports = { startSubmissionFeed };
