@@ -1,6 +1,6 @@
 // commands/vc-start.js — Virtual Contest: start, join, end
 const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ComponentType } = require('discord.js');
-const { getUser, getActiveVCForChannel, createVC, joinVC, getVCParticipants, endVC, updateVCSolved } = require('../database/db');
+const { getUser, getActiveVCForChannel, createVC, joinVC, getVCParticipants, endVC, updateVCSolved, getRatings } = require('../database/db');
 const { getCFProblems, checkCFSolved } = require('../utils/codeforces');
 const { errorEmbed, successEmbed }     = require('../utils/embeds');
 const crypto = require('crypto');
@@ -120,18 +120,49 @@ module.exports = {
 
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
-    const allRatings = [];
-    for (let r = 800; r <= 3500; r += 100) {
-      allRatings.push(r.toString());
+    const userId = interaction.user.id;
+    let cfRating = 1200;
+    try {
+      const ratings = getRatings(userId);
+      cfRating = ratings.find(r => r.platform === 'cf')?.rating ?? 1200;
+    } catch (err) {
+      console.error('[VC-Start Autocomplete] Database query failed:', err);
     }
 
-    const filtered = allRatings
-      .filter(choice => choice.startsWith(focusedValue))
-      .slice(0, 25);
+    const allRatings = [];
+    for (let r = 800; r <= 3500; r += 100) {
+      allRatings.push(r);
+    }
 
-    await interaction.respond(
-      filtered.map(choice => ({ name: choice, value: parseInt(choice, 10) }))
-    ).catch(() => {});
+    let choices = [];
+    if (focusedValue) {
+      const filtered = allRatings
+        .map(r => r.toString())
+        .filter(choice => choice.startsWith(focusedValue))
+        .slice(0, 25);
+      choices = filtered.map(choice => ({ name: choice, value: parseInt(choice, 10) }));
+    } else {
+      const roundedRating = Math.round(cfRating / 100) * 100;
+      const targetRating = Math.max(800, Math.min(3500, roundedRating));
+      const targetIndex = allRatings.indexOf(targetRating);
+
+      let startIndex = targetIndex - 12;
+      let endIndex = targetIndex + 12;
+
+      if (startIndex < 0) {
+        startIndex = 0;
+        endIndex = Math.min(allRatings.length - 1, 24);
+      }
+      if (endIndex >= allRatings.length) {
+        endIndex = allRatings.length - 1;
+        startIndex = Math.max(0, endIndex - 24);
+      }
+
+      const windowRatings = allRatings.slice(startIndex, endIndex + 1);
+      choices = windowRatings.map(r => ({ name: r.toString(), value: r }));
+    }
+
+    await interaction.respond(choices).catch(() => {});
   },
 
   async execute(interaction) {
