@@ -321,7 +321,7 @@ async function calculateCFStreak(handle) {
       return `${yyyy}-${mm}-${dd}`;
     };
 
-    // Calculate current streak in UTC
+    // Calculate current active streak
     const nowUTC = new Date();
     const todayStr = formatDate(nowUTC);
     
@@ -355,16 +355,21 @@ async function calculateCFStreak(handle) {
           break;
         }
       }
-    } else {
-      currentStreak = 0;
     }
 
-    // Calculate max streak in history
-    let maxStreak = 0;
+    // Calculate max streak in the last 30 days to match the "X days in a row for the last month" CF text
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 3600 * 1000;
+    const recentDates = sortedDates.filter(dateStr => {
+      const parts = dateStr.split('-');
+      const time = Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      return time >= thirtyDaysAgo;
+    });
+
+    let maxRecentStreak = 0;
     let tempStreak = 0;
     let prevTime = null;
 
-    for (const dateStr of sortedDates) {
+    for (const dateStr of recentDates) {
       const parts = dateStr.split('-');
       const currTime = Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
 
@@ -375,15 +380,42 @@ async function calculateCFStreak(handle) {
         if (diffDays === 1) {
           tempStreak++;
         } else if (diffDays > 1) {
-          maxStreak = Math.max(maxStreak, tempStreak);
+          maxRecentStreak = Math.max(maxRecentStreak, tempStreak);
           tempStreak = 1;
         }
       }
       prevTime = currTime;
     }
-    maxStreak = Math.max(maxStreak, tempStreak);
+    maxRecentStreak = Math.max(maxRecentStreak, tempStreak);
 
-    return { current: currentStreak, max: maxStreak };
+    // Final display streak is the maximum of their active streak and recent 30-day streak
+    const displayStreak = Math.max(currentStreak, maxRecentStreak);
+
+    // Calculate max streak in history (all-time)
+    let maxStreak = 0;
+    let tempMax = 0;
+    let prevMaxTime = null;
+
+    for (const dateStr of sortedDates) {
+      const parts = dateStr.split('-');
+      const currTime = Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+
+      if (prevMaxTime === null) {
+        tempMax = 1;
+      } else {
+        const diffDays = Math.round((currTime - prevMaxTime) / (24 * 3600 * 1000));
+        if (diffDays === 1) {
+          tempMax++;
+        } else if (diffDays > 1) {
+          maxStreak = Math.max(maxStreak, tempMax);
+          tempMax = 1;
+        }
+      }
+      prevMaxTime = currTime;
+    }
+    maxStreak = Math.max(maxStreak, tempMax);
+
+    return { current: displayStreak, max: maxStreak };
   } catch (err) {
     console.error(`[StreakCalc] Error calculating streak for ${handle}:`, err.message);
     return { current: 0, max: 0 };
