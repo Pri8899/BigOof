@@ -156,7 +156,26 @@ module.exports = {
     collector.on('collect', async btnInteraction => {
       if (!btnInteraction.customId.startsWith('vc_join_')) return;
       const clicker = getUser(btnInteraction.user.id);
-      joinVC(vcId, btnInteraction.user.id, clicker?.cf_handle ?? null);
+      
+      // 1. Verify Codeforces linkage
+      if (!clicker || !clicker.cf_handle) {
+        return btnInteraction.reply({
+          content: `⚠️ You must link your Codeforces account first using \`/link\` before joining the virtual contest!`,
+          ephemeral: true
+        });
+      }
+
+      // 2. Check if already joined
+      const participants = getVCParticipants(vcId);
+      const alreadyJoined = participants.some(p => p.discord_id === btnInteraction.user.id);
+      if (alreadyJoined) {
+        return btnInteraction.reply({
+          content: `⚠️ You've already joined this contest!`,
+          ephemeral: true
+        });
+      }
+
+      joinVC(vcId, btnInteraction.user.id, clicker.cf_handle);
       await btnInteraction.reply({
         content: `✅ You've joined the contest! Solve the problems on Codeforces and your score will be recorded automatically when time ends.`,
         ephemeral: true
