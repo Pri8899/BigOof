@@ -206,37 +206,41 @@ module.exports = {
 
       const { getPlatformEmojis } = require('../utils/emojis');
       const emojis = await getPlatformEmojis(interaction.guild);
-
       // Construct Embed Card
       const embed = new EmbedBuilder()
-        .setColor(0x9B59B6)
+        .setColor(0x5E35B1) // Moody Deep Violet
         .setTitle(`⚔️ CP RPG Character Sheet — ${dbUser.cf_handle}`)
-        .setDescription(`**Title**: \`${title}\`\n**Overall Level**: \`Lvl ${overallLevelInfo.level}\`  (EXP: \`${overallLevelInfo.currentExp}/${overallLevelInfo.nextLevelExp}\`)\n${drawProgressBar(overallLevelInfo.currentExp, overallLevelInfo.nextLevelExp, 16)}\n\u200b`)
+        .setDescription(
+          `> 🏆 **Title**: \`${title}\`\n` +
+          `> 📊 **Overall Level**: \`Lvl ${overallLevelInfo.level}\`  (EXP: \`${overallLevelInfo.currentExp}/${overallLevelInfo.nextLevelExp}\`)\n` +
+          `> ${drawProgressBar(overallLevelInfo.currentExp, overallLevelInfo.nextLevelExp, 12)}\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        )
         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
         .addFields(
           {
-            name: '🗡️ Combat Skills',
-            value: `**Greedy & Brute Force**: Lvl ${classLevels.attack.level} (EXP: \`${classLevels.attack.currentExp}/${classLevels.attack.nextLevelExp}\`)\n${drawProgressBar(classLevels.attack.currentExp, classLevels.attack.nextLevelExp)}\n\n` +
-                   `**Implementation**: Lvl ${classLevels.defense.level} (EXP: \`${classLevels.defense.currentExp}/${classLevels.defense.nextLevelExp}\`)\n${drawProgressBar(classLevels.defense.currentExp, classLevels.defense.nextLevelExp)}\n\n` +
-                   `**Binary Search & Sort**: Lvl ${classLevels.precision.level} (EXP: \`${classLevels.precision.currentExp}/${classLevels.precision.nextLevelExp}\`)\n${drawProgressBar(classLevels.precision.currentExp, classLevels.precision.nextLevelExp)}`,
-            inline: true
+            name: '⚔️ Combat Skills',
+            value: `🗡️ **Greedy & Brute Force**\n\`Lvl ${classLevels.attack.level}\` · (EXP: \`${classLevels.attack.currentExp}/${classLevels.attack.nextLevelExp}\`)\n${drawProgressBar(classLevels.attack.currentExp, classLevels.attack.nextLevelExp, 10)}\n\n` +
+                   `🛡️ **Implementation**\n\`Lvl ${classLevels.defense.level}\` · (EXP: \`${classLevels.defense.currentExp}/${classLevels.defense.nextLevelExp}\`)\n${drawProgressBar(classLevels.defense.currentExp, classLevels.defense.nextLevelExp, 10)}\n\n` +
+                   `🏹 **Binary Search & Sort**\n\`Lvl ${classLevels.precision.level}\` · (EXP: \`${classLevels.precision.currentExp}/${classLevels.precision.nextLevelExp}\`)\n${drawProgressBar(classLevels.precision.currentExp, classLevels.precision.nextLevelExp, 10)}`,
+            inline: false
           },
           {
-            name: '🧙‍♂️ Arcane & Inventory',
-            value: `**Math & Number Theory**: Lvl ${classLevels.magic.level} (EXP: \`${classLevels.magic.currentExp}/${classLevels.magic.nextLevelExp}\`)\n${drawProgressBar(classLevels.magic.currentExp, classLevels.magic.nextLevelExp)}\n\n` +
-                   `**Dynamic Programming**: Lvl ${classLevels.chrono.level} (EXP: \`${classLevels.chrono.currentExp}/${classLevels.chrono.nextLevelExp}\`)\n${drawProgressBar(classLevels.chrono.currentExp, classLevels.chrono.nextLevelExp)}\n\n` +
-                   `**Data Structures & DSU**: Lvl ${classLevels.inventory.level} (EXP: \`${classLevels.inventory.currentExp}/${classLevels.inventory.nextLevelExp}\`)\n${drawProgressBar(classLevels.inventory.currentExp, classLevels.inventory.nextLevelExp)}`,
-            inline: true
+            name: '🔮 Arcane & Inventory',
+            value: `🧙‍♂️ **Math & Number Theory**\n\`Lvl ${classLevels.magic.level}\` · (EXP: \`${classLevels.magic.currentExp}/${classLevels.magic.nextLevelExp}\`)\n${drawProgressBar(classLevels.magic.currentExp, classLevels.magic.nextLevelExp, 10)}\n\n` +
+                   `🌀 **Dynamic Programming**\n\`Lvl ${classLevels.chrono.level}\` · (EXP: \`${classLevels.chrono.currentExp}/${classLevels.chrono.nextLevelExp}\`)\n${drawProgressBar(classLevels.chrono.currentExp, classLevels.chrono.nextLevelExp, 10)}\n\n` +
+                   `📦 **Data Structures & DSU**\n\`Lvl ${classLevels.inventory.level}\` · (EXP: \`${classLevels.inventory.currentExp}/${classLevels.inventory.nextLevelExp}\`)\n${drawProgressBar(classLevels.inventory.currentExp, classLevels.inventory.nextLevelExp, 10)}`,
+            inline: false
           },
           {
             name: '🗺️ Exploration & Runes',
-            value: `**Graphs & Trees**: Lvl ${classLevels.exploration.level} (EXP: \`${classLevels.exploration.currentExp}/${classLevels.exploration.nextLevelExp}\`)\n${drawProgressBar(classLevels.exploration.currentExp, classLevels.exploration.nextLevelExp)}\n\n` +
-                   `**Strings & Hashing**: Lvl ${classLevels.runes.level} (EXP: \`${classLevels.runes.currentExp}/${classLevels.runes.nextLevelExp}\`)\n${drawProgressBar(classLevels.runes.currentExp, classLevels.runes.nextLevelExp)}`,
+            value: `🗺️ **Graphs & Trees**\n\`Lvl ${classLevels.exploration.level}\` · (EXP: \`${classLevels.exploration.currentExp}/${classLevels.exploration.nextLevelExp}\`)\n${drawProgressBar(classLevels.exploration.currentExp, classLevels.exploration.nextLevelExp, 10)}\n\n` +
+                   `✍️ **Strings & Hashing**\n\`Lvl ${classLevels.runes.level}\` · (EXP: \`${classLevels.runes.currentExp}/${classLevels.runes.nextLevelExp}\`)\n${drawProgressBar(classLevels.runes.currentExp, classLevels.runes.nextLevelExp, 10)}`,
             inline: false
           },
           {
             name: '📊 Platform Achievements',
-            value: `${emojis.cf} **Codeforces Solves**: \`${totalSolvesCount}\` problems\n⭐ **Average Solved Rating**: \`${averageRating || '—'}\``,
+            value: `> ${emojis.cf} **Codeforces Solves**: \`${totalSolvesCount}\` problems\n> ⭐ **Average Solved Rating**: \`${averageRating || '—'}\``,
             inline: false
           }
         )
