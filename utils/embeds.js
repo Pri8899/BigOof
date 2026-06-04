@@ -162,7 +162,10 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
         ? (row.ac_rating > 0 ? `AC: **${row.ac_rating}** (Solved: **${row.ac_solved}**)` : `AC: Unrated (Solved: **${row.ac_solved}**)`)
         : `AC: —`;
       const streak  = streakMap[row.discord_id];
-      const fire    = streak >= 7 ? ` 🔥${streak}d` : streak >= 1 ? ` ⚡${streak}d` : '';
+      const fire    = streak >= 30 ? ` 💫${streak}d` :
+                      streak >= 15 ? ` 👑${streak}d` :
+                      streak >= 7  ? ` 🔥${streak}d` :
+                      streak >= 1  ? ` ⚡${streak}d` : '';
       return `${medal} **${row.username ?? 'Unknown'}**${fire} — ${cfStr} | ${acStr}`;
     });
     description = lines.join('\n');
