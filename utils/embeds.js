@@ -166,7 +166,7 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
                       streak >= 15 ? ` 👑${streak}d` :
                       streak >= 7  ? ` 🔥${streak}d` :
                       streak >= 1  ? ` ⚡${streak}d` : '';
-      const displayName = row.cf_handle || row.ac_handle || row.username || 'Unknown';
+      const displayName = row.cf_handle || row.username || 'Unknown';
       const escapedName = displayName.replace(/([_*~|`\\])/g, '\\$1');
       return `${medal} **${escapedName}**${fire} — ${cfStr} | ${acStr}`;
     });
