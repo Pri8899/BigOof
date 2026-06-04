@@ -52,9 +52,8 @@ module.exports = {
               }
             }
             
-            // Get top 3 tags sorted by frequency (ignoring implementation and math for diversity)
+            // Get top 3 tags sorted by frequency
             const sortedTags = Object.entries(tagCounts)
-              .filter(([tag]) => tag !== 'implementation' && tag !== 'math')
               .sort((a, b) => b[1] - a[1])
               .map(([tag]) => tag);
             
