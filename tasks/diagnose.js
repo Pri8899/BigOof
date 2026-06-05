@@ -59,6 +59,31 @@ async function runDiagnostics(client) {
     const endStr = new Date(endTimeUtc * 1000).toLocaleString('en-US', { timeZone: 'Asia/Dhaka' });
     report += `- Cycle Window: \`${startTimeUtc}\` to \`${endTimeUtc}\`\n  (Dhaka: \`${startStr}\` to \`${endStr}\`)\n\n`;
 
+    // 3.5 Query Virtual Contests and Versus Matches
+    report += `🎮 **Virtual Contests in DB**:\n`;
+    try {
+      const vcs = db.prepare('SELECT * FROM virtual_contests ORDER BY started_at DESC LIMIT 5').all();
+      for (const vc of vcs) {
+        report += `- ID: \`${vc.id}\` | Ended: \`${vc.ended}\` | Ends At: \`${vc.ends_at}\` (<t:${vc.ends_at}:R>) | Type: \`${vc.type}\` | Started By: <@${vc.started_by}>\n`;
+        const vcParts = db.prepare('SELECT * FROM vc_participants WHERE vc_id = ?').all(vc.id);
+        report += `  • Participants (${vcParts.length}): ` + vcParts.map(p => `<@${p.discord_id}> (\`${p.cf_handle}\`, Solved: ${p.solved})`).join(', ') + '\n';
+      }
+    } catch (err) {
+      report += `  • Error: ${err.message}\n`;
+    }
+    report += '\n';
+
+    report += `⚔️ **Versus Matches in DB**:\n`;
+    try {
+      const vss = db.prepare('SELECT * FROM vs_matches ORDER BY started_at DESC LIMIT 5').all();
+      for (const vs of vss) {
+        report += `- ID: \`${vs.id}\` | Status: \`${vs.status}\` | Creator: <@${vs.creator_id}>\n`;
+      }
+    } catch (err) {
+      report += `  • Error: ${err.message}\n`;
+    }
+    report += '\n';
+
     // 4. Fetch Submissions for each user and analyze
     report += `📝 **Submissions Analysis**:\n`;
     for (const u of users) {
