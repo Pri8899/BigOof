@@ -114,12 +114,10 @@ async function syncAllRatings(client) {
     const existing = {};
     for (const r of getRatings(user.discord_id)) existing[r.platform] = r;
 
-    const tasks = [];
-
     if (user.cf_handle) {
-      tasks.push(
-        getCFUser(user.cf_handle).then(async stats => {
-          if (!stats) return;
+      try {
+        const stats = await getCFUser(user.cf_handle);
+        if (stats) {
           const hasExisting = existing['cf'] !== undefined;
           const oldRating = existing['cf']?.rating ?? 0;
           upsertRating(user.discord_id, 'cf', stats);
@@ -130,25 +128,30 @@ async function syncAllRatings(client) {
               await postRatingChange(client, user.discord_id, user.username, 'cf', oldRating, stats.rating, stats.rank_title, stats.lastContest);
             }
           }
+        }
+      } catch (err) {
+        console.error(`[RatingSync] CF error ${user.cf_handle}:`, err.message);
+      }
 
-          // Sync real Codeforces streak and update role
-          try {
-            const streakInfo = await calculateCFStreak(user.cf_handle);
-            upsertStreak(user.discord_id, 'cf', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
-            if (client) {
-              await updateDiscordStreakRole(client, user.discord_id, streakInfo.current);
-            }
-          } catch (err) {
-            console.error(`[RatingSync] CF streak error for ${user.cf_handle}:`, err.message);
-          }
-        }).catch(err => console.error(`[RatingSync] CF error ${user.cf_handle}:`, err.message))
-      );
+      await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
+
+      try {
+        const streakInfo = await calculateCFStreak(user.cf_handle);
+        upsertStreak(user.discord_id, 'cf', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+        if (client) {
+          await updateDiscordStreakRole(client, user.discord_id, streakInfo.current);
+        }
+      } catch (err) {
+        console.error(`[RatingSync] CF streak error for ${user.cf_handle}:`, err.message);
+      }
+
+      await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
     }
 
     if (user.ac_handle) {
-      tasks.push(
-        getACUser(user.ac_handle).then(async stats => {
-          if (!stats) return;
+      try {
+        const stats = await getACUser(user.ac_handle);
+        if (stats) {
           const hasExisting = existing['ac'] !== undefined;
           const oldRating = existing['ac']?.rating ?? 0;
           upsertRating(user.discord_id, 'ac', stats);
@@ -156,12 +159,13 @@ async function syncAllRatings(client) {
           if (client && hasExisting && oldRating !== stats.rating) {
             await postRatingChange(client, user.discord_id, user.username, 'ac', oldRating, stats.rating, stats.rank_title, stats.lastContest);
           }
-        }).catch(err => console.error(`[RatingSync] AC error ${user.ac_handle}:`, err.message))
-      );
-    }
+        }
+      } catch (err) {
+        console.error(`[RatingSync] AC error ${user.ac_handle}:`, err.message);
+      }
 
-    await Promise.all(tasks);
-    await new Promise(r => setTimeout(r, 500)); // stagger
+      await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
+    }
   }
 
   console.log('[RatingSync] Sync complete.');
