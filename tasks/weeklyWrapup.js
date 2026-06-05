@@ -276,55 +276,14 @@ function getTargetWeeklyWrapupDate() {
   return `${targetMonth}/${targetDay}/${targetYear}`;
 }
 
-// One-time weekly reset to clean up old leaderboard messages and regenerate with new layout
-async function runOneTimeWeeklyReset(client) {
-  try {
-    const { getConfig, setConfig, db } = require('../database/db');
-    const resetWeeklyDone = getConfig('reset_weekly_0601_v3');
-    if (resetWeeklyDone === 'true') return;
-
-    console.log('[WeeklyReset] Running one-time weekly wrap-up layout reset for 06/01 v3...');
-
-    // 1. Fetch channel and delete the previous wrap-up message
-    const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id');
-    if (channelId) {
-      const channel = await client.channels.fetch(channelId).catch(() => null);
-      if (channel) {
-        // Fetch 100 messages to make sure we reach back to yesterday's weekly message
-        const messages = await channel.messages.fetch({ limit: 100 }).catch(() => []);
-        const targetMessages = [...messages.values()].filter(m => 
-          m.author.id === client.user.id &&
-          m.embeds.length > 0 &&
-          (
-            (m.embeds[0].title && /weekly|champion/i.test(m.embeds[0].title)) ||
-            (m.embeds[0].description && /weekly|champion/i.test(m.embeds[0].description)) ||
-            m.embeds[0].color === 0xD4AF37
-          )
-        );
-
-        for (const msg of targetMessages) {
-          await msg.delete().catch(() => {});
-          console.log(`[WeeklyReset] Deleted old weekly wrap-up message: ${msg.id}`);
-        }
-      }
-    }
-
-    // 2. Clear last_weekly_wrapup_date so catch-up triggers immediately
-    setConfig('last_weekly_wrapup_date', 'null_reset_0601_v3');
-
-    // 3. Mark reset as done
-    setConfig('reset_weekly_0601_v3', 'true');
-    console.log('[WeeklyReset] One-time weekly wrap-up reset complete.');
-  } catch (err) {
-    console.error('[WeeklyReset Error]', err);
-  }
-}
+// One-time weekly reset (no-op now)
+async function runOneTimeWeeklyReset(client) {}
 
 function startWeeklyWrapup(client) {
   // Catch-up check on boot (waits 15s to let bot fully connect)
   setTimeout(async () => {
     try {
-      // 1. Run layout reset first
+      // 1. Run layout reset first (no-op now)
       await runOneTimeWeeklyReset(client);
 
       // 2. Then perform the catch-up check
@@ -334,9 +293,15 @@ function startWeeklyWrapup(client) {
       console.log(`[WeeklyWrapUp] Startup check: last wrap-up date is ${lastWrapupDate}, target is ${targetDateStr}`);
       
       if (lastWrapupDate !== targetDateStr) {
-        console.log(`[WeeklyWrapUp] Startup catch-up check: Wrap-up for Sunday ${targetDateStr} not posted yet. Posting...`);
-        await runWeeklyWrapup(client);
-        setConfig('last_weekly_wrapup_date', targetDateStr);
+        if (!lastWrapupDate) {
+          // First time initialization on fresh database: don't post empty historical wrap-up, just mark it as done
+          console.log(`[WeeklyWrapUp] Fresh database detected. Initializing last_weekly_wrapup_date to ${targetDateStr} without posting.`);
+          setConfig('last_weekly_wrapup_date', targetDateStr);
+        } else {
+          console.log(`[WeeklyWrapUp] Startup catch-up check: Wrap-up for Sunday ${targetDateStr} not posted yet. Posting...`);
+          await runWeeklyWrapup(client);
+          setConfig('last_weekly_wrapup_date', targetDateStr);
+        }
       }
     } catch (err) {
       console.error('[WeeklyWrapUp Startup Catch-up Error]', err);
