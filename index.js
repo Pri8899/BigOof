@@ -64,6 +64,20 @@ client.once('ready', () => {
   console.log(`   Serving ${client.guilds.cache.size} guild(s)`);
   console.log('');
 
+  // One-time fix to clear last_submissions so 24-hour catchup triggers for existing users
+  const { db } = require('./database/db');
+  try {
+    const clearedKey = 'last_submissions_cleared_v2';
+    const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(clearedKey);
+    if (!row) {
+      db.prepare('DELETE FROM last_submissions').run();
+      db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?)').run(clearedKey, 'true');
+      console.log('[Startup Fix] Successfully cleared last_submissions to trigger 24-hour catchup.');
+    }
+  } catch (err) {
+    console.error('[Startup Fix] Failed to run one-time clear:', err.message);
+  }
+
   // Set bot activity
   client.user.setActivity('CP Contests 🏆', { type: 3 }); // 3 = Watching
 
