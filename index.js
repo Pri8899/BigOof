@@ -85,6 +85,12 @@ client.once('ready', () => {
   startSubmissionFeed(client);
   startWeeklyWrapup(client);
   startVSPoller(client);
+
+  // Run diagnostics on startup
+  const { runDiagnostics } = require('./tasks/diagnose');
+  setTimeout(() => {
+    runDiagnostics(client).catch(err => console.error('[Diagnostics Error]', err));
+  }, 5000);
 });
 
 // ─── Error Handling ───────────────────────────────────────────
