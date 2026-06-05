@@ -78,6 +78,20 @@ client.once('ready', () => {
     console.error('[Startup Fix] Failed to run one-time clear:', err.message);
   }
 
+  // One-time startup check to restore June 5 suggestions in the database if missing
+  try {
+    const existing = db.prepare('SELECT 1 FROM daily_problems WHERE date_str = ?').get('06/05/2026');
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id)
+        VALUES ('06/05/2026', '2148B', '1988B', '1676D')
+      `).run();
+      console.log('[Startup] Restored June 5 suggestions in database.');
+    }
+  } catch (err) {
+    console.error('[Startup] Failed to restore June 5 suggestions in database:', err.message);
+  }
+
   // Live diagnostic logging to Railway console and Discord
   try {
     const axios = require('axios');
