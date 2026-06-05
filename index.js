@@ -78,15 +78,27 @@ client.once('ready', () => {
     console.error('[Startup Fix] Failed to run one-time clear:', err.message);
   }
 
-  // Live diagnostic logging to Railway console
+  // Live diagnostic logging to Railway console and Discord
   try {
     const axios = require('axios');
     const users = getAllUsers();
     console.log(`\n=================== LIVE DIAGNOSTICS ===================`);
     console.log(`Registered users in DB: ${users.length}`);
+    
+    let report = `📊 **Startup Database Diagnostic Report**\n`;
+    report += `• **Total users in DB**: \`${users.length}\`\n`;
+    
     users.forEach(u => {
       console.log(`- User: ${u.username} (Discord: ${u.discord_id}) | CF: ${u.cf_handle || 'None'} | AC: ${u.ac_handle || 'None'}`);
+      report += `- <@${u.discord_id}> | Username: \`${u.username}\` | CF: \`${u.cf_handle || 'None'}\` | AC: \`${u.ac_handle || 'None'}\`\n`;
     });
+    
+    const generalChannelId = process.env.GENERAL_CHANNEL_ID || '1505614835650658355';
+    client.channels.fetch(generalChannelId)
+      .then(channel => {
+        if (channel) channel.send(report).catch(() => {});
+      })
+      .catch(() => {});
     
     // Check if anyone solved problems on CF in the last 2 hours
     const nowSec = Math.floor(Date.now() / 1000);
