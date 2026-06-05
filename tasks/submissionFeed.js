@@ -94,10 +94,13 @@ async function fetchCFSubmissions(user) {
     const submissions = res.data.result.sort((a, b) => a.id - b.id);
     const newAc = [];
     
+    const nowSec = Math.floor(Date.now() / 1000);
+    const minTime = Math.max(user.joined_at || 0, nowSec - 1800);
+
     for (const sub of submissions) {
-      if (lastId === null) {
-        highestId = Math.max(highestId, sub.id);
-      } else if (sub.id > lastId) {
+      const isNew = lastId !== null ? (sub.id > lastId) : (sub.creationTimeSeconds >= minTime);
+      
+      if (isNew) {
         highestId = Math.max(highestId, sub.id);
         if (sub.verdict === 'OK' && sub.problem) {
           const contestName = await getOrFetchContestName(sub.problem.contestId);
@@ -114,15 +117,14 @@ async function fetchCFSubmissions(user) {
             contestName: contestName
           });
         }
+      } else if (lastId === null) {
+        highestId = Math.max(highestId, sub.id);
       }
     }
     
     if (highestId > (lastId || 0)) {
       setLastSubmission(user.discord_id, 'cf', highestId);
     }
-    
-    // If it was their first time being checked, don't spam their latest 10 submissions.
-    if (lastId === null) return [];
     
     return newAc;
   } catch (err) {
@@ -137,23 +139,26 @@ async function fetchACSubmissions(user) {
     let lastTime = getLastSubmission(user.discord_id, 'ac');
     const now = Math.floor(Date.now() / 1000);
     
-    // If first time, set it to 1 hour ago instead of exactly 'now'.
-    // This prevents missing submissions if the bot restarts or if Kenkoooo has a delay.
-    if (lastTime === null) {
-      setLastSubmission(user.discord_id, 'ac', now - 3600);
-      return [];
+    let queryTime = lastTime;
+    if (queryTime === null) {
+      queryTime = Math.max(user.joined_at || 0, now - 1800) - 1;
     }
     
     const res = await axios.get(
-      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${user.ac_handle}&from_second=${lastTime + 1}`,
+      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${user.ac_handle}&from_second=${queryTime + 1}`,
       { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } }
     );
     
-    if (!Array.isArray(res.data) || res.data.length === 0) return [];
+    if (!Array.isArray(res.data) || res.data.length === 0) {
+      if (lastTime === null) {
+        setLastSubmission(user.discord_id, 'ac', now);
+      }
+      return [];
+    }
     
     // Sort by epoch_second ascending
     const submissions = res.data.sort((a, b) => a.epoch_second - b.epoch_second);
-    let highestTime = lastTime;
+    let highestTime = lastTime || queryTime;
     const newAc = [];
     
     for (const sub of submissions) {
@@ -169,7 +174,7 @@ async function fetchACSubmissions(user) {
       }
     }
     
-    if (highestTime > lastTime) {
+    if (highestTime > (lastTime || 0)) {
       setLastSubmission(user.discord_id, 'ac', highestTime);
     }
     
