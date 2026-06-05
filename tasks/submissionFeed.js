@@ -221,14 +221,24 @@ async function runSubmissionFeed(client) {
   }
 }
 
+let isRunning = false;
+
+async function runSubmissionFeedLoop(client) {
+  if (isRunning) return;
+  isRunning = true;
+  try {
+    await runSubmissionFeed(client);
+  } catch (err) {
+    console.error('[SubmissionFeed] Error in loop:', err.message);
+  } finally {
+    isRunning = false;
+  }
+}
+
 function startSubmissionFeed(client) {
   // Run every 1 minute
   cron.schedule('* * * * *', async () => {
-    try {
-      await runSubmissionFeed(client);
-    } catch (err) {
-      console.error('[SubmissionFeed] Error:', err.message);
-    }
+    await runSubmissionFeedLoop(client);
   });
   console.log('[SubmissionFeed] Started 1-minute live feed poller.');
 }

@@ -65,7 +65,7 @@ client.once('ready', () => {
   console.log('');
 
   // One-time fix to clear last_submissions so 24-hour catchup triggers for existing users
-  const { db } = require('./database/db');
+  const { db, getAllUsers } = require('./database/db');
   try {
     const clearedKey = 'last_submissions_cleared_v2';
     const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(clearedKey);
@@ -76,6 +76,40 @@ client.once('ready', () => {
     }
   } catch (err) {
     console.error('[Startup Fix] Failed to run one-time clear:', err.message);
+  }
+
+  // Live diagnostic logging to Railway console
+  try {
+    const axios = require('axios');
+    const users = getAllUsers();
+    console.log(`\n=================== LIVE DIAGNOSTICS ===================`);
+    console.log(`Registered users in DB: ${users.length}`);
+    users.forEach(u => {
+      console.log(`- User: ${u.username} (Discord: ${u.discord_id}) | CF: ${u.cf_handle || 'None'} | AC: ${u.ac_handle || 'None'}`);
+    });
+    
+    // Check if anyone solved problems on CF in the last 2 hours
+    const nowSec = Math.floor(Date.now() / 1000);
+    for (const u of users) {
+      if (u.cf_handle) {
+        axios.get(`https://codeforces.com/api/user.status?handle=${u.cf_handle}&from=1&count=10`)
+          .then(res => {
+            if (res.data.status === 'OK') {
+              const recent = res.data.result.filter(sub => sub.creationTimeSeconds >= nowSec - 7200);
+              console.log(`[CF Diagnostic] User ${u.username} (${u.cf_handle}) has ${recent.length} submissions in the last 2 hours:`);
+              recent.forEach(sub => {
+                console.log(`  • ID: ${sub.id} | Problem: ${sub.problem.name} | Verdict: ${sub.verdict}`);
+              });
+            }
+          })
+          .catch(err => {
+            console.error(`[CF Diagnostic Error] Failed to fetch for ${u.username}:`, err.message);
+          });
+      }
+    }
+    console.log(`========================================================\n`);
+  } catch (e) {
+    console.error('[Diagnostic Error] Failed to run diagnostics:', e.message);
   }
 
   // Set bot activity
