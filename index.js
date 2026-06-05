@@ -67,7 +67,7 @@ client.once('ready', () => {
   // One-time fix to clear last_submissions so 24-hour catchup triggers for existing users
   const { db, getAllUsers } = require('./database/db');
   try {
-    const clearedKey = 'last_submissions_cleared_v2';
+    const clearedKey = 'last_submissions_cleared_v3';
     const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(clearedKey);
     if (!row) {
       db.prepare('DELETE FROM last_submissions').run();
