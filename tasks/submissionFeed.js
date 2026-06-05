@@ -95,7 +95,7 @@ async function fetchCFSubmissions(user) {
     const newAc = [];
     
     const nowSec = Math.floor(Date.now() / 1000);
-    const minTime = nowSec - 86400;
+    const minTime = nowSec - 10800; // 3 hours
 
     for (const sub of submissions) {
       const isNew = lastId !== null ? (sub.id > lastId) : (sub.creationTimeSeconds >= minTime);
@@ -141,7 +141,7 @@ async function fetchACSubmissions(user) {
     
     let queryTime = lastTime;
     if (queryTime === null) {
-      queryTime = now - 86400;
+      queryTime = now - 10800; // 3 hours
     }
     
     const res = await axios.get(
