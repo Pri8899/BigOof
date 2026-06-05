@@ -84,6 +84,17 @@ async function runDiagnostics(client) {
     }
     report += '\n';
 
+    report += `📥 **Last Submissions in DB**:\n`;
+    try {
+      const ls = db.prepare('SELECT * FROM last_submissions').all();
+      for (const row of ls) {
+        report += `- User: <@${row.discord_id}> | Platform: \`${row.platform}\` | Last ID/Time: \`${row.last_id}\`\n`;
+      }
+    } catch (err) {
+      report += `  • Error: ${err.message}\n`;
+    }
+    report += '\n';
+
     // 4. Fetch Submissions for each user and analyze
     report += `📝 **Submissions Analysis**:\n`;
     for (const u of users) {
