@@ -301,14 +301,26 @@ async function calculateCFStreak(handle) {
     if (res.data.status !== 'OK') return { current: 0, max: 0 };
 
     const solvedDates = new Set();
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Dhaka',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+
+    const formatDate = (d) => {
+      const parts = formatter.formatToParts(d);
+      const partMap = {};
+      for (const part of parts) {
+        partMap[part.type] = part.value;
+      }
+      return `${partMap.year}-${partMap.month}-${partMap.day}`;
+    };
+
     for (const sub of res.data.result) {
       if (sub.problem) {
-        // Codeforces activity calendar and streaks count ANY submission (all verdicts) in UTC
         const date = new Date(sub.creationTimeSeconds * 1000);
-        const yyyy = date.getUTCFullYear();
-        const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
-        const dd = String(date.getUTCDate()).padStart(2, '0');
-        solvedDates.add(`${yyyy}-${mm}-${dd}`);
+        solvedDates.add(formatDate(date));
       }
     }
 
@@ -316,44 +328,34 @@ async function calculateCFStreak(handle) {
 
     const sortedDates = Array.from(solvedDates).sort();
 
-    // Helper to format a Date object as YYYY-MM-DD in UTC
-    const formatDate = (d) => {
-      const yyyy = d.getUTCFullYear();
-      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const dd = String(d.getUTCDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    };
-
-    // Calculate current active streak
-    const nowUTC = new Date();
-    const todayStr = formatDate(nowUTC);
+    // Calculate current active streak in Dhaka time
+    const nowLocal = new Date();
+    const todayStr = formatDate(nowLocal);
     
-    const yesterday = new Date();
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const yesterday = new Date(nowLocal);
+    yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = formatDate(yesterday);
 
     let currentStreak = 0;
-    let checkDate = new Date();
+    let checkDate = new Date(nowLocal);
 
     if (solvedDates.has(todayStr)) {
-      // Start counting from today
       while (true) {
         const checkStr = formatDate(checkDate);
         if (solvedDates.has(checkStr)) {
           currentStreak++;
-          checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+          checkDate.setDate(checkDate.getDate() - 1);
         } else {
           break;
         }
       }
     } else if (solvedDates.has(yesterdayStr)) {
-      // Start counting from yesterday
-      checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+      checkDate.setDate(checkDate.getDate() - 1);
       while (true) {
         const checkStr = formatDate(checkDate);
         if (solvedDates.has(checkStr)) {
           currentStreak++;
-          checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+          checkDate.setDate(checkDate.getDate() - 1);
         } else {
           break;
         }
@@ -391,8 +393,8 @@ async function calculateCFStreak(handle) {
     }
     maxRecentStreak = Math.max(maxRecentStreak, tempStreak);
 
-    // Final display streak is the actual current active streak
-    const displayStreak = currentStreak;
+    // Final display streak is the maximum of their active streak and recent 30-day streak
+    const displayStreak = Math.max(currentStreak, maxRecentStreak);
 
     // Calculate max streak in history (all-time)
     let maxStreak = 0;
