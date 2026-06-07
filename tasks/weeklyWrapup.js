@@ -6,7 +6,7 @@ const { buildWeeklyWrapupEmbed } = require('../utils/embeds');
 
 async function runWeeklyWrapup(client) {
   // Try to use the rating channel as requested, fallback to dashboard
-  const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id');
+  const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID;
   if (!channelId) {
     console.log('[WeeklyWrapUp] No channel configured to post wrap up.');
     return;
@@ -59,6 +59,8 @@ async function runWeeklyWrapup(client) {
       } catch (err) {
         console.error(`[WeeklyWrapUp] CF Status API error for ${user.username}:`, err.message);
       }
+
+      await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
       
       try {
         const ratingRes = await axios.get(`https://codeforces.com/api/user.rating?handle=${user.cf_handle}`, { timeout: 6000 }).catch(() => null);
@@ -210,6 +212,8 @@ async function runWeeklyWrapup(client) {
       ac_end: acEnd,
       ac_linked: !!user.ac_handle
     });
+
+    await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
   }
 
   // Sort lists (solved descending, rating gain descending)
