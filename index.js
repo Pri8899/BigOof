@@ -116,6 +116,51 @@ client.once('ready', () => {
     console.error('[Startup] Failed to run forced weekly wrap-up:', err.message);
   }
 
+  // One-time startup check to delete the previous wrapped weekly wrap-up and repost it correctly
+  try {
+    const repostKey = 'repost_weekly_0607_v2';
+    const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(repostKey);
+    if (!row) {
+      const { getConfig } = require('./database/db');
+      const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID;
+      if (channelId) {
+        client.channels.fetch(channelId)
+          .then(async channel => {
+            if (channel) {
+              console.log('[Startup Repost] Fetching messages to delete old weekly wrap-up...');
+              const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+              if (messages) {
+                // Find old weekly message containing @everyone and WEEKLY CHAMPIONS in the description
+                const weeklyMsg = messages.find(m => m.author.id === client.user.id && m.embeds.some(e => e.description && e.description.includes('WEEKLY CHAMPIONS')));
+                if (weeklyMsg) {
+                  console.log(`[Startup Repost] Found old weekly wrap-up message (ID: ${weeklyMsg.id}). Deleting...`);
+                  await weeklyMsg.delete().catch(err => console.error('[Startup Repost] Delete error:', err.message));
+                } else {
+                  console.log('[Startup Repost] No old weekly wrap-up message found.');
+                }
+              }
+              
+              // Post the new wrap-up
+              const { runWeeklyWrapup } = require('./tasks/weeklyWrapup');
+              console.log('[Startup Repost] Generating new weekly wrap-up message...');
+              const success = await runWeeklyWrapup(client);
+              if (success) {
+                db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?)').run(repostKey, 'true');
+                console.log('[Startup Repost] Reposted weekly wrap-up completed and flag saved.');
+              } else {
+                console.error('[Startup Repost] Repost failed (no channel or early exit).');
+              }
+            }
+          })
+          .catch(err => {
+            console.error('[Startup Repost] Channel fetch failed:', err.message);
+          });
+      }
+    }
+  } catch (err) {
+    console.error('[Startup Repost] Failed to run repost:', err.message);
+  }
+
   // Live diagnostic logging to Railway console
   try {
     const users = getAllUsers();
