@@ -92,6 +92,26 @@ client.once('ready', () => {
     console.error('[Startup] Failed to restore June 5 suggestions in database:', err.message);
   }
 
+  // One-time startup check to force-run the weekly wrap-up once on the production database
+  try {
+    const forcedKey = 'force_weekly_wrapup_0607_v1';
+    const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(forcedKey);
+    if (!row) {
+      const { runWeeklyWrapup } = require('./tasks/weeklyWrapup');
+      console.log('[Startup] Forcing weekly wrap-up run to compile stats for all production users...');
+      runWeeklyWrapup(client)
+        .then(() => {
+          db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?)').run(forcedKey, 'true');
+          console.log('[Startup] Forced weekly wrap-up completed and flag saved.');
+        })
+        .catch(err => {
+          console.error('[Startup] Forced weekly wrap-up failed:', err.message);
+        });
+    }
+  } catch (err) {
+    console.error('[Startup] Failed to run forced weekly wrap-up:', err.message);
+  }
+
   // Live diagnostic logging to Railway console and Discord
   try {
     const axios = require('axios');
