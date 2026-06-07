@@ -99,8 +99,16 @@ client.once('ready', () => {
     console.log(`\n=================== LIVE DIAGNOSTICS ===================`);
     console.log(`Registered users in DB: ${users.length}`);
     
+    const getConfigVal = (key) => {
+      const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(key);
+      return row ? row.value : 'None';
+    };
+    
     let report = `📊 **Startup Database Diagnostic Report**\n`;
     report += `• **Total users in DB**: \`${users.length}\`\n`;
+    report += `• **last_suggest_post_date**: \`${getConfigVal('last_suggest_post_date')}\`\n`;
+    report += `• **last_weekly_wrapup_date**: \`${getConfigVal('last_weekly_wrapup_date')}\`\n`;
+    report += `• **Current Time (Dhaka)**: \`${new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })}\`\n`;
     
     users.forEach(u => {
       console.log(`- User: ${u.username} (Discord: ${u.discord_id}) | CF: ${u.cf_handle || 'None'} | AC: ${u.ac_handle || 'None'}`);
