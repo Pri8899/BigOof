@@ -393,7 +393,7 @@ function buildSubmissionEmbed(user, problem, platform) {
 function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵', ac: '🔴' }) {
   const embed = new EmbedBuilder()
     .setColor(0xD4AF37) // Legendary Gold
-    .setDescription(`# \u2003\u2003\u2003👑 CP SERVER WEEKLY CHAMPIONS 👑\n\nHappy Sunday! Let's celebrate the top performers who dominated the competitive programming charts this week!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+    .setDescription(`### 👑 CP SERVER WEEKLY CHAMPIONS 👑\n\nHappy Sunday! Let's celebrate the top performers who dominated the competitive programming charts this week!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
     .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png') // Gold trophy icon
     .setTimestamp();
 

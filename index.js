@@ -100,9 +100,13 @@ client.once('ready', () => {
       const { runWeeklyWrapup } = require('./tasks/weeklyWrapup');
       console.log('[Startup] Forcing weekly wrap-up run to compile stats for all production users...');
       runWeeklyWrapup(client)
-        .then(() => {
-          db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?)').run(forcedKey, 'true');
-          console.log('[Startup] Forced weekly wrap-up completed and flag saved.');
+        .then(success => {
+          if (success) {
+            db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?)').run(forcedKey, 'true');
+            console.log('[Startup] Forced weekly wrap-up completed and flag saved.');
+          } else {
+            console.error('[Startup] Forced weekly wrap-up skipped or failed (no channel resolved).');
+          }
         })
         .catch(err => {
           console.error('[Startup] Forced weekly wrap-up failed:', err.message);

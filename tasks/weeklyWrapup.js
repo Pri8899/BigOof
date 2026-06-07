@@ -9,7 +9,7 @@ async function runWeeklyWrapup(client) {
   const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID;
   if (!channelId) {
     console.log('[WeeklyWrapUp] No channel configured to post wrap up.');
-    return;
+    return false;
   }
 
   const channel = await client.channels.fetch(channelId).catch(err => {
@@ -18,7 +18,7 @@ async function runWeeklyWrapup(client) {
   });
   if (!channel) {
     console.warn(`[WeeklyWrapUp] Channel ${channelId} not found.`);
-    return;
+    return false;
   }
 
   const users = getAllUsers();
@@ -224,11 +224,20 @@ async function runWeeklyWrapup(client) {
   const emojis = await getPlatformEmojis(channel.guild);
   const embed = buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis);
   
-  await channel.send({ content: '@everyone', embeds: [embed] }).catch(err => {
-    console.error('[WeeklyWrapUp] Failed to post wrap up:', err.message);
-  });
+  let posted = false;
+  await channel.send({ content: '@everyone', embeds: [embed] })
+    .then(() => {
+      posted = true;
+    })
+    .catch(err => {
+      console.error('[WeeklyWrapUp] Failed to post wrap up:', err.message);
+    });
   
-  console.log('[WeeklyWrapUp] Successfully posted weekly wrap-up.');
+  if (posted) {
+    console.log('[WeeklyWrapUp] Successfully posted weekly wrap-up.');
+    return true;
+  }
+  return false;
 }
 
 function getTargetWeeklyWrapupDate() {
@@ -239,22 +248,19 @@ function getTargetWeeklyWrapupDate() {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
     hour12: false
   });
   
-  const formatted = formatter.format(now);
-  const match = formatted.match(/^(\d{2})\/(\d{2})\/(\d{4}),\s*(\d{2}):(\d{2}):(\d{2})$/);
-  if (!match) {
-    // Fallback if match fails
-    return '';
+  const parts = formatter.formatToParts(now);
+  const partMap = {};
+  for (const part of parts) {
+    partMap[part.type] = part.value;
   }
   
-  const month = parseInt(match[1], 10) - 1; // 0-based
-  const dayOfMonth = parseInt(match[2], 10);
-  const year = parseInt(match[3], 10);
-  const hour = parseInt(match[4], 10);
+  const year = parseInt(partMap.year, 10);
+  const month = parseInt(partMap.month, 10) - 1; // 0-based
+  const dayOfMonth = parseInt(partMap.day, 10);
+  const hour = parseInt(partMap.hour, 10);
   
   const localDhakaDate = new Date(Date.UTC(year, month, dayOfMonth, hour, 0, 0));
   const dayOfWeek = localDhakaDate.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
@@ -303,8 +309,12 @@ function startWeeklyWrapup(client) {
           setConfig('last_weekly_wrapup_date', targetDateStr);
         } else {
           console.log(`[WeeklyWrapUp] Startup catch-up check: Wrap-up for Sunday ${targetDateStr} not posted yet. Posting...`);
-          await runWeeklyWrapup(client);
-          setConfig('last_weekly_wrapup_date', targetDateStr);
+          const success = await runWeeklyWrapup(client);
+          if (success) {
+            setConfig('last_weekly_wrapup_date', targetDateStr);
+          } else {
+            console.error('[WeeklyWrapUp] Startup catch-up failed or skipped (no channel resolved).');
+          }
         }
       }
     } catch (err) {
@@ -316,10 +326,13 @@ function startWeeklyWrapup(client) {
   cron.schedule('0 21 * * 0', async () => {
     try {
       console.log('[WeeklyWrapUp] Sunday 9 PM triggered! Generating wrap up...');
-      await runWeeklyWrapup(client);
-      
-      const targetDateStr = getTargetWeeklyWrapupDate();
-      setConfig('last_weekly_wrapup_date', targetDateStr);
+      const success = await runWeeklyWrapup(client);
+      if (success) {
+        const targetDateStr = getTargetWeeklyWrapupDate();
+        setConfig('last_weekly_wrapup_date', targetDateStr);
+      } else {
+        console.error('[WeeklyWrapUp] Sunday 9 PM execution failed or skipped (no channel resolved).');
+      }
     } catch (err) {
       console.error('[WeeklyWrapUp] Error:', err.message);
     }

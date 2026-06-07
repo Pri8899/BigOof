@@ -391,8 +391,8 @@ async function calculateCFStreak(handle) {
     }
     maxRecentStreak = Math.max(maxRecentStreak, tempStreak);
 
-    // Final display streak is the maximum of their active streak and recent 30-day streak
-    const displayStreak = Math.max(currentStreak, maxRecentStreak);
+    // Final display streak is the actual current active streak
+    const displayStreak = currentStreak;
 
     // Calculate max streak in history (all-time)
     let maxStreak = 0;
