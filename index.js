@@ -108,6 +108,9 @@ client.once('ready', () => {
     report += `• **Total users in DB**: \`${users.length}\`\n`;
     report += `• **last_suggest_post_date**: \`${getConfigVal('last_suggest_post_date')}\`\n`;
     report += `• **last_weekly_wrapup_date**: \`${getConfigVal('last_weekly_wrapup_date')}\`\n`;
+    report += `• **rating_channel_id**: \`${getConfigVal('rating_channel_id')}\`\n`;
+    report += `• **dashboard_channel_id**: \`${getConfigVal('dashboard_channel_id')}\`\n`;
+    report += `• **suggest_channel_id**: \`${getConfigVal('suggest_channel_id')}\`\n`;
     report += `• **Current Time (Dhaka)**: \`${new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })}\`\n`;
     
     users.forEach(u => {
