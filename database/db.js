@@ -193,6 +193,19 @@ try {
   // Column already exists
 }
 
+// One-time database correction for parth0_paul's AtCoder handle
+try {
+  const row = db.prepare("SELECT ac_handle FROM users WHERE discord_id = '1367493270703444078'").get();
+  if (row && row.ac_handle === 'ImposterBhO0') {
+    db.prepare("UPDATE users SET ac_handle = 'ImposterBhOO' WHERE discord_id = '1367493270703444078'").run();
+    db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
+    db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
+    console.log('[Migration] Successfully corrected AtCoder handle for parth0_paul to ImposterBhOO.');
+  }
+} catch (e) {
+  console.error('[Migration] AtCoder handle correction failed:', e.message);
+}
+
 // ─── User Helpers ────────────────────────────────────────────
 function getUser(discordId) {
   return db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
