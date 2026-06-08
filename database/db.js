@@ -193,17 +193,17 @@ try {
   // Column already exists
 }
 
-// One-time database correction for parth0_paul's AtCoder handle
+// One-time database correction for parth0_paul's AtCoder handle (revert back to ImposterBhO0)
 try {
   const row = db.prepare("SELECT ac_handle FROM users WHERE discord_id = '1367493270703444078'").get();
-  if (row && row.ac_handle === 'ImposterBhO0') {
-    db.prepare("UPDATE users SET ac_handle = 'ImposterBhOO' WHERE discord_id = '1367493270703444078'").run();
+  if (row && row.ac_handle === 'ImposterBhOO') {
+    db.prepare("UPDATE users SET ac_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
     db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
     db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
-    console.log('[Migration] Successfully corrected AtCoder handle for parth0_paul to ImposterBhOO.');
+    console.log('[Migration] Successfully reverted AtCoder handle for parth0_paul to ImposterBhO0.');
   }
 } catch (e) {
-  console.error('[Migration] AtCoder handle correction failed:', e.message);
+  console.error('[Migration] AtCoder handle revert failed:', e.message);
 }
 
 // ─── User Helpers ────────────────────────────────────────────
