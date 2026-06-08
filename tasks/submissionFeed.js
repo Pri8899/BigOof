@@ -218,11 +218,29 @@ async function runSubmissionFeed(client) {
       setLastSubmission(user.discord_id, 'ac', highestTime);
     }
 
+    if (cfNew.length > 0) {
+      try {
+        const { getCFUser } = require('../utils/codeforces');
+        const cfStats = await getCFUser(user.cf_handle);
+        if (cfStats) {
+          const { upsertRating } = require('../database/db');
+          upsertRating(user.discord_id, 'cf', cfStats);
+        }
+      } catch (err) {
+        console.error(`[SubmissionFeed] Error updating CF stats for ${user.cf_handle}:`, err.message);
+      }
+      shouldUpdateDashboard = true;
+    }
+
     if (acNew.length > 0) {
-      const { getACSolvedCount } = require('../utils/atcoder');
-      const latestSolved = await getACSolvedCount(user.ac_handle);
-      if (latestSolved > 0) {
-        db.prepare("UPDATE ratings SET solved = max(coalesce(solved, 0), ?) WHERE discord_id = ? AND platform = 'ac'").run(latestSolved, user.discord_id);
+      try {
+        const { getACSolvedCount } = require('../utils/atcoder');
+        const latestSolved = await getACSolvedCount(user.ac_handle);
+        if (latestSolved > 0) {
+          db.prepare("UPDATE ratings SET solved = max(coalesce(solved, 0), ?) WHERE discord_id = ? AND platform = 'ac'").run(latestSolved, user.discord_id);
+        }
+      } catch (err) {
+        console.error(`[SubmissionFeed] Error updating AC stats for ${user.ac_handle}:`, err.message);
       }
       shouldUpdateDashboard = true;
     }
