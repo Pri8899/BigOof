@@ -68,11 +68,19 @@ function startContestFetcher(client) {
     db.prepare(`ALTER TABLE notified_contests ADD COLUMN discord_msg_id TEXT`).run();
   } catch (_) {}
 
-  // Run immediately on boot
+  // Run immediately on boot if last refresh was more than 1 hour ago
   setTimeout(async () => {
     try {
-      console.log(`[ContestFetcher] Startup trigger: Performing full refresh...`);
-      await performContestRefresh(client);
+      const lastFetchStr = getConfig('last_contest_fetch_time');
+      const lastFetch = lastFetchStr ? parseInt(lastFetchStr, 10) : 0;
+      const now = Math.floor(Date.now() / 1000);
+      
+      if (now - lastFetch >= 3600) {
+        console.log(`[ContestFetcher] Startup trigger: last fetch was ${now - lastFetch}s ago. Performing full refresh...`);
+        await performContestRefresh(client);
+      } else {
+        console.log(`[ContestFetcher] Startup trigger: last fetch was only ${now - lastFetch}s ago. Skipping refresh to prevent duplicate pings.`);
+      }
     } catch (err) {
       console.error('[ContestFetcher Startup Error]', err);
     }
@@ -87,16 +95,6 @@ function startContestFetcher(client) {
       console.error('[ContestFetcher Hourly Cron Error]', err);
     }
   });
-
-  // Every day at 9am UTC+6 (03:00 UTC): refresh the grouped summary (fallback)
-  cron.schedule('0 3 * * *', async () => {
-    try {
-      await postContestSummary(client);
-    } catch (err) {
-      console.error('[ContestFetcher Daily Cron Error]', err);
-    }
-  }, { timezone: 'UTC' });
-
   console.log('[ContestFetcher] Strict hourly cron scheduler started.');
 }
 
@@ -162,35 +160,29 @@ async function postContestSummary(client) {
       }
     }
 
-    let succeeded = false;
     if (msg) {
+      // Delete the old message — new one will be posted below
+      await msg.delete().catch(() => {});
+      console.log('[ContestFetcher] Deleted old contest summary message.');
+    }
+
+    // Post fresh with @everyone ping — retry until it succeeds so the channel is never left empty
+    let newMsg = null;
+    for (let attempt = 1; attempt <= 10; attempt++) {
       try {
-        await msg.edit({ content: '', embeds: [embed] });
-        succeeded = true;
-        console.log('[ContestFetcher] Successfully edited existing contest summary.');
+        newMsg = await channel.send({ content: '@everyone', embeds: [embed] });
+        break; // success
       } catch (err) {
-        console.warn('[ContestFetcher] Failed to edit existing summary, will post fresh:', err.message);
+        console.warn(`[ContestFetcher] Send attempt ${attempt}/10 failed: ${err.message}`);
+        if (attempt < 10) await new Promise(r => setTimeout(r, 5000)); // wait 5s before retry
       }
     }
 
-    if (!succeeded) {
-      let newMsg = null;
-      for (let attempt = 1; attempt <= 10; attempt++) {
-        try {
-          newMsg = await channel.send({ content: '@everyone', embeds: [embed] });
-          break; // success
-        } catch (err) {
-          console.warn(`[ContestFetcher] Send attempt ${attempt}/10 failed: ${err.message}`);
-          if (attempt < 10) await new Promise(r => setTimeout(r, 5000));
-        }
-      }
-
-      if (newMsg) {
-        setConfig('contest_summary_msg_id', newMsg.id);
-        console.log('[ContestFetcher] Posted fresh contest summary.');
-      } else {
-        console.error('[ContestFetcher] Failed to post contest summary after 10 attempts!');
-      }
+    if (newMsg) {
+      setConfig('contest_summary_msg_id', newMsg.id);
+      console.log('[ContestFetcher] Posted fresh contest summary.');
+    } else {
+      console.error('[ContestFetcher] Failed to post contest summary after 10 attempts!');
     }
   } catch (err) {
     console.error('[ContestFetcher] postContestSummary critical error:', err);

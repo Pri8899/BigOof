@@ -224,35 +224,29 @@ async function updateDashboard(client) {
       }
     }
 
-    let succeeded = false;
     if (msg) {
+      // Delete the old message — new one will be posted below
+      await msg.delete().catch(() => {});
+      console.log('[Dashboard] Deleted old dashboard message.');
+    }
+
+    // Post fresh — retry until it succeeds so the channel is never left empty
+    let newMsg = null;
+    for (let attempt = 1; attempt <= 10; attempt++) {
       try {
-        await msg.edit({ embeds: [embed] });
-        succeeded = true;
-        console.log('[Dashboard] Successfully edited existing dashboard.');
+        newMsg = await channel.send({ embeds: [embed] });
+        break; // success
       } catch (err) {
-        console.warn('[Dashboard] Failed to edit existing dashboard, will post fresh:', err.message);
+        console.warn(`[Dashboard] Send attempt ${attempt}/10 failed: ${err.message}`);
+        if (attempt < 10) await new Promise(r => setTimeout(r, 5000)); // wait 5s before retry
       }
     }
 
-    if (!succeeded) {
-      let newMsg = null;
-      for (let attempt = 1; attempt <= 10; attempt++) {
-        try {
-          newMsg = await channel.send({ embeds: [embed] });
-          break; // success
-        } catch (err) {
-          console.warn(`[Dashboard] Send attempt ${attempt}/10 failed: ${err.message}`);
-          if (attempt < 10) await new Promise(r => setTimeout(r, 5000));
-        }
-      }
-
-      if (newMsg) {
-        setConfig('dashboard_message_id', newMsg.id);
-        console.log('[Dashboard] Created new dashboard message.');
-      } else {
-        console.error('[Dashboard] Failed to post dashboard after 10 attempts!');
-      }
+    if (newMsg) {
+      setConfig('dashboard_message_id', newMsg.id);
+      console.log('[Dashboard] Created new dashboard message.');
+    } else {
+      console.error('[Dashboard] Failed to post dashboard after 10 attempts!');
     }
   } catch (err) {
     console.error('[Dashboard] updateDashboard critical error:', err);
@@ -264,9 +258,8 @@ function startRatingSync(client) {
   // Run immediately on boot
   setTimeout(async () => {
     try {
-      console.log(`[RatingSync] Startup trigger: Syncing ratings and dashboard...`);
+      console.log(`[RatingSync] Startup trigger: Syncing ratings...`);
       await syncAllRatings(client);
-      await updateDashboard(client);
     } catch (err) {
       console.error('[RatingSync Startup Error]', err);
     }
@@ -277,7 +270,6 @@ function startRatingSync(client) {
     try {
       console.log(`[RatingSync] Hourly rating sync triggered.`);
       await syncAllRatings(client);
-      await updateDashboard(client);
     } catch (err) {
       console.error('[RatingSync Hourly Cron Error]', err);
     }
