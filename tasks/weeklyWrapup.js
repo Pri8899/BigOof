@@ -4,6 +4,12 @@ const axios = require('axios');
 const { getAllUsers, getRatings, getWeeklySnapshot, setWeeklySnapshot, getConfig, setConfig, db } = require('../database/db');
 const { buildWeeklyWrapupEmbed } = require('../utils/embeds');
 
+const KENKOOOO_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
+  'Origin':     'https://kenkoooo.com',
+  'Referer':    'https://kenkoooo.com/atcoder/'
+};
+
 async function runWeeklyWrapup(client) {
   // Try to use the rating channel as requested, fallback to dashboard
   const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID;
@@ -95,11 +101,14 @@ async function runWeeklyWrapup(client) {
     let acGain = null;
     if (user.ac_handle) {
       try {
-        const resultsRes = await axios.get(`https://kenkoooo.com/atcoder/atcoder-api/results?user=${user.ac_handle}`, { timeout: 8000 }).catch(() => null);
+        const resultsRes = await axios.get(`https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${user.ac_handle}&from_second=${sevenDaysAgo}`, {
+          timeout: 8000,
+          headers: KENKOOOO_HEADERS
+        }).catch(() => null);
         if (resultsRes && resultsRes.data && Array.isArray(resultsRes.data)) {
           const solvedSet = new Set();
           for (const sub of resultsRes.data) {
-            if (sub.epoch_second >= sevenDaysAgo && sub.result === 'AC') {
+            if (sub.result === 'AC') {
               solvedSet.add(sub.problem_id);
             }
           }
@@ -213,7 +222,11 @@ async function runWeeklyWrapup(client) {
       ac_linked: !!user.ac_handle
     });
 
-    await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
+    if (user.cf_handle) {
+      await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
+    } else if (user.ac_handle) {
+      await new Promise(r => setTimeout(r, 500));
+    }
   }
 
   // Sort lists (solved descending, rating gain descending)
