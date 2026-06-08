@@ -1,8 +1,14 @@
 // tasks/submissionFeed.js — Live feed for accepted submissions
 const cron = require('node-cron');
 const axios = require('axios');
-const { getAllUsers, getConfig, getLastSubmission, setLastSubmission, getCachedContestName, cacheContestName } = require('../database/db');
+const { getAllUsers, getConfig, getLastSubmission, setLastSubmission, getCachedContestName, cacheContestName, db } = require('../database/db');
 const { buildSubmissionEmbed } = require('../utils/embeds');
+
+const KENKOOOO_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
+  'Origin':     'https://kenkoooo.com',
+  'Referer':    'https://kenkoooo.com/atcoder/'
+};
 
 const CF_BASE = 'https://codeforces.com/api';
 
@@ -134,7 +140,7 @@ async function fetchCFSubmissions(user) {
 }
 
 async function fetchACSubmissions(user) {
-  if (!user.ac_handle) return [];
+  if (!user.ac_handle) return { newAc: [], highestTime: null };
   try {
     let lastTime = getLastSubmission(user.discord_id, 'ac');
     const now = Math.floor(Date.now() / 1000);
@@ -146,14 +152,11 @@ async function fetchACSubmissions(user) {
     
     const res = await axios.get(
       `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${user.ac_handle}&from_second=${queryTime + 1}`,
-      { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } }
+      { timeout: 8000, headers: KENKOOOO_HEADERS }
     );
     
     if (!Array.isArray(res.data) || res.data.length === 0) {
-      if (lastTime === null) {
-        setLastSubmission(user.discord_id, 'ac', now);
-      }
-      return [];
+      return { newAc: [], highestTime: lastTime === null ? queryTime : null };
     }
     
     // Sort by epoch_second ascending
@@ -174,14 +177,10 @@ async function fetchACSubmissions(user) {
       }
     }
     
-    if (highestTime > (lastTime || 0)) {
-      setLastSubmission(user.discord_id, 'ac', highestTime);
-    }
-    
-    return newAc;
+    return { newAc, highestTime: highestTime > (lastTime || 0) ? highestTime : null };
   } catch (err) {
     console.error(`[SubmissionFeed] Error fetching AtCoder submissions for ${user.ac_handle}:`, err.message);
-    return [];
+    return { newAc: [], highestTime: null };
   }
 }
 
@@ -199,12 +198,11 @@ async function runSubmissionFeed(client) {
   }
 
   const users = getAllUsers();
+  let shouldUpdateDashboard = false;
   
   for (const user of users) {
-    const [cfNew, acNew] = await Promise.all([
-      fetchCFSubmissions(user),
-      fetchACSubmissions(user)
-    ]);
+    const cfNew = await fetchCFSubmissions(user);
+    const { newAc: acNew, highestTime } = await fetchACSubmissions(user);
     
     for (const sub of cfNew) {
       const embed = buildSubmissionEmbed(user, sub, 'cf');
@@ -215,9 +213,31 @@ async function runSubmissionFeed(client) {
       const embed = buildSubmissionEmbed(user, sub, 'ac');
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
+
+    if (highestTime !== null) {
+      setLastSubmission(user.discord_id, 'ac', highestTime);
+    }
+
+    if (acNew.length > 0) {
+      const { getACSolvedCount } = require('../utils/atcoder');
+      const latestSolved = await getACSolvedCount(user.ac_handle);
+      if (latestSolved > 0) {
+        db.prepare("UPDATE ratings SET solved = max(coalesce(solved, 0), ?) WHERE discord_id = ? AND platform = 'ac'").run(latestSolved, user.discord_id);
+      }
+      shouldUpdateDashboard = true;
+    }
     
     // Slight delay to prevent rate limits when scanning many users (respecting 1 request / 2 seconds CF limit)
-    await new Promise(r => setTimeout(r, 2500));
+    if (user.cf_handle) {
+      await new Promise(r => setTimeout(r, 2500));
+    } else if (user.ac_handle) {
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  if (shouldUpdateDashboard) {
+    const { updateDashboard } = require('./ratingSync');
+    await updateDashboard(client).catch(err => console.error('[SubmissionFeed] Dashboard update failed:', err.message));
   }
 }
 
@@ -243,4 +263,4 @@ function startSubmissionFeed(client) {
   console.log('[SubmissionFeed] Started 1-minute live feed poller.');
 }
 
-module.exports = { startSubmissionFeed };
+module.exports = { startSubmissionFeed, runSubmissionFeed };

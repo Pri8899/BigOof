@@ -119,13 +119,28 @@ async function scrapeAtCoderContests() {
 
 // Helper to fetch solved count from submissions API
 async function getACSolvedCount(handle) {
+  // Try direct ac_rank API first (fastest, 1 request)
+  try {
+    const rankRes = await axios.get(
+      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/ac_rank?user=${handle}`,
+      { timeout: 8000, headers: KENKOOOO_HEADERS }
+    );
+    if (rankRes.data && rankRes.data.count !== undefined) {
+      return rankRes.data.count;
+    }
+  } catch (err) {
+    console.warn(`[AC] Direct ac_rank fetch failed for ${handle}:`, err.message);
+  }
+
+  // Fallback: fetch page-by-page from submissions API
   try {
     const solvedProblems = new Set();
     let fromSecond = 0;
-    while (true) {
+    let pagesFetched = 0;
+    while (pagesFetched < 10) { // Safety cap to prevent infinite loop
       const res = await axios.get(
         `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=${fromSecond}`,
-        { timeout: 10000, headers: KENKOOOO_HEADERS }
+        { timeout: 8000, headers: KENKOOOO_HEADERS }
       );
       if (!Array.isArray(res.data) || res.data.length === 0) {
         break;
@@ -140,22 +155,13 @@ async function getACSolvedCount(handle) {
       }
       const maxEpoch = Math.max(...res.data.map(s => s.epoch_second));
       fromSecond = maxEpoch + 1;
+      pagesFetched++;
     }
     if (solvedProblems.size > 0) {
       return solvedProblems.size;
     }
   } catch (_) {}
 
-  // Fallback to ac_rank if submissions fetch fails
-  try {
-    const rankRes = await axios.get(
-      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/ac_rank?user=${handle}`,
-      { timeout: 10000, headers: KENKOOOO_HEADERS }
-    );
-    if (rankRes.data && rankRes.data.count !== undefined) {
-      return rankRes.data.count;
-    }
-  } catch (_) {}
   return 0;
 }
 
@@ -243,4 +249,4 @@ function getACRankTitle(rating) {
   return 'Unrated';
 }
 
-module.exports = { getACUser, getACContests, validateACHandle };
+module.exports = { getACUser, getACContests, validateACHandle, getACSolvedCount };

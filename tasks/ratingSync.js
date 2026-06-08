@@ -271,6 +271,7 @@ function startRatingSync(client) {
     try {
       console.log(`[RatingSync] Hourly rating sync triggered.`);
       await syncAllRatings(client);
+      await updateDashboard(client);
     } catch (err) {
       console.error('[RatingSync Hourly Cron Error]', err);
     }

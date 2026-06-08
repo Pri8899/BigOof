@@ -229,7 +229,7 @@ function upsertRating(discordId, platform, data) {
       rating     = excluded.rating,
       max_rating = excluded.max_rating,
       rank_title = excluded.rank_title,
-      solved     = excluded.solved,
+      solved     = MAX(ratings.solved, excluded.solved),
       acceptance = excluded.acceptance,
       updated_at = excluded.updated_at
   `).run(discordId, platform, data.rating ?? 0, data.max_rating ?? 0, data.rank_title ?? 'Unrated', data.solved ?? 0, data.acceptance ?? 0);
