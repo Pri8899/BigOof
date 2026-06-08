@@ -119,20 +119,6 @@ async function scrapeAtCoderContests() {
 
 // Helper to fetch solved count from submissions API
 async function getACSolvedCount(handle) {
-  // Try direct ac_rank API first (fastest, 1 request)
-  try {
-    const rankRes = await axios.get(
-      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/ac_rank?user=${handle}`,
-      { timeout: 8000, headers: KENKOOOO_HEADERS }
-    );
-    if (rankRes.data && rankRes.data.count !== undefined) {
-      return rankRes.data.count;
-    }
-  } catch (err) {
-    console.warn(`[AC] Direct ac_rank fetch failed for ${handle}:`, err.message);
-  }
-
-  // Fallback: fetch page-by-page from submissions API
   try {
     const solvedProblems = new Set();
     let fromSecond = 0;
@@ -157,12 +143,11 @@ async function getACSolvedCount(handle) {
       fromSecond = maxEpoch + 1;
       pagesFetched++;
     }
-    if (solvedProblems.size > 0) {
-      return solvedProblems.size;
-    }
-  } catch (_) {}
-
-  return 0;
+    return solvedProblems.size;
+  } catch (err) {
+    console.error(`[AC] getACSolvedCount failed for ${handle}:`, err.message);
+    return 0;
+  }
 }
 
 // ─── User Stats ──────────────────────────────────────────────
