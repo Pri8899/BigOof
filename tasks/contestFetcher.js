@@ -162,29 +162,35 @@ async function postContestSummary(client) {
       }
     }
 
+    let succeeded = false;
     if (msg) {
-      // Delete the old message — new one will be posted below
-      await msg.delete().catch(() => {});
-      console.log('[ContestFetcher] Deleted old contest summary message.');
-    }
-
-    // Post fresh with @everyone ping — retry until it succeeds so the channel is never left empty
-    let newMsg = null;
-    for (let attempt = 1; attempt <= 10; attempt++) {
       try {
-        newMsg = await channel.send({ content: '@everyone', embeds: [embed] });
-        break; // success
+        await msg.edit({ content: '', embeds: [embed] });
+        succeeded = true;
+        console.log('[ContestFetcher] Successfully edited existing contest summary.');
       } catch (err) {
-        console.warn(`[ContestFetcher] Send attempt ${attempt}/10 failed: ${err.message}`);
-        if (attempt < 10) await new Promise(r => setTimeout(r, 5000)); // wait 5s before retry
+        console.warn('[ContestFetcher] Failed to edit existing summary, will post fresh:', err.message);
       }
     }
 
-    if (newMsg) {
-      setConfig('contest_summary_msg_id', newMsg.id);
-      console.log('[ContestFetcher] Posted fresh contest summary.');
-    } else {
-      console.error('[ContestFetcher] Failed to post contest summary after 10 attempts!');
+    if (!succeeded) {
+      let newMsg = null;
+      for (let attempt = 1; attempt <= 10; attempt++) {
+        try {
+          newMsg = await channel.send({ content: '@everyone', embeds: [embed] });
+          break; // success
+        } catch (err) {
+          console.warn(`[ContestFetcher] Send attempt ${attempt}/10 failed: ${err.message}`);
+          if (attempt < 10) await new Promise(r => setTimeout(r, 5000));
+        }
+      }
+
+      if (newMsg) {
+        setConfig('contest_summary_msg_id', newMsg.id);
+        console.log('[ContestFetcher] Posted fresh contest summary.');
+      } else {
+        console.error('[ContestFetcher] Failed to post contest summary after 10 attempts!');
+      }
     }
   } catch (err) {
     console.error('[ContestFetcher] postContestSummary critical error:', err);
