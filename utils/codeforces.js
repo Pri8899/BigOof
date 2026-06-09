@@ -339,19 +339,32 @@ async function getCFDivisionBreakdown(handle) {
 
         let classified = false;
 
-        // Classify pure Div. 3 and Div. 4 contests by their contest name
+        // Classify by contest name first (most accurate)
         if (contestName) {
           const lowerName = contestName.toLowerCase();
-          if (lowerName.includes('div. 3') || lowerName.includes('div 3')) {
-            breakdown.div3++;
-            classified = true;
-          } else if (lowerName.includes('div. 4') || lowerName.includes('div 4')) {
-            breakdown.div4++;
-            classified = true;
+          const hasDiv1 = lowerName.includes('div. 1') || lowerName.includes('div 1');
+          const hasDiv2 = lowerName.includes('div. 2') || lowerName.includes('div 2');
+          const hasDiv3 = lowerName.includes('div. 3') || lowerName.includes('div 3');
+          const hasDiv4 = lowerName.includes('div. 4') || lowerName.includes('div 4');
+          const isEducational = lowerName.includes('educational');
+          const isGlobal = lowerName.includes('global round');
+
+          if (hasDiv4 && !hasDiv3 && !hasDiv2 && !hasDiv1) {
+            breakdown.div4++; classified = true;
+          } else if (hasDiv3 && !hasDiv4 && !hasDiv2 && !hasDiv1) {
+            breakdown.div3++; classified = true;
+          } else if (isEducational) {
+            // Educational rounds are Div. 2 equivalent
+            breakdown.div2++; classified = true;
+          } else if (hasDiv2 && !hasDiv1 && !hasDiv3 && !hasDiv4) {
+            breakdown.div2++; classified = true;
+          } else if (isGlobal || (hasDiv1 && !hasDiv2 && !hasDiv3 && !hasDiv4)) {
+            breakdown.div1++; classified = true;
           }
+          // Div. 1 + Div. 2 combined rounds fall through to rating-based classification below
         }
 
-        // For other rounds, use the problem rating to assign the true difficulty division
+        // Fallback: use problem rating if contest name didn't classify it
         if (!classified) {
           if (rating !== undefined && rating !== null) {
             if (rating >= 1900) breakdown.div1++;
@@ -359,16 +372,7 @@ async function getCFDivisionBreakdown(handle) {
             else if (rating >= 1200) breakdown.div3++;
             else breakdown.div4++;
           } else {
-            // Default fallback if rating is missing
-            if (contestName) {
-              if (matchesDivision(contestName, 'div1')) breakdown.div1++;
-              else if (matchesDivision(contestName, 'div2')) breakdown.div2++;
-              else if (matchesDivision(contestName, 'div3')) breakdown.div3++;
-              else if (matchesDivision(contestName, 'div4')) breakdown.div4++;
-              else breakdown.div4++;
-            } else {
-              breakdown.div4++;
-            }
+            breakdown.div4++;
           }
         }
       }
