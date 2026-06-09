@@ -60,17 +60,17 @@ module.exports = {
             const total = breakdown.total || 1; // avoid division by zero
             const filled = Math.min(length, Math.round((count / total) * length));
             const empty = length - filled;
-            const bar = '▰'.repeat(filled) + '▱'.repeat(empty);
+            const bar = '█'.repeat(filled) + '░'.repeat(empty);
             const pct = Math.round((count / total) * 100);
             return `\`${bar}\` **${count}** solved (${pct}%)`;
           };
 
           embed.addFields(
             { name: `${emojis.cf} Codeforces Breakdown (\`${user.cf_handle}\`)`, value: '\u200b', inline: false },
-            { name: '🏆 Division 1 (Rating ≥1900)', value: buildBar(breakdown.div1), inline: false },
-            { name: '🥇 Division 2 (Rating 1600-1899)', value: buildBar(breakdown.div2), inline: false },
-            { name: '🥈 Division 3 (Rating 1200-1599)', value: buildBar(breakdown.div3), inline: false },
-            { name: '🥉 Division 4 (Rating <1200)', value: buildBar(breakdown.div4), inline: false }
+            { name: '🏆 Division 1', value: buildBar(breakdown.div1), inline: false },
+            { name: '🥇 Division 2', value: buildBar(breakdown.div2), inline: false },
+            { name: '🥈 Division 3', value: buildBar(breakdown.div3), inline: false },
+            { name: '🥉 Division 4', value: buildBar(breakdown.div4), inline: false }
           );
         } else {
           embed.addFields({ name: `${emojis.cf} Codeforces Breakdown`, value: '❌ Failed to load submission details.', inline: false });
