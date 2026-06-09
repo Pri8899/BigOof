@@ -318,6 +318,24 @@ async function checkCFSolved(handle, problems) {
  */
 async function getCFDivisionBreakdown(handle) {
   try {
+    // Ensure the contest cache is populated — fetch it if missing
+    if (!cachedContests) {
+      try {
+        const contestRes = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 15000 });
+        if (contestRes.data.status === 'OK') {
+          const contestMap = {};
+          for (const c of contestRes.data.result) {
+            contestMap[c.id] = c.name;
+          }
+          cachedContests = contestMap;
+          lastContestCacheFetchTime = Date.now();
+          console.log(`[CF] Contest cache loaded on-demand: ${Object.keys(cachedContests).length} contests`);
+        }
+      } catch (cErr) {
+        console.warn('[CF] Could not fetch contest list for division breakdown:', cErr.message);
+      }
+    }
+
     const subRes = await axios.get(
       `${CF_BASE}/user.status?handle=${handle}&from=1&count=10000`,
       { timeout: 12000 }
