@@ -313,5 +313,82 @@ async function checkCFSolved(handle, problems) {
   }
 }
 
-module.exports = { getCFUser, getCFContests, validateCFHandle, getCFProblems, checkCFSolved, initializeProblemCache };
+/**
+ * Get the solved problem breakdown by division (Div 1, 2, 3, 4) for a user
+ */
+async function getCFDivisionBreakdown(handle) {
+  try {
+    const subRes = await axios.get(
+      `${CF_BASE}/user.status?handle=${handle}&from=1&count=10000`,
+      { timeout: 12000 }
+    );
+    if (subRes.data.status !== 'OK') return null;
+
+    const uniqueSolved = new Set();
+    const breakdown = { div1: 0, div2: 0, div3: 0, div4: 0, total: 0 };
+
+    for (const sub of subRes.data.result) {
+      if (sub.verdict === 'OK' && sub.problem) {
+        const key = `${sub.problem.contestId}-${sub.problem.index}`;
+        if (uniqueSolved.has(key)) continue;
+        uniqueSolved.add(key);
+
+        const contestId = sub.problem.contestId;
+        const rating = sub.problem.rating;
+        const contestName = cachedContests ? cachedContests[contestId] : null;
+
+        let classified = false;
+
+        // Classify pure Div. 3 and Div. 4 contests by their contest name
+        if (contestName) {
+          const lowerName = contestName.toLowerCase();
+          if (lowerName.includes('div. 3') || lowerName.includes('div 3')) {
+            breakdown.div3++;
+            classified = true;
+          } else if (lowerName.includes('div. 4') || lowerName.includes('div 4')) {
+            breakdown.div4++;
+            classified = true;
+          }
+        }
+
+        // For other rounds, use the problem rating to assign the true difficulty division
+        if (!classified) {
+          if (rating !== undefined && rating !== null) {
+            if (rating >= 1900) breakdown.div1++;
+            else if (rating >= 1600) breakdown.div2++;
+            else if (rating >= 1200) breakdown.div3++;
+            else breakdown.div4++;
+          } else {
+            // Default fallback if rating is missing
+            if (contestName) {
+              if (matchesDivision(contestName, 'div1')) breakdown.div1++;
+              else if (matchesDivision(contestName, 'div2')) breakdown.div2++;
+              else if (matchesDivision(contestName, 'div3')) breakdown.div3++;
+              else if (matchesDivision(contestName, 'div4')) breakdown.div4++;
+              else breakdown.div4++;
+            } else {
+              breakdown.div4++;
+            }
+          }
+        }
+      }
+    }
+
+    breakdown.total = uniqueSolved.size;
+    return breakdown;
+  } catch (err) {
+    console.error(`[CF] Error getting division breakdown for ${handle}:`, err.message);
+    return null;
+  }
+}
+
+module.exports = {
+  getCFUser,
+  getCFContests,
+  validateCFHandle,
+  getCFProblems,
+  checkCFSolved,
+  initializeProblemCache,
+  getCFDivisionBreakdown
+};
 
