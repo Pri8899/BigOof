@@ -356,16 +356,20 @@ async function getCFDivisionBreakdown(handle) {
 
         if (contestName) {
           const lowerName = contestName.toLowerCase();
-          // A problem can match multiple divisions (e.g. Div. 1 + Div. 2 counts in both)
-          const matchedAny =
-            (lowerName.includes('div. 1') || lowerName.includes('div 1') ? (breakdown.div1++, true) : false) |
-            (lowerName.includes('div. 2') || lowerName.includes('div 2') ? (breakdown.div2++, true) : false) |
-            (lowerName.includes('div. 3') || lowerName.includes('div 3') ? (breakdown.div3++, true) : false) |
-            (lowerName.includes('div. 4') || lowerName.includes('div 4') ? (breakdown.div4++, true) : false);
+          const hasDiv1 = lowerName.includes('div. 1') || lowerName.includes('div 1');
+          const hasDiv2 = lowerName.includes('div. 2') || lowerName.includes('div 2');
+          const hasDiv3 = lowerName.includes('div. 3') || lowerName.includes('div 3');
+          const hasDiv4 = lowerName.includes('div. 4') || lowerName.includes('div 4');
+          const isEducational = lowerName.includes('educational');
+          const isGlobal = lowerName.includes('global round');
 
-          if (!matchedAny) breakdown.others++;
+          // Highest division wins (Div.1+2 → Div.1)
+          if (hasDiv1 || isGlobal)       breakdown.div1++;
+          else if (hasDiv2 || isEducational) breakdown.div2++;
+          else if (hasDiv3)              breakdown.div3++;
+          else if (hasDiv4)              breakdown.div4++;
+          else                           breakdown.others++;
         } else {
-          // No contest name found — count as Others
           breakdown.others++;
         }
       }
