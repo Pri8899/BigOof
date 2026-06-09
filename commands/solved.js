@@ -70,7 +70,8 @@ module.exports = {
             { name: '🏆 Division 1', value: buildBar(breakdown.div1), inline: false },
             { name: '🥇 Division 2', value: buildBar(breakdown.div2), inline: false },
             { name: '🥈 Division 3', value: buildBar(breakdown.div3), inline: false },
-            { name: '🥉 Division 4', value: buildBar(breakdown.div4), inline: false }
+            { name: '🥉 Division 4', value: buildBar(breakdown.div4), inline: false },
+            { name: '📦 Others', value: buildBar(breakdown.others), inline: false }
           );
         } else {
           embed.addFields({ name: `${emojis.cf} Codeforces Breakdown`, value: '❌ Failed to load submission details.', inline: false });

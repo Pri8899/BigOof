@@ -343,7 +343,7 @@ async function getCFDivisionBreakdown(handle) {
     if (subRes.data.status !== 'OK') return null;
 
     const uniqueSolved = new Set();
-    const breakdown = { div1: 0, div2: 0, div3: 0, div4: 0, total: 0 };
+    const breakdown = { div1: 0, div2: 0, div3: 0, div4: 0, others: 0, total: 0 };
 
     for (const sub of subRes.data.result) {
       if (sub.verdict === 'OK' && sub.problem) {
@@ -352,46 +352,21 @@ async function getCFDivisionBreakdown(handle) {
         uniqueSolved.add(key);
 
         const contestId = sub.problem.contestId;
-        const rating = sub.problem.rating;
         const contestName = cachedContests ? cachedContests[contestId] : null;
 
-        let classified = false;
-
-        // Classify by contest name first (most accurate)
         if (contestName) {
           const lowerName = contestName.toLowerCase();
-          const hasDiv1 = lowerName.includes('div. 1') || lowerName.includes('div 1');
-          const hasDiv2 = lowerName.includes('div. 2') || lowerName.includes('div 2');
-          const hasDiv3 = lowerName.includes('div. 3') || lowerName.includes('div 3');
-          const hasDiv4 = lowerName.includes('div. 4') || lowerName.includes('div 4');
-          const isEducational = lowerName.includes('educational');
-          const isGlobal = lowerName.includes('global round');
+          // A problem can match multiple divisions (e.g. Div. 1 + Div. 2 counts in both)
+          const matchedAny =
+            (lowerName.includes('div. 1') || lowerName.includes('div 1') ? (breakdown.div1++, true) : false) |
+            (lowerName.includes('div. 2') || lowerName.includes('div 2') ? (breakdown.div2++, true) : false) |
+            (lowerName.includes('div. 3') || lowerName.includes('div 3') ? (breakdown.div3++, true) : false) |
+            (lowerName.includes('div. 4') || lowerName.includes('div 4') ? (breakdown.div4++, true) : false);
 
-          if (hasDiv4 && !hasDiv3 && !hasDiv2 && !hasDiv1) {
-            breakdown.div4++; classified = true;
-          } else if (hasDiv3 && !hasDiv4 && !hasDiv2 && !hasDiv1) {
-            breakdown.div3++; classified = true;
-          } else if (isEducational) {
-            // Educational rounds are Div. 2 equivalent
-            breakdown.div2++; classified = true;
-          } else if (hasDiv2 && !hasDiv1 && !hasDiv3 && !hasDiv4) {
-            breakdown.div2++; classified = true;
-          } else if (isGlobal || (hasDiv1 && !hasDiv2 && !hasDiv3 && !hasDiv4)) {
-            breakdown.div1++; classified = true;
-          }
-          // Div. 1 + Div. 2 combined rounds fall through to rating-based classification below
-        }
-
-        // Fallback: use problem rating if contest name didn't classify it
-        if (!classified) {
-          if (rating !== undefined && rating !== null) {
-            if (rating >= 1900) breakdown.div1++;
-            else if (rating >= 1600) breakdown.div2++;
-            else if (rating >= 1200) breakdown.div3++;
-            else breakdown.div4++;
-          } else {
-            breakdown.div4++;
-          }
+          if (!matchedAny) breakdown.others++;
+        } else {
+          // No contest name found — count as Others
+          breakdown.others++;
         }
       }
     }
