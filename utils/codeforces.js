@@ -356,12 +356,12 @@ async function getCFDivisionBreakdown(handle) {
 
         if (contestName) {
           const lowerName = contestName.toLowerCase();
-          const hasDiv1 = lowerName.includes('div. 1') || lowerName.includes('div 1');
-          const hasDiv2 = lowerName.includes('div. 2') || lowerName.includes('div 2');
+          const hasDiv1 = lowerName.includes('div. 1') || lowerName.includes('div 1') || lowerName.includes('global');
+          const hasDiv2 = lowerName.includes('div. 2') || lowerName.includes('div 2') || lowerName.includes('educational');
           const hasDiv3 = lowerName.includes('div. 3') || lowerName.includes('div 3');
           const hasDiv4 = lowerName.includes('div. 4') || lowerName.includes('div 4');
 
-          // Highest div number wins; no div number → Others
+          // Highest div wins: priority Div 1 > Div 2 > Div 3 > Div 4 > Others
           if (hasDiv1)      breakdown.div1++;
           else if (hasDiv2) breakdown.div2++;
           else if (hasDiv3) breakdown.div3++;
