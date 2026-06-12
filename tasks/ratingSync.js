@@ -258,8 +258,9 @@ function startRatingSync(client) {
   // Run immediately on boot
   setTimeout(async () => {
     try {
-      console.log(`[RatingSync] Startup trigger: Syncing ratings...`);
+      console.log(`[RatingSync] Startup trigger: Syncing ratings and updating dashboard...`);
       await syncAllRatings(client);
+      await updateDashboard(client);
     } catch (err) {
       console.error('[RatingSync Startup Error]', err);
     }
