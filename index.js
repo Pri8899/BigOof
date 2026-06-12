@@ -63,39 +63,9 @@ client.once('ready', async () => {
   console.log(`\n✅ Bot online as ${client.user.tag}`);
   console.log(`   Serving ${client.guilds.cache.size} guild(s)`);
   console.log('');
-  // TEMPORARY DB DEBUG LOG TO DISCORD
-  try {
-    const debugChannel = await client.channels.fetch('1505614835650658355').catch(() => null);
-    if (debugChannel) {
-      const { db } = require('./database/db');
-      const lastCfSub = db.prepare("SELECT * FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'cf'").get();
-      const lastAcSub = db.prepare("SELECT * FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'ac'").get();
-      const userObj = db.prepare("SELECT * FROM users WHERE discord_id = '1367493270703444078'").get();
-      
-      let msgContent = `🔍 **Debug Live Feed info:**\n`;
-      msgContent += `User cf_handle: \`${userObj ? userObj.cf_handle : 'not found'}\`\n`;
-      msgContent += `Last CF Sub ID: \`${lastCfSub ? lastCfSub.last_id : 'null'}\`\n`;
-      msgContent += `Last AC Sub ID: \`${lastAcSub ? lastAcSub.last_id : 'null'}\`\n`;
-      await debugChannel.send(msgContent);
-    }
-  } catch (err) {
-    console.error('[DB Debug] Failed to send dump:', err.message);
-  }
 
 
-  // One-time fix to clear last_submissions so 24-hour catchup triggers for existing users
-  const { db, getAllUsers } = require('./database/db');
-  try {
-    const clearedKey = 'last_submissions_cleared_v3';
-    const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(clearedKey);
-    if (!row) {
-      db.prepare('DELETE FROM last_submissions').run();
-      db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?)').run(clearedKey, 'true');
-      console.log('[Startup Fix] Successfully cleared last_submissions to trigger 24-hour catchup.');
-    }
-  } catch (err) {
-    console.error('[Startup Fix] Failed to run one-time clear:', err.message);
-  }
+
 
   // One-time startup check to restore June 5 suggestions in the database if missing
   try {

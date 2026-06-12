@@ -197,17 +197,29 @@ try {
 try {
   const row = db.prepare("SELECT cf_handle, ac_handle FROM users WHERE discord_id = '1367493270703444078'").get();
   if (row) {
-    if (row.cf_handle === 'ImposterBhOO') {
+    const cfLower = row.cf_handle ? row.cf_handle.toLowerCase() : '';
+    const acLower = row.ac_handle ? row.ac_handle.toLowerCase() : '';
+    let updated = false;
+
+    if (cfLower === 'imposterbhoo' || cfLower === 'imposterbho0') {
       db.prepare("UPDATE users SET cf_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
       db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078' AND platform = 'cf'").run();
       db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'cf'").run();
       console.log('[Migration] Successfully corrected Codeforces handle for parth0_paul to ImposterBhO0.');
+      updated = true;
     }
-    if (row.ac_handle === 'ImposterBhOO') {
+    if (acLower === 'imposterbhoo' || acLower === 'imposterbho0') {
       db.prepare("UPDATE users SET ac_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
       db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
       db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
       console.log('[Migration] Successfully corrected AtCoder handle for parth0_paul to ImposterBhO0.');
+      updated = true;
+    }
+    
+    // If it was wrong in the database, clear ratings to force sync
+    if (cfLower === 'imposterbhoo' || acLower === 'imposterbhoo') {
+      db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078'").run();
+      db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078'").run();
     }
   }
 } catch (e) {
