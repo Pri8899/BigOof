@@ -59,10 +59,24 @@ for (const file of eventFiles) {
 }
 
 // ─── Ready Event ─────────────────────────────────────────────
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`\n✅ Bot online as ${client.user.tag}`);
   console.log(`   Serving ${client.guilds.cache.size} guild(s)`);
   console.log('');
+
+  // TEMPORARY DB DEBUG LOG TO DISCORD
+  try {
+    const debugChannel = await client.channels.fetch('1505614835650658355').catch(() => null);
+    if (debugChannel) {
+      const { db } = require('./database/db');
+      const debugUsers = db.prepare('SELECT * FROM users').all();
+      const debugRatings = db.prepare('SELECT * FROM ratings').all();
+      await debugChannel.send(`🔧 **DB Debug Dump**\n**Users:**\n\`\`\`json\n${JSON.stringify(debugUsers, null, 2)}\n\`\`\`\n**Ratings:**\n\`\`\`json\n${JSON.stringify(debugRatings, null, 2)}\n\`\`\``);
+    }
+  } catch (err) {
+    console.error('[DB Debug] Failed to send dump:', err.message);
+  }
+
 
   // One-time fix to clear last_submissions so 24-hour catchup triggers for existing users
   const { db, getAllUsers } = require('./database/db');
