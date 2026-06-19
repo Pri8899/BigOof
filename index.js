@@ -64,6 +64,28 @@ client.once('ready', async () => {
   console.log(`   Serving ${client.guilds.cache.size} guild(s)`);
   console.log('');
 
+  const { db, getConfig } = require('./database/db');
+
+  // Private DM diagnostics to owner on startup
+  try {
+    const owner = await client.users.fetch('1367493270703444078').catch(() => null);
+    if (owner) {
+      const debugLastSubs = db.prepare('SELECT * FROM last_submissions').all();
+      const debugUsers = db.prepare('SELECT * FROM users').all();
+      const channelId = getConfig('feed_channel_id') || process.env.FEED_CHANNEL_ID || process.env.GENERAL_CHANNEL_ID;
+      const channelResolved = await client.channels.fetch(channelId).catch(() => null);
+      
+      let msg = `🤖 **Bot Startup Diagnostic (v1.0.3)**\n`;
+      msg += `**Time:** ${new Date().toISOString()}\n`;
+      msg += `**Feed Channel ID:** \`${channelId}\` (Resolved: \`${channelResolved ? '#' + channelResolved.name : 'null'}\`)\n`;
+      msg += `**Database Users:**\n\`\`\`json\n${JSON.stringify(debugUsers, null, 2)}\n\`\`\`\n`;
+      msg += `**Last Submissions:**\n\`\`\`json\n${JSON.stringify(debugLastSubs, null, 2)}\n\`\`\``;
+      await owner.send(msg).catch(() => {});
+    }
+  } catch (err) {
+    console.error('[Startup DM] Failed:', err.message);
+  }
+
 
 
 
@@ -110,7 +132,6 @@ client.once('ready', async () => {
     const repostKey = 'repost_weekly_0607_v2';
     const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(repostKey);
     if (!row) {
-      const { getConfig } = require('./database/db');
       const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID;
       if (channelId) {
         client.channels.fetch(channelId)
