@@ -64,20 +64,6 @@ client.once('ready', async () => {
   console.log(`   Serving ${client.guilds.cache.size} guild(s)`);
   console.log('');
 
-  try {
-    const debugChannel = await client.channels.fetch('1505614835650658355').catch(() => null);
-    if (debugChannel) {
-      const { db } = require('./database/db');
-      const debugUsers = db.prepare('SELECT * FROM users').all();
-      const debugRatings = db.prepare('SELECT * FROM ratings').all();
-      const debugLastSubs = db.prepare('SELECT * FROM last_submissions').all();
-      await debugChannel.send(`🔧 **Railway Database Diagnostic**\n**Users:**\n\`\`\`json\n${JSON.stringify(debugUsers, null, 2)}\n\`\`\`\n**Ratings:**\n\`\`\`json\n${JSON.stringify(debugRatings, null, 2)}\n\`\`\`\n**Last Submissions:**\n\`\`\`json\n${JSON.stringify(debugLastSubs, null, 2)}\n\`\`\``);
-    }
-  } catch (err) {
-    console.error('[Diagnostic] Error sending database state:', err.message);
-  }
-
-
 
 
 
@@ -166,6 +152,7 @@ client.once('ready', async () => {
 
   // Live diagnostic logging to Railway console
   try {
+    const { getAllUsers } = require('./database/db');
     const users = getAllUsers();
     console.log(`\n=================== LIVE DIAGNOSTICS ===================`);
     console.log(`Registered users in DB: ${users.length}`);

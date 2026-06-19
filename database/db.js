@@ -197,29 +197,36 @@ try {
 try {
   const row = db.prepare("SELECT cf_handle, ac_handle FROM users WHERE discord_id = '1367493270703444078'").get();
   if (row) {
-    const cfLower = row.cf_handle ? row.cf_handle.toLowerCase() : '';
-    const acLower = row.ac_handle ? row.ac_handle.toLowerCase() : '';
-    let updated = false;
+    // 1. Codeforces Handle Correction
+    if (row.cf_handle) {
+      const cfLower = row.cf_handle.toLowerCase();
+      if (cfLower === 'imposterbhoo') {
+        // Wrong handle (ends in O), update and clear
+        db.prepare("UPDATE users SET cf_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
+        db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078' AND platform = 'cf'").run();
+        db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'cf'").run();
+        console.log('[Migration] Corrected wrong Codeforces handle from ImposterBhOO to ImposterBhO0 and cleared history.');
+      } else if (cfLower === 'imposterbho0' && row.cf_handle !== 'ImposterBhO0') {
+        // Correct handle but wrong casing, just update handle casing without clearing
+        db.prepare("UPDATE users SET cf_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
+        console.log('[Migration] Corrected Codeforces handle casing to ImposterBhO0.');
+      }
+    }
 
-    if (cfLower === 'imposterbhoo' || cfLower === 'imposterbho0') {
-      db.prepare("UPDATE users SET cf_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
-      db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078' AND platform = 'cf'").run();
-      db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'cf'").run();
-      console.log('[Migration] Successfully corrected Codeforces handle for parth0_paul to ImposterBhO0.');
-      updated = true;
-    }
-    if (acLower === 'imposterbhoo' || acLower === 'imposterbho0') {
-      db.prepare("UPDATE users SET ac_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
-      db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
-      db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
-      console.log('[Migration] Successfully corrected AtCoder handle for parth0_paul to ImposterBhO0.');
-      updated = true;
-    }
-    
-    // If it was wrong in the database, clear ratings to force sync
-    if (cfLower === 'imposterbhoo' || acLower === 'imposterbhoo') {
-      db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078'").run();
-      db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078'").run();
+    // 2. AtCoder Handle Correction
+    if (row.ac_handle) {
+      const acLower = row.ac_handle.toLowerCase();
+      if (acLower === 'imposterbhoo') {
+        // Wrong handle (ends in O), update and clear
+        db.prepare("UPDATE users SET ac_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
+        db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
+        db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
+        console.log('[Migration] Corrected wrong AtCoder handle from ImposterBhOO to ImposterBhO0 and cleared history.');
+      } else if (acLower === 'imposterbho0' && row.ac_handle !== 'ImposterBhO0') {
+        // Correct handle but wrong casing, just update handle casing without clearing
+        db.prepare("UPDATE users SET ac_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
+        console.log('[Migration] Corrected AtCoder handle casing to ImposterBhO0.');
+      }
     }
   }
 } catch (e) {

@@ -259,13 +259,29 @@ async function runSubmissionFeed(client) {
   }
 }
 
+async function runWithTimeout(promise, ms, name) {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Timeout: ${name} took longer than ${ms}ms`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 let isRunning = false;
 
 async function runSubmissionFeedLoop(client) {
   if (isRunning) return;
   isRunning = true;
   try {
-    await runSubmissionFeed(client);
+    console.log('[SubmissionFeed] Polling submission feed...');
+    await runWithTimeout(runSubmissionFeed(client), 90000, 'runSubmissionFeed');
+    console.log('[SubmissionFeed] Submission feed poll complete.');
   } catch (err) {
     console.error('[SubmissionFeed] Error in loop:', err.message);
   } finally {
@@ -274,11 +290,25 @@ async function runSubmissionFeedLoop(client) {
 }
 
 function startSubmissionFeed(client) {
-  // Run every 1 minute
-  cron.schedule('* * * * *', async () => {
+  // Run initial check 15 seconds after boot to catch any offline solves
+  setTimeout(async () => {
+    console.log('[SubmissionFeed] Startup check: Running initial poller...');
     await runSubmissionFeedLoop(client);
-  });
-  console.log('[SubmissionFeed] Started 1-minute live feed poller.');
+  }, 15000);
+
+  // Set up a robust recursive setTimeout poller that schedules the next run only after the previous finishes
+  const poll = async () => {
+    try {
+      await runSubmissionFeedLoop(client);
+    } catch (err) {
+      console.error('[SubmissionFeed] Poller error:', err.message);
+    }
+    setTimeout(poll, 60000); // Poll again 60 seconds after completing the previous run
+  };
+
+  // Schedule the recursive poller to begin after the startup check
+  setTimeout(poll, 75000);
+  console.log('[SubmissionFeed] Sleep-resistant recursive poller started (guaranteed every 60s).');
 }
 
 module.exports = { startSubmissionFeed, runSubmissionFeed };
