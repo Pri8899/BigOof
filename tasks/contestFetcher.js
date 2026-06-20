@@ -68,14 +68,14 @@ function startContestFetcher(client) {
     db.prepare(`ALTER TABLE notified_contests ADD COLUMN discord_msg_id TEXT`).run();
   } catch (_) {}
 
-  // Run immediately on boot if last refresh was more than 1 hour ago
+  // Run immediately on boot if last refresh was more than 12 hours ago (43200 seconds)
   setTimeout(async () => {
     try {
       const lastFetchStr = getConfig('last_contest_fetch_time');
       const lastFetch = lastFetchStr ? parseInt(lastFetchStr, 10) : 0;
       const now = Math.floor(Date.now() / 1000);
       
-      if (now - lastFetch >= 3600) {
+      if (now - lastFetch >= 43200) {
         console.log(`[ContestFetcher] Startup trigger: last fetch was ${now - lastFetch}s ago. Performing full refresh...`);
         await performContestRefresh(client);
       } else {
@@ -86,16 +86,16 @@ function startContestFetcher(client) {
     }
   }, 5000);
 
-  // Exact hourly schedule at the top of the hour (e.g. 14:00, 15:00)
-  cron.schedule('0 * * * *', async () => {
+  // Exact 12-hour schedule (runs at minute 0 of every 12th hour)
+  cron.schedule('0 */12 * * *', async () => {
     try {
-      console.log(`[ContestFetcher] Hourly cron triggered. Refreshing...`);
+      console.log(`[ContestFetcher] 12-hour cron triggered. Refreshing...`);
       await performContestRefresh(client);
     } catch (err) {
-      console.error('[ContestFetcher Hourly Cron Error]', err);
+      console.error('[ContestFetcher 12-Hour Cron Error]', err);
     }
   });
-  console.log('[ContestFetcher] Strict hourly cron scheduler started.');
+  console.log('[ContestFetcher] Strict 12-hour cron scheduler started.');
 }
 
 /**
