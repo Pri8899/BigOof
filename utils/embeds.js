@@ -308,7 +308,7 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
 
   embed
     .setDescription(`${header}\n\n` + sections.join('\n\n'))
-    .setFooter({ text: `${displayedCount} total upcoming contests  •  Refreshes every hour  •  ${timeStr}` });
+    .setFooter({ text: `${displayedCount} total upcoming contests  •  Refreshes every 12 hours  •  ${timeStr}` });
 
   return embed;
 }
