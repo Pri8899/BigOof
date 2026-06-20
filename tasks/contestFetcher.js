@@ -86,16 +86,16 @@ function startContestFetcher(client) {
     }
   }, 5000);
 
-  // Exact 12-hour schedule (runs at minute 0 of every 12th hour)
-  cron.schedule('0 */12 * * *', async () => {
+  // Exact 12-hour schedule (runs at 12:00 AM and 12:00 PM Dhaka time)
+  cron.schedule('0 0,12 * * *', async () => {
     try {
       console.log(`[ContestFetcher] 12-hour cron triggered. Refreshing...`);
       await performContestRefresh(client);
     } catch (err) {
       console.error('[ContestFetcher 12-Hour Cron Error]', err);
     }
-  });
-  console.log('[ContestFetcher] Strict 12-hour cron scheduler started.');
+  }, { timezone: 'Asia/Dhaka' });
+  console.log('[ContestFetcher] Strict 12-hour (12:00 AM/PM Dhaka time) cron scheduler started.');
 }
 
 /**
