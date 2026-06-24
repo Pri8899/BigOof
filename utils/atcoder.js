@@ -1,6 +1,27 @@
 // utils/atcoder.js — AtCoder wrapper (scrapes atcoder.jp directly)
 const axios = require('axios');
 
+async function axiosGetWithRetry(url, options = {}, retries = 3, backoff = 1500) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await axios.get(url, options);
+    } catch (err) {
+      const status = err.response ? err.response.status : null;
+      const isRateLimit = status === 429;
+      const isServerError = status && status >= 500;
+      const isTimeout = err.code === 'ECONNABORTED' || err.message.includes('timeout');
+      
+      if ((isRateLimit || isServerError || isTimeout) && i < retries - 1) {
+        const delay = backoff * Math.pow(2, i);
+        console.warn(`[AC API Retry] Failed to fetch ${url} (Status: ${status || err.code}). Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
   'Accept':     'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -119,44 +140,39 @@ async function scrapeAtCoderContests() {
 
 // Helper to fetch solved count from submissions API
 async function getACSolvedCount(handle) {
-  try {
-    const solvedProblems = new Set();
-    let fromSecond = 0;
-    let pagesFetched = 0;
-    while (pagesFetched < 10) { // Safety cap to prevent infinite loop
-      const res = await axios.get(
-        `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=${fromSecond}`,
-        { timeout: 8000, headers: KENKOOOO_HEADERS }
-      );
-      if (!Array.isArray(res.data) || res.data.length === 0) {
-        break;
-      }
-      for (const s of res.data) {
-        if (s.result === 'AC') {
-          solvedProblems.add(s.problem_id);
-        }
-      }
-      if (res.data.length < 500) {
-        break;
-      }
-      const maxEpoch = Math.max(...res.data.map(s => s.epoch_second));
-      fromSecond = maxEpoch + 1;
-      pagesFetched++;
+  const solvedProblems = new Set();
+  let fromSecond = 0;
+  let pagesFetched = 0;
+  while (pagesFetched < 10) { // Safety cap to prevent infinite loop
+    const res = await axiosGetWithRetry(
+      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=${fromSecond}`,
+      { timeout: 15000, headers: KENKOOOO_HEADERS }
+    );
+    if (!Array.isArray(res.data) || res.data.length === 0) {
+      break;
     }
-    return solvedProblems.size;
-  } catch (err) {
-    console.error(`[AC] getACSolvedCount failed for ${handle}:`, err.message);
-    return 0;
+    for (const s of res.data) {
+      if (s.result === 'AC') {
+        solvedProblems.add(s.problem_id);
+      }
+    }
+    if (res.data.length < 500) {
+      break;
+    }
+    const maxEpoch = Math.max(...res.data.map(s => s.epoch_second));
+    fromSecond = maxEpoch + 1;
+    pagesFetched++;
   }
+  return solvedProblems.size;
 }
 
 // ─── User Stats ──────────────────────────────────────────────
 async function getACUser(handle) {
   const solved = await getACSolvedCount(handle);
   try {
-    const res = await axios.get(
+    const res = await axiosGetWithRetry(
       `https://kenkoooo.com/atcoder/atcoder-api/v3/user/history?user=${handle}`,
-      { timeout: 10000, headers: KENKOOOO_HEADERS }
+      { timeout: 15000, headers: KENKOOOO_HEADERS }
     ).catch(() => null);
 
     let rating = 0, maxRating = 0;
@@ -166,8 +182,8 @@ async function getACUser(handle) {
       maxRating = Math.max(...res.data.map(h => h.NewRating ?? 0));
     } else {
       // Fallback to official history JSON endpoint
-      const officialRes = await axios.get(`https://atcoder.jp/users/${handle}/history/json`, {
-        timeout: 10000,
+      const officialRes = await axiosGetWithRetry(`https://atcoder.jp/users/${handle}/history/json`, {
+        timeout: 15000,
         headers: BROWSER_HEADERS
       }).catch(() => null);
       if (officialRes && Array.isArray(officialRes.data) && officialRes.data.length > 0) {
@@ -179,8 +195,8 @@ async function getACUser(handle) {
 
     let lastContest = null;
     try {
-      const histRes = await axios.get(`https://atcoder.jp/users/${handle}/history/json`, {
-        timeout: 10000,
+      const histRes = await axiosGetWithRetry(`https://atcoder.jp/users/${handle}/history/json`, {
+        timeout: 15000,
         headers: BROWSER_HEADERS
       });
       if (Array.isArray(histRes.data) && histRes.data.length > 0) {
@@ -200,9 +216,10 @@ async function getACUser(handle) {
     if (isValid) {
       return { rating: 0, max_rating: 0, rank_title: 'Unrated', solved, acceptance: 0, lastContest: null };
     }
-    return null;
+    throw err; // Propagate the error so ratingSync knows the fetch failed
   }
 }
+
 
 // ─── Handle Validation ───────────────────────────────────────
 async function validateACHandle(handle) {

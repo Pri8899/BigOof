@@ -1,6 +1,27 @@
 // tasks/submissionFeed.js — Live feed for accepted submissions
 const cron = require('node-cron');
 const axios = require('axios');
+
+async function axiosGetWithRetry(url, options = {}, retries = 3, backoff = 1500) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await axios.get(url, options);
+    } catch (err) {
+      const status = err.response ? err.response.status : null;
+      const isRateLimit = status === 429;
+      const isServerError = status && status >= 500;
+      const isTimeout = err.code === 'ECONNABORTED' || err.message.includes('timeout');
+      
+      if ((isRateLimit || isServerError || isTimeout) && i < retries - 1) {
+        const delay = backoff * Math.pow(2, i);
+        console.warn(`[AC Feed Retry] Failed to fetch ${url} (Status: ${status || err.code}). Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
 const { getAllUsers, getConfig, getLastSubmission, setLastSubmission, getCachedContestName, cacheContestName, db } = require('../database/db');
 const { buildSubmissionEmbed } = require('../utils/embeds');
 
@@ -150,9 +171,9 @@ async function fetchACSubmissions(user) {
       queryTime = now - 10800; // 3 hours
     }
     
-    const res = await axios.get(
+    const res = await axiosGetWithRetry(
       `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${user.ac_handle}&from_second=${queryTime + 1}`,
-      { timeout: 8000, headers: KENKOOOO_HEADERS }
+      { timeout: 15000, headers: KENKOOOO_HEADERS }
     );
     
     if (!Array.isArray(res.data) || res.data.length === 0) {
@@ -183,6 +204,7 @@ async function fetchACSubmissions(user) {
     return { newAc: [], highestTime: null };
   }
 }
+
 
 async function runSubmissionFeed(client) {
   const channelId = getConfig('feed_channel_id') || process.env.FEED_CHANNEL_ID || process.env.GENERAL_CHANNEL_ID;

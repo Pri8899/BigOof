@@ -266,161 +266,159 @@ function startRatingSync(client) {
     }
   }, 10000);
 
-  // Hourly check for rating changes (runs at minute 30 of every hour)
-  cron.schedule('30 * * * *', async () => {
+  // Exactly at 12:00 AM and 12:00 PM in Asia/Dhaka time
+  cron.schedule('0 0,12 * * *', async () => {
     try {
-      console.log(`[RatingSync] Hourly rating sync triggered.`);
-      await syncAllRatings(client);
-    } catch (err) {
-      console.error('[RatingSync Hourly Cron Error]', err);
-    }
-  });
-
-  // Exactly at 9:00 AM every morning in Asia/Dhaka time
-  cron.schedule('0 9 * * *', async () => {
-    try {
-      console.log(`[Dashboard] Scheduled 9 AM dashboard update triggered.`);
-      // Sync ratings before updating dashboard to ensure it's fresh
+      console.log(`[RatingSync] Scheduled 12-hour rating sync and dashboard update triggered.`);
       await syncAllRatings(client);
       await updateDashboard(client);
     } catch (err) {
-      console.error('[Dashboard 9AM Cron Error]', err);
+      console.error('[RatingSync Scheduled Cron Error]', err);
     }
   }, { timezone: 'Asia/Dhaka' });
 
-  console.log('[RatingSync] Strict cron scheduler started (Hourly rating sync + 9 AM Dashboard update).');
+  console.log('[RatingSync] Cron scheduler started (runs at 12:00 AM and 12:00 PM Dhaka time).');
+}
+
+function epochToDateStr(epoch, offset) {
+  return new Date((epoch + offset * 3600) * 1000).toISOString().split('T')[0];
+}
+
+function todayInOffset(offset) {
+  return epochToDateStr(Date.now() / 1000, offset);
+}
+
+function computeStreakFromActivity(activityMap, offset) {
+  const todayStr = todayInOffset(offset);
+  const todayCount = activityMap[todayStr] || 0;
+  
+  let streak = 0;
+  let checkDate = new Date(todayStr + "T00:00:00Z");
+  
+  if (todayCount === 0) {
+    checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+  }
+  
+  while (true) {
+    const checkStr = checkDate.toISOString().split('T')[0];
+    if ((activityMap[checkStr] || 0) > 0) {
+      streak++;
+      checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+    } else {
+      break;
+    }
+  }
+  
+  return { streak, todayCount };
+}
+
+function calculateMaxStreakForActivity(activityMap) {
+  const activeDates = Object.keys(activityMap).filter(d => activityMap[d] > 0).sort();
+  if (activeDates.length === 0) return 0;
+  
+  let maxStreak = 0;
+  let tempStreak = 0;
+  let prevTime = null;
+  
+  for (const dateStr of activeDates) {
+    const parts = dateStr.split('-');
+    const currTime = Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    
+    if (prevTime === null) {
+      tempStreak = 1;
+    } else {
+      const diffDays = Math.round((currTime - prevTime) / (24 * 3600 * 1000));
+      if (diffDays === 1) {
+        tempStreak++;
+      } else if (diffDays > 1) {
+        maxStreak = Math.max(maxStreak, tempStreak);
+        tempStreak = 1;
+      }
+    }
+    prevTime = currTime;
+  }
+  maxStreak = Math.max(maxStreak, tempStreak);
+  return maxStreak;
 }
 
 /**
  * Calculate the current and maximum consecutive days a Codeforces user has submitted at least one problem (any verdict).
- * Dates are calculated in UTC time to match Codeforces profile activity calendar and streaks.
+ * Timezone-agnostic offset search is used to match Codeforces profile activity calendar and streaks exactly.
  */
 async function calculateCFStreak(handle) {
   try {
     const res = await axios.get(`${CF_BASE}/user.status?handle=${handle}&from=1&count=2000`, { timeout: 12000 });
     if (res.data.status !== 'OK') return { current: 0, max: 0 };
 
-    const solvedDates = new Set();
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Dhaka',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
-
-    const formatDate = (d) => {
-      const parts = formatter.formatToParts(d);
-      const partMap = {};
-      for (const part of parts) {
-        partMap[part.type] = part.value;
-      }
-      return `${partMap.year}-${partMap.month}-${partMap.day}`;
-    };
-
-    for (const sub of res.data.result) {
-      if (sub.problem) {
-        const date = new Date(sub.creationTimeSeconds * 1000);
-        solvedDates.add(formatDate(date));
+    const preferredOffsets = [6, 3, 0];
+    const allOffsets = [];
+    const seen = new Set();
+    for (const o of preferredOffsets) {
+      seen.add(o);
+      allOffsets.push(o);
+    }
+    for (let o = -12; o <= 14; o++) {
+      if (!seen.has(o)) {
+        allOffsets.push(o);
       }
     }
 
-    if (solvedDates.size === 0) return { current: 0, max: 0 };
+    let bestStreak = 0;
+    let bestActivityMap = null;
+    let bestOffset = 6; // default fallback offset
 
-    const sortedDates = Array.from(solvedDates).sort();
-
-    // Calculate current active streak in Dhaka time
-    const nowLocal = new Date();
-    const todayStr = formatDate(nowLocal);
-    
-    const yesterday = new Date(nowLocal);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = formatDate(yesterday);
-
-    let currentStreak = 0;
-    let checkDate = new Date(nowLocal);
-
-    if (solvedDates.has(todayStr)) {
-      while (true) {
-        const checkStr = formatDate(checkDate);
-        if (solvedDates.has(checkStr)) {
-          currentStreak++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-          break;
+    // Step 1: Search for offset that maximizes current active streak
+    for (const offset of allOffsets) {
+      const activityMap = {};
+      for (const sub of res.data.result) {
+        if (sub.problem && sub.creationTimeSeconds) {
+          const dateStr = epochToDateStr(sub.creationTimeSeconds, offset);
+          activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
         }
       }
-    } else if (solvedDates.has(yesterdayStr)) {
-      checkDate.setDate(checkDate.getDate() - 1);
-      while (true) {
-        const checkStr = formatDate(checkDate);
-        if (solvedDates.has(checkStr)) {
-          currentStreak++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-          break;
+      const { streak } = computeStreakFromActivity(activityMap, offset);
+      if (streak > bestStreak) {
+        bestStreak = streak;
+        bestActivityMap = activityMap;
+        bestOffset = offset;
+      }
+    }
+
+    // Step 2: If current active streak is 0, search for offset that maximizes all-time max streak
+    if (bestStreak === 0) {
+      let maxAllTimeStreak = 0;
+      for (const offset of allOffsets) {
+        const activityMap = {};
+        for (const sub of res.data.result) {
+          if (sub.problem && sub.creationTimeSeconds) {
+            const dateStr = epochToDateStr(sub.creationTimeSeconds, offset);
+            activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
+          }
+        }
+        const maxStreak = calculateMaxStreakForActivity(activityMap);
+        if (maxStreak > maxAllTimeStreak) {
+          maxAllTimeStreak = maxStreak;
+          bestActivityMap = activityMap;
+          bestOffset = offset;
         }
       }
     }
 
-    // Calculate max streak in the last 30 days to match the "X days in a row for the last month" CF text
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 3600 * 1000;
-    const recentDates = sortedDates.filter(dateStr => {
-      const parts = dateStr.split('-');
-      const time = Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-      return time >= thirtyDaysAgo;
-    });
-
-    let maxRecentStreak = 0;
-    let tempStreak = 0;
-    let prevTime = null;
-
-    for (const dateStr of recentDates) {
-      const parts = dateStr.split('-');
-      const currTime = Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-
-      if (prevTime === null) {
-        tempStreak = 1;
-      } else {
-        const diffDays = Math.round((currTime - prevTime) / (24 * 3600 * 1000));
-        if (diffDays === 1) {
-          tempStreak++;
-        } else if (diffDays > 1) {
-          maxRecentStreak = Math.max(maxRecentStreak, tempStreak);
-          tempStreak = 1;
+    // Fallback if no submissions at all
+    if (!bestActivityMap) {
+      bestActivityMap = {};
+      for (const sub of res.data.result) {
+        if (sub.problem && sub.creationTimeSeconds) {
+          const dateStr = epochToDateStr(sub.creationTimeSeconds, bestOffset);
+          bestActivityMap[dateStr] = (bestActivityMap[dateStr] || 0) + 1;
         }
       }
-      prevTime = currTime;
     }
-    maxRecentStreak = Math.max(maxRecentStreak, tempStreak);
 
-    // Final display streak is the maximum of their active streak and recent 30-day streak
-    const displayStreak = Math.max(currentStreak, maxRecentStreak);
+    const current = computeStreakFromActivity(bestActivityMap, bestOffset).streak;
+    const max = calculateMaxStreakForActivity(bestActivityMap);
 
-    // Calculate max streak in history (all-time)
-    let maxStreak = 0;
-    let tempMax = 0;
-    let prevMaxTime = null;
-
-    for (const dateStr of sortedDates) {
-      const parts = dateStr.split('-');
-      const currTime = Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-
-      if (prevMaxTime === null) {
-        tempMax = 1;
-      } else {
-        const diffDays = Math.round((currTime - prevMaxTime) / (24 * 3600 * 1000));
-        if (diffDays === 1) {
-          tempMax++;
-        } else if (diffDays > 1) {
-          maxStreak = Math.max(maxStreak, tempMax);
-          tempMax = 1;
-        }
-      }
-      prevMaxTime = currTime;
-    }
-    maxStreak = Math.max(maxStreak, tempMax);
-
-    return { current: displayStreak, max: maxStreak };
+    return { current, max };
   } catch (err) {
     console.error(`[StreakCalc] Error calculating streak for ${handle}:`, err.message);
     return { current: 0, max: 0 };
