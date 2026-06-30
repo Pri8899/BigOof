@@ -359,73 +359,18 @@ async function calculateCFStreak(handle) {
     const res = await axios.get(`${CF_BASE}/user.status?handle=${handle}&from=1&count=2000`, { timeout: 12000 });
     if (res.data.status !== 'OK') return { current: 0, max: 0 };
 
-    const preferredOffsets = [6, 3, 0];
-    const allOffsets = [];
-    const seen = new Set();
-    for (const o of preferredOffsets) {
-      seen.add(o);
-      allOffsets.push(o);
-    }
-    for (let o = -12; o <= 14; o++) {
-      if (!seen.has(o)) {
-        allOffsets.push(o);
+    const offset = 6; // Codeforces renders green boxes based on user's timezone (UTC+6) or MSK (UTC+3). We use 6 to match the user's exact green boxes.
+    const activityMap = {};
+
+    for (const sub of res.data.result) {
+      if (sub.problem && sub.creationTimeSeconds && sub.verdict === 'OK') {
+        const dateStr = epochToDateStr(sub.creationTimeSeconds, offset);
+        activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
       }
     }
 
-    let bestStreak = 0;
-    let bestActivityMap = null;
-    let bestOffset = 6; // default fallback offset
-
-    // Step 1: Search for offset that maximizes current active streak
-    for (const offset of allOffsets) {
-      const activityMap = {};
-      for (const sub of res.data.result) {
-        if (sub.problem && sub.creationTimeSeconds && sub.verdict === 'OK') {
-          const dateStr = epochToDateStr(sub.creationTimeSeconds, offset);
-          activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
-        }
-      }
-      const { streak } = computeStreakFromActivity(activityMap, offset);
-      if (streak > bestStreak) {
-        bestStreak = streak;
-        bestActivityMap = activityMap;
-        bestOffset = offset;
-      }
-    }
-
-    // Step 2: If current active streak is 0, search for offset that maximizes all-time max streak
-    if (bestStreak === 0) {
-      let maxAllTimeStreak = 0;
-      for (const offset of allOffsets) {
-        const activityMap = {};
-        for (const sub of res.data.result) {
-          if (sub.problem && sub.creationTimeSeconds && sub.verdict === 'OK') {
-            const dateStr = epochToDateStr(sub.creationTimeSeconds, offset);
-            activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
-          }
-        }
-        const maxStreak = calculateMaxStreakForActivity(activityMap);
-        if (maxStreak > maxAllTimeStreak) {
-          maxAllTimeStreak = maxStreak;
-          bestActivityMap = activityMap;
-          bestOffset = offset;
-        }
-      }
-    }
-
-    // Fallback if no submissions at all
-    if (!bestActivityMap) {
-      bestActivityMap = {};
-      for (const sub of res.data.result) {
-        if (sub.problem && sub.creationTimeSeconds && sub.verdict === 'OK') {
-          const dateStr = epochToDateStr(sub.creationTimeSeconds, bestOffset);
-          bestActivityMap[dateStr] = (bestActivityMap[dateStr] || 0) + 1;
-        }
-      }
-    }
-
-    const current = computeStreakFromActivity(bestActivityMap, bestOffset).streak;
-    const max = calculateMaxStreakForActivity(bestActivityMap);
+    const current = computeStreakFromActivity(activityMap, offset).streak;
+    const max = calculateMaxStreakForActivity(activityMap);
 
     return { current, max };
   } catch (err) {
