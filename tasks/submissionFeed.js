@@ -111,7 +111,7 @@ async function getOrFetchContestName(contestId) {
 async function fetchCFSubmissions(user) {
   if (!user.cf_handle) return [];
   try {
-    const res = await axios.get(`${CF_BASE}/user.status?handle=${user.cf_handle}&from=1&count=10`, { timeout: 8000 });
+    const res = await axios.get(`${CF_BASE}/user.status?handle=${user.cf_handle}&from=1&count=50`, { timeout: 8000 });
     if (res.data.status !== 'OK') return [];
     
     let lastId = getLastSubmission(user.discord_id, 'cf');

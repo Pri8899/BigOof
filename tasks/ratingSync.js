@@ -380,7 +380,7 @@ async function calculateCFStreak(handle) {
     for (const offset of allOffsets) {
       const activityMap = {};
       for (const sub of res.data.result) {
-        if (sub.problem && sub.creationTimeSeconds) {
+        if (sub.problem && sub.creationTimeSeconds && sub.verdict === 'OK') {
           const dateStr = epochToDateStr(sub.creationTimeSeconds, offset);
           activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
         }
@@ -399,7 +399,7 @@ async function calculateCFStreak(handle) {
       for (const offset of allOffsets) {
         const activityMap = {};
         for (const sub of res.data.result) {
-          if (sub.problem && sub.creationTimeSeconds) {
+          if (sub.problem && sub.creationTimeSeconds && sub.verdict === 'OK') {
             const dateStr = epochToDateStr(sub.creationTimeSeconds, offset);
             activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
           }
@@ -417,7 +417,7 @@ async function calculateCFStreak(handle) {
     if (!bestActivityMap) {
       bestActivityMap = {};
       for (const sub of res.data.result) {
-        if (sub.problem && sub.creationTimeSeconds) {
+        if (sub.problem && sub.creationTimeSeconds && sub.verdict === 'OK') {
           const dateStr = epochToDateStr(sub.creationTimeSeconds, bestOffset);
           bestActivityMap[dateStr] = (bestActivityMap[dateStr] || 0) + 1;
         }
