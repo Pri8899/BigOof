@@ -31,6 +31,7 @@ const BROWSER_HEADERS = {
 
 const KENKOOOO_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
+  'Accept-Encoding': 'gzip, deflate',
   'Origin':     'https://kenkoooo.com',
   'Referer':    'https://kenkoooo.com/atcoder/'
 };
@@ -143,7 +144,7 @@ async function getACSolvedCount(handle) {
   const solvedProblems = new Set();
   let fromSecond = 0;
   let pagesFetched = 0;
-  while (pagesFetched < 50) { // Safety cap to prevent infinite loop
+  while (pagesFetched < 10) { // Safety cap to prevent infinite loop
     const res = await axiosGetWithRetry(
       `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=${fromSecond}`,
       { timeout: 15000, headers: KENKOOOO_HEADERS }

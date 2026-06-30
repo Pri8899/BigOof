@@ -27,6 +27,7 @@ const { buildSubmissionEmbed } = require('../utils/embeds');
 
 const KENKOOOO_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
+  'Accept-Encoding': 'gzip, deflate',
   'Origin':     'https://kenkoooo.com',
   'Referer':    'https://kenkoooo.com/atcoder/'
 };
@@ -44,8 +45,8 @@ async function getOrFetchContestName(contestId) {
   if (name) return name;
 
   const now = Date.now();
-  // Fetch contest list if cache is empty or older than 12 hours (43200000 ms)
-  if (!contestListCache || (now - lastContestListFetchTime > 43200000)) {
+  // Fetch contest list if cache is empty or older than 1 hour (3600000 ms)
+  if (!contestListCache || (now - lastContestListFetchTime > 3600000)) {
     try {
       console.log('[SubmissionFeed] Fetching Codeforces contest list for cache...');
       const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 8000 });
@@ -70,7 +71,7 @@ async function getOrFetchContestName(contestId) {
 
   // Fetch gym contest list if the ID looks like a Gym contest (usually >= 100000)
   if (Number(contestId) >= 100000) {
-    if (!gymContestListCache || (now - lastGymContestListFetchTime > 43200000)) {
+    if (!gymContestListCache || (now - lastGymContestListFetchTime > 3600000)) {
       try {
         console.log('[SubmissionFeed] Fetching Codeforces gym contest list for cache...');
         const res = await axios.get(`${CF_BASE}/contest.list?gym=true`, { timeout: 15000 });
@@ -168,7 +169,7 @@ async function fetchACSubmissions(user) {
     
     let queryTime = lastTime;
     if (queryTime === null) {
-      queryTime = now - (86400 * 30); // 30 days fallback to ensure we find their last solve
+      queryTime = now - 10800; // 3 hours
     }
     
     const res = await axiosGetWithRetry(
@@ -177,31 +178,24 @@ async function fetchACSubmissions(user) {
     );
     
     if (!Array.isArray(res.data) || res.data.length === 0) {
-      return { newAc: [], highestTime: lastTime === null ? now - 86400 : null }; // If truly no submissions, just mark 24h ago
+      return { newAc: [], highestTime: lastTime === null ? queryTime : null };
     }
     
     // Sort by epoch_second ascending
     const submissions = res.data.sort((a, b) => a.epoch_second - b.epoch_second);
-    let highestTime = lastTime || (now - 86400); // 24 hours ago as baseline
+    let highestTime = lastTime || queryTime;
     const newAc = [];
-    const minTime = now - 86400; // Accept submissions up to 24h old for new users
     
     for (const sub of submissions) {
-      const isNew = lastTime !== null ? (sub.epoch_second > lastTime) : (sub.epoch_second >= minTime);
-      
-      if (isNew) {
-        highestTime = Math.max(highestTime, sub.epoch_second);
-        if (sub.result === 'AC') {
-          newAc.push({
-            name: `${sub.problem_id}`,
-            url: `https://atcoder.jp/contests/${sub.contest_id}/tasks/${sub.problem_id}`,
-            difficulty: null,
-            tags: [],
-            contestId: sub.contest_id
-          });
-        }
-      } else if (lastTime === null) {
-        highestTime = Math.max(highestTime, sub.epoch_second);
+      highestTime = Math.max(highestTime, sub.epoch_second);
+      if (sub.result === 'AC') {
+        newAc.push({
+          name: `${sub.problem_id}`,
+          url: `https://atcoder.jp/contests/${sub.contest_id}/tasks/${sub.problem_id}`,
+          difficulty: null,
+          tags: [],
+          contestId: sub.contest_id
+        });
       }
     }
     

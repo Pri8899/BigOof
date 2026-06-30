@@ -12,7 +12,7 @@ function computeLeaderboard(users, ratings, streaks = []) {
 
   const streakMap = {};
   for (const s of streaks) {
-    if (!streakMap[s.discord_id] || s.current_streak > streakMap[s.discord_id]) {
+    if (s.platform === 'cf') {
       streakMap[s.discord_id] = s.current_streak;
     }
   }
@@ -24,7 +24,7 @@ function computeLeaderboard(users, ratings, streaks = []) {
       const cfS = u.cf_handle ? (ratingMap[u.discord_id]?.cf?.solved ?? 0) : 0;
       const acR = u.ac_handle ? (ratingMap[u.discord_id]?.ac?.rating ?? 0) : 0;
       const acS = u.ac_handle ? (ratingMap[u.discord_id]?.ac?.solved ?? 0) : 0;
-      const maxStreak = streakMap[u.discord_id] ?? 0;
+      const cfStreak = u.cf_handle ? (streakMap[u.discord_id] ?? 0) : 0;
 
       return {
         discord_id: u.discord_id,
@@ -37,7 +37,7 @@ function computeLeaderboard(users, ratings, streaks = []) {
         ac_rating:  acR,
         ac_solved:  acS,
         ac_linked:  !!u.ac_handle,
-        max_streak: maxStreak,
+        cf_streak:  cfStreak,
         highest:    Math.max(cfR, acR)
       };
     })
@@ -56,8 +56,8 @@ function computeLeaderboard(users, ratings, streaks = []) {
       if (a.ac_solved !== b.ac_solved) {
         return b.ac_solved - a.ac_solved;
       }
-      // 4. Max Streak
-      return b.max_streak - a.max_streak;
+      // 4. CF Streak
+      return b.cf_streak - a.cf_streak;
     });
 
   return rows;
