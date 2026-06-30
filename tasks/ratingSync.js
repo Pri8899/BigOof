@@ -440,15 +440,9 @@ async function calculateACStreak(handle) {
     let fromSecond = 0;
     let pagesFetched = 0;
     while (pagesFetched < 50) {
-      const KENKOOOO_HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
-        'Accept-Encoding': 'gzip, deflate',
-        'Origin':     'https://kenkoooo.com',
-        'Referer':    'https://kenkoooo.com/atcoder/'
-      };
       const res = await axios.get(
         `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=${fromSecond}`,
-        { timeout: 12000, headers: KENKOOOO_HEADERS }
+        { timeout: 12000 }
       );
       if (!Array.isArray(res.data) || res.data.length === 0) break;
       for (const s of res.data) {

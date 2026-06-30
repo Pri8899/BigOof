@@ -27,7 +27,6 @@ const { buildSubmissionEmbed } = require('../utils/embeds');
 
 const KENKOOOO_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
-  'Accept-Encoding': 'gzip, deflate',
   'Origin':     'https://kenkoooo.com',
   'Referer':    'https://kenkoooo.com/atcoder/'
 };
