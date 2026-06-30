@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodeSync Pro — Settings</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+      --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+      --accent: #58a6ff; --accent-h: #79b8ff;
+      --green: #3fb950; --red: #f85149; --orange: #f97316; --yellow: #eab308;
+      --r: 10px;
+    }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; padding: 32px 20px;
+    }
+    .container { width: 100%; max-width: 640px; margin: 0 auto; }
+
+    /* Header */
+    .header { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+    .header-icon {
+      width: 96px; height: 96px;
+      border-radius: 20px;
+      flex-shrink: 0;
+      object-fit: cover;
+    }
+    .header h1 { font-size: 22px; font-weight: 800; }
+    .header p { font-size: 13px; color: var(--muted); margin-top: 3px; }
+
+    /* Info box */
+    .info-box {
+      background: rgba(88,166,255,.07);
+      border: 1px solid rgba(88,166,255,.2);
+      border-radius: 8px; padding: 14px 16px; margin-bottom: 16px;
+    }
+    .info-box p { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+    .info-box a { color: var(--accent); text-decoration: none; }
+    .info-box a:hover { text-decoration: underline; }
+
+    /* Card */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 20px; margin-bottom: 14px;
+    }
+    .card-title {
+      font-size: 12px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .07em;
+      margin-bottom: 16px; display: flex; align-items: center;
+      justify-content: space-between; gap: 8px;
+    }
+
+    /* Toggle switch */
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .toggle-label { font-size: 13px; color: var(--text); font-weight: 500; }
+    .toggle-switch { position: relative; width: 40px; height: 22px; cursor: pointer; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; border-radius: 11px;
+      background: var(--surface2); border: 1px solid var(--border);
+      transition: .2s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--muted); top: 2px; left: 2px; transition: .2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: rgba(63,185,80,.2); border-color: var(--green); }
+    .toggle-switch input:checked + .toggle-slider::before { background: var(--green); transform: translateX(18px); }
+
+    /* Form groups */
+    .form-group { margin-bottom: 16px; }
+    .form-group:last-of-type { margin-bottom: 0; }
+    label {
+      display: block; font-size: 12.5px; font-weight: 600;
+      color: var(--text); margin-bottom: 6px;
+    }
+    .label-hint { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 6px; }
+    input[type="text"], input[type="password"] {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 13.5px;
+      font-family: inherit; padding: 9px 12px; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,.12); }
+    input::placeholder { color: var(--muted); }
+    .token-wrapper { position: relative; }
+    .token-wrapper input { padding-right: 42px; }
+    .toggle-vis {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 15px; padding: 2px; transition: color .15s;
+    }
+    .toggle-vis:hover { color: var(--text); }
+    .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+    /* Buttons */
+    .btn-row { display: flex; gap: 8px; margin-top: 16px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 7px; padding: 9px 18px; border-radius: 8px;
+      font-size: 13.5px; font-weight: 600; font-family: inherit;
+      cursor: pointer; transition: all .15s; border: none; outline: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #1f6feb, #58a6ff);
+      color: #fff; flex: 1;
+    }
+    .btn-primary:hover { opacity: .9; transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .btn-secondary {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-danger {
+      background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.3);
+      color: var(--red);
+    }
+    .btn-danger:hover { background: rgba(248,81,73,.22); }
+
+    /* Status messages */
+    .status-msg {
+      margin-top: 12px; padding: 11px 14px; border-radius: 8px;
+      font-size: 13px; font-weight: 500; display: none;
+      align-items: center; gap: 8px;
+      animation: fadeIn .2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .status-msg.success { display: flex; background: rgba(63,185,80,.15); border: 1px solid rgba(63,185,80,.45); color: #4ade80; font-weight: 600; }
+    .status-msg.error { display: flex; background: rgba(248,81,73,.15); border: 1px solid rgba(248,81,73,.45); color: #f87171; font-weight: 600; }
+    .status-msg.loading { display: flex; background: rgba(88,166,255,.12); border: 1px solid rgba(88,166,255,.4); color: var(--accent); font-weight: 600; }
+    .status-msg.info { display: flex; background: rgba(56,189,248,.12); border: 1px solid rgba(56,189,248,.4); color: #38bdf8; font-weight: 600; }
+    .spinner { width: 13px; height: 13px; border: 2px solid rgba(88,166,255,.3); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scope badge */
+    .scope-badge {
+      display: inline-block; background: rgba(63,185,80,.15); color: var(--green);
+      font-size: 11px; font-weight: 600; padding: 1px 6px;
+      border-radius: 4px; border: 1px solid rgba(63,185,80,.3);
+    }
+    .repo-hint { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+    .repo-hint a { color: var(--accent); text-decoration: none; }
+    .repo-hint a:hover { text-decoration: underline; }
+
+    /* Create repo modal */
+    .create-repo-row { display: flex; gap: 8px; align-items: flex-end; }
+    .create-repo-row .form-group { flex: 1; margin-bottom: 0; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+    .checkbox-row input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; }
+
+    /* Folder preview */
+    .folder-preview {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 12px; margin-top: 10px;
+      font-family: 'Courier New', monospace; font-size: 11px;
+      color: var(--muted); line-height: 1.8;
+    }
+    /* ── Smooth Hover Scale & Micro-Animations ── */
+    .btn, .toggle-switch, .toggle-vis, input[type="text"], input[type="password"], input[type="checkbox"] {
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.25s, border-color 0.25s, box-shadow 0.25s, color 0.25s !important;
+    }
+    .btn:hover:not(:disabled), .toggle-switch:hover, .toggle-vis:hover {
+      transform: scale(1.06) !important;
+    }
+    input[type="text"]:focus, input[type="password"]:focus {
+      transform: scale(1.01) !important;
+    }
+    .btn:active:not(:disabled), .toggle-switch:active, .toggle-vis:active {
+      transform: scale(0.96) !important;
+    }
+    .btn:disabled {
+      cursor: not-allowed;
+      transform: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="icons/icon128.png" class="header-icon" alt="CodeSync Pro Logo" />
+      <div>
+        <h1>CodeSync Pro</h1>
+        <p>Configure GitHub sync for Codeforces, AtCoder &amp; LeetCode</p>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <p>
+        Every time you get an <strong>Accepted</strong> verdict on any supported platform,
+        this extension pushes your solution + problem statement to GitHub.
+      </p>
+    </div>
+
+    <!-- GitHub Card -->
+    <div class="card">
+      <div class="card-title">🐙 GitHub Repository</div>
+
+      <div class="form-group">
+        <label for="gh-owner">Username <span class="label-hint">GitHub account owner</span></label>
+        <input type="text" id="gh-owner" placeholder="e.g. octocat" autocomplete="off" />
+      </div>
+
+      <div class="form-group">
+        <label for="gh-repo">Repository Name <span class="label-hint">Will be created if it doesn't exist</span></label>
+        <div class="create-repo-row">
+          <div class="form-group">
+            <input type="text" id="gh-repo" placeholder="e.g. my-cp-solutions" autocomplete="off" />
+          </div>
+          <button class="btn btn-secondary" id="create-repo-btn">✨ Create</button>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="repo-private" />
+          <label for="repo-private" style="margin-bottom:0;font-weight:400">Make repository private</label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="gh-token">
+          Personal Access Token
+          <span class="label-hint">Needs <span class="scope-badge">repo</span> scope</span>
+        </label>
+        <div class="token-wrapper">
+          <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
+          <button class="toggle-vis" id="toggle-token" type="button">👁</button>
+        </div>
+      </div>
+
+      <p class="repo-hint">
+        Generate a token at <a href="https://github.com/settings/tokens/new?scopes=repo&description=CodeSyncPro" target="_blank">github.com/settings/tokens</a>
+        with the <span class="scope-badge">repo</span> scope enabled.
+      </p>
+
+
+
+      <div class="divider"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="save-btn">
+          <span id="btn-text">💾 Save &amp; Test Connection</span>
+        </button>
+      </div>
+      <div class="status-msg" id="status-msg"></div>
+      <div class="status-msg" id="create-repo-msg" style="margin-top:8px"></div>
+    </div>
+
+    <!-- Codeforces Card -->
+    <div class="card">
+      <div class="card-title">
+        🔵 Codeforces
+        <label class="toggle-switch">
+          <input type="checkbox" id="cf-enabled" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="cf-handle">Handle <span class="label-hint">Your exact Codeforces username</span></label>
+        <input type="text" id="cf-handle" placeholder="e.g. tourist" autocomplete="off" />
+      </div>
+      <div class="btn-row" style="margin-top: 14px;">
+        <button class="btn btn-primary" id="cf-save-btn">💾 Save Codeforces Handle</button>
+      </div>
+      <div class="status-msg" id="cf-status-msg"></div>
+    </div>
+
+    <!-- AtCoder Card -->
+    <div class="card">
+      <div class="card-title">
+        🟠 AtCoder
+        <label class="toggle-switch">
+          <input type="checkbox" id="ac-enabled" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="ac-handle">Username <span class="label-hint">Your exact AtCoder username</span></label>
+        <input type="text" id="ac-handle" placeholder="e.g. tourist" autocomplete="off" />
+      </div>
+      <div class="btn-row" style="margin-top: 14px;">
+        <button class="btn btn-primary" id="ac-save-btn">💾 Save AtCoder Username</button>
+      </div>
+      <div class="status-msg" id="ac-status-msg"></div>
+    </div>
+
+    <!-- LeetCode Card -->
+    <div class="card">
+      <div class="card-title">
+        🟡 LeetCode
+        <label class="toggle-switch">
+          <input type="checkbox" id="lc-enabled" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <p style="font-size:12.5px;color:var(--muted);line-height:1.5">
+        LeetCode sync detects accepted submissions automatically on the problem page.
+        Make sure you are logged into LeetCode in this browser.
+      </p>
+    </div>
+
+    <!-- Preferences Card -->
+    <div class="card">
+      <div class="card-title">⚙️ Preferences</div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">🔔 Play sound on sync</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Plays a chime when a solution is uploaded</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="sound-enabled" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="form-group">
+        <label for="lang-filter">Language Filter <span class="label-hint">Only sync these extensions (e.g. `cpp, py, java`). Leave blank to sync all.</span></label>
+        <input type="text" id="lang-filter" placeholder="e.g. cpp, py" autocomplete="off" />
+      </div>
+      <div class="btn-row" style="margin-top: 14px;">
+        <button class="btn btn-primary" id="pref-save-btn">💾 Save Preferences</button>
+      </div>
+      <div class="status-msg" id="pref-status-msg"></div>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

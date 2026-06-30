@@ -143,7 +143,7 @@ async function getACSolvedCount(handle) {
   const solvedProblems = new Set();
   let fromSecond = 0;
   let pagesFetched = 0;
-  while (pagesFetched < 10) { // Safety cap to prevent infinite loop
+  while (pagesFetched < 50) { // Safety cap to prevent infinite loop
     const res = await axiosGetWithRetry(
       `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=${fromSecond}`,
       { timeout: 15000, headers: KENKOOOO_HEADERS }

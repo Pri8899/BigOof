@@ -150,6 +150,15 @@ async function syncAllRatings(client) {
 
     if (user.ac_handle) {
       try {
+        const streakInfo = await calculateACStreak(user.ac_handle);
+        if (streakInfo && (streakInfo.current > 0 || streakInfo.max > 0)) {
+          upsertStreak(user.discord_id, 'ac', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+        }
+      } catch (err) {
+        console.error(`[RatingSync] AC streak error for ${user.ac_handle}:`, err.message);
+      }
+
+      try {
         const stats = await getACUser(user.ac_handle);
         if (stats) {
           const hasExisting = existing['ac'] !== undefined;
@@ -421,6 +430,92 @@ async function calculateCFStreak(handle) {
     return { current, max };
   } catch (err) {
     console.error(`[StreakCalc] Error calculating streak for ${handle}:`, err.message);
+    return { current: 0, max: 0 };
+  }
+}
+
+async function calculateACStreak(handle) {
+  try {
+    const allSubs = [];
+    let fromSecond = 0;
+    let pagesFetched = 0;
+    while (pagesFetched < 50) {
+      const res = await axios.get(
+        `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=${fromSecond}`,
+        { timeout: 12000 }
+      );
+      if (!Array.isArray(res.data) || res.data.length === 0) break;
+      for (const s of res.data) {
+        if (s.result === 'AC') allSubs.push(s);
+      }
+      if (res.data.length < 500) break;
+      const maxEpoch = Math.max(...res.data.map(s => s.epoch_second));
+      fromSecond = maxEpoch + 1;
+      pagesFetched++;
+    }
+
+    if (allSubs.length === 0) return { current: 0, max: 0 };
+
+    const preferredOffsets = [9, 3, 0];
+    const allOffsets = [];
+    const seen = new Set();
+    for (const o of preferredOffsets) {
+      seen.add(o);
+      allOffsets.push(o);
+    }
+    for (let o = -12; o <= 14; o++) {
+      if (!seen.has(o)) allOffsets.push(o);
+    }
+
+    let bestStreak = 0;
+    let bestActivityMap = null;
+    let bestOffset = 9; // JST default
+
+    for (const offset of allOffsets) {
+      const activityMap = {};
+      for (const sub of allSubs) {
+        const dateStr = epochToDateStr(sub.epoch_second, offset);
+        activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
+      }
+      const { streak } = computeStreakFromActivity(activityMap, offset);
+      if (streak > bestStreak) {
+        bestStreak = streak;
+        bestActivityMap = activityMap;
+        bestOffset = offset;
+      }
+    }
+
+    if (bestStreak === 0) {
+      let maxAllTimeStreak = 0;
+      for (const offset of allOffsets) {
+        const activityMap = {};
+        for (const sub of allSubs) {
+          const dateStr = epochToDateStr(sub.epoch_second, offset);
+          activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
+        }
+        const maxStreak = calculateMaxStreakForActivity(activityMap);
+        if (maxStreak > maxAllTimeStreak) {
+          maxAllTimeStreak = maxStreak;
+          bestActivityMap = activityMap;
+          bestOffset = offset;
+        }
+      }
+    }
+
+    if (!bestActivityMap) {
+      bestActivityMap = {};
+      for (const sub of allSubs) {
+        const dateStr = epochToDateStr(sub.epoch_second, bestOffset);
+        bestActivityMap[dateStr] = (bestActivityMap[dateStr] || 0) + 1;
+      }
+    }
+
+    const current = computeStreakFromActivity(bestActivityMap, bestOffset).streak;
+    const max = calculateMaxStreakForActivity(bestActivityMap);
+
+    return { current, max };
+  } catch (err) {
+    console.error(`[StreakCalc] Error calculating AC streak for ${handle}:`, err.message);
     return { current: 0, max: 0 };
   }
 }
