@@ -359,22 +359,43 @@ async function calculateCFStreak(handle) {
     const res = await axios.get(`${CF_BASE}/user.status?handle=${handle}&from=1&count=2000`, { timeout: 12000 });
     if (res.data.status !== 'OK') return { current: 0, max: 0 };
 
-    const offset = 6; // Codeforces renders green boxes based on user's timezone (UTC+6) or MSK (UTC+3). We use 6 to match the user's exact green boxes.
-    const activityMap = {};
+    const subs = res.data.result.filter(sub => sub.verdict === 'OK' && sub.creationTimeSeconds);
 
-    for (const sub of res.data.result) {
-      if (sub.problem && sub.creationTimeSeconds && sub.verdict === 'OK') {
-        const dateStr = epochToDateStr(sub.creationTimeSeconds, offset);
-        activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
+    const offsetsToTry = new Set([6, 3, 0]);
+    for (let i = -12; i <= 14; i++) offsetsToTry.add(i);
+
+    let maxCurrentStreak = 0;
+    let maxHistoricalStreak = 0;
+
+    for (const offset of offsetsToTry) {
+      const activityMap = {};
+      for (const sub of subs) {
+        const dStr = epochToDateStr(sub.creationTimeSeconds, offset);
+        activityMap[dStr] = (activityMap[dStr] || 0) + 1;
       }
+
+      const current = computeStreakFromActivity(activityMap, offset).streak;
+      const max = calculateMaxStreakForActivity(activityMap);
+
+      if (current > maxCurrentStreak) maxCurrentStreak = current;
+      if (max > maxHistoricalStreak) maxHistoricalStreak = max;
     }
 
-    const current = computeStreakFromActivity(activityMap, offset).streak;
-    const max = calculateMaxStreakForActivity(activityMap);
+    if (maxCurrentStreak === 0 && maxHistoricalStreak === 0) {
+      const activityMap = {};
+      for (const sub of subs) {
+        const dStr = epochToDateStr(sub.creationTimeSeconds, 6);
+        activityMap[dStr] = (activityMap[dStr] || 0) + 1;
+      }
+      return { 
+        current: computeStreakFromActivity(activityMap, 6).streak, 
+        max: calculateMaxStreakForActivity(activityMap) 
+      };
+    }
 
-    return { current, max };
+    return { current: maxCurrentStreak, max: Math.max(maxHistoricalStreak, maxCurrentStreak) };
   } catch (err) {
-    console.error(`[StreakCalc] Error calculating streak for ${handle}:`, err.message);
+    console.error(`[CF Streak] Error for ${handle}:`, err.message);
     return { current: 0, max: 0 };
   }
 }
