@@ -276,9 +276,9 @@ function startRatingSync(client) {
   }, 10000);
 
   // Exactly at 12:00 AM and 12:00 PM in Asia/Dhaka time
-  cron.schedule('0 0,12 * * *', async () => {
+  cron.schedule('0 9 * * *', async () => {
     try {
-      console.log(`[RatingSync] Scheduled 12-hour rating sync and dashboard update triggered.`);
+      console.log(`[RatingSync] Scheduled 9 AM rating sync and dashboard update triggered.`);
       await syncAllRatings(client);
       await updateDashboard(client);
     } catch (err) {
@@ -286,7 +286,7 @@ function startRatingSync(client) {
     }
   }, { timezone: 'Asia/Dhaka' });
 
-  console.log('[RatingSync] Cron scheduler started (runs at 12:00 AM and 12:00 PM Dhaka time).');
+  console.log('[RatingSync] Cron scheduler started (runs at 9:00 AM Dhaka time).');
 }
 
 function epochToDateStr(epoch, offset) {
@@ -359,7 +359,7 @@ async function calculateCFStreak(handle) {
     const res = await axios.get(`${CF_BASE}/user.status?handle=${handle}&from=1&count=2000`, { timeout: 12000 });
     if (res.data.status !== 'OK') return { current: 0, max: 0 };
 
-    const subs = res.data.result.filter(sub => sub.verdict === 'OK' && sub.creationTimeSeconds);
+    const subs = res.data.result.filter(sub => sub.creationTimeSeconds);
 
     const offsetsToTry = new Set([6, 3, 0]);
     for (let i = -12; i <= 14; i++) offsetsToTry.add(i);
@@ -412,7 +412,7 @@ async function calculateACStreak(handle) {
       );
       if (!Array.isArray(res.data) || res.data.length === 0) break;
       for (const s of res.data) {
-        if (s.result === 'AC') allSubs.push(s);
+        allSubs.push(s);
       }
       if (res.data.length < 500) break;
       const maxEpoch = Math.max(...res.data.map(s => s.epoch_second));
