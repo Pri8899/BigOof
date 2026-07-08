@@ -361,39 +361,17 @@ async function calculateCFStreak(handle) {
 
     const subs = res.data.result.filter(sub => sub.creationTimeSeconds);
 
-    const offsetsToTry = new Set([6, 3, 0]);
-    for (let i = -12; i <= 14; i++) offsetsToTry.add(i);
-
-    let maxCurrentStreak = 0;
-    let maxHistoricalStreak = 0;
-
-    for (const offset of offsetsToTry) {
-      const activityMap = {};
-      for (const sub of subs) {
-        const dStr = epochToDateStr(sub.creationTimeSeconds, offset);
-        activityMap[dStr] = (activityMap[dStr] || 0) + 1;
-      }
-
-      const current = computeStreakFromActivity(activityMap, offset).streak;
-      const max = calculateMaxStreakForActivity(activityMap);
-
-      if (current > maxCurrentStreak) maxCurrentStreak = current;
-      if (max > maxHistoricalStreak) maxHistoricalStreak = max;
+    const offset = 6; // Asia/Dhaka
+    const activityMap = {};
+    for (const sub of subs) {
+      const dStr = epochToDateStr(sub.creationTimeSeconds, offset);
+      activityMap[dStr] = (activityMap[dStr] || 0) + 1;
     }
 
-    if (maxCurrentStreak === 0 && maxHistoricalStreak === 0) {
-      const activityMap = {};
-      for (const sub of subs) {
-        const dStr = epochToDateStr(sub.creationTimeSeconds, 6);
-        activityMap[dStr] = (activityMap[dStr] || 0) + 1;
-      }
-      return { 
-        current: computeStreakFromActivity(activityMap, 6).streak, 
-        max: calculateMaxStreakForActivity(activityMap) 
-      };
-    }
+    const current = computeStreakFromActivity(activityMap, offset).streak;
+    const max = calculateMaxStreakForActivity(activityMap);
 
-    return { current: maxCurrentStreak, max: Math.max(maxHistoricalStreak, maxCurrentStreak) };
+    return { current, max };
   } catch (err) {
     console.error(`[CF Streak] Error for ${handle}:`, err.message);
     return { current: 0, max: 0 };
@@ -422,62 +400,15 @@ async function calculateACStreak(handle) {
 
     if (allSubs.length === 0) return { current: 0, max: 0 };
 
-    const preferredOffsets = [9, 3, 0];
-    const allOffsets = [];
-    const seen = new Set();
-    for (const o of preferredOffsets) {
-      seen.add(o);
-      allOffsets.push(o);
-    }
-    for (let o = -12; o <= 14; o++) {
-      if (!seen.has(o)) allOffsets.push(o);
+    const offset = 6; // Asia/Dhaka
+    const activityMap = {};
+    for (const sub of allSubs) {
+      const dateStr = epochToDateStr(sub.epoch_second, offset);
+      activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
     }
 
-    let bestStreak = 0;
-    let bestActivityMap = null;
-    let bestOffset = 9; // JST default
-
-    for (const offset of allOffsets) {
-      const activityMap = {};
-      for (const sub of allSubs) {
-        const dateStr = epochToDateStr(sub.epoch_second, offset);
-        activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
-      }
-      const { streak } = computeStreakFromActivity(activityMap, offset);
-      if (streak > bestStreak) {
-        bestStreak = streak;
-        bestActivityMap = activityMap;
-        bestOffset = offset;
-      }
-    }
-
-    if (bestStreak === 0) {
-      let maxAllTimeStreak = 0;
-      for (const offset of allOffsets) {
-        const activityMap = {};
-        for (const sub of allSubs) {
-          const dateStr = epochToDateStr(sub.epoch_second, offset);
-          activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
-        }
-        const maxStreak = calculateMaxStreakForActivity(activityMap);
-        if (maxStreak > maxAllTimeStreak) {
-          maxAllTimeStreak = maxStreak;
-          bestActivityMap = activityMap;
-          bestOffset = offset;
-        }
-      }
-    }
-
-    if (!bestActivityMap) {
-      bestActivityMap = {};
-      for (const sub of allSubs) {
-        const dateStr = epochToDateStr(sub.epoch_second, bestOffset);
-        bestActivityMap[dateStr] = (bestActivityMap[dateStr] || 0) + 1;
-      }
-    }
-
-    const current = computeStreakFromActivity(bestActivityMap, bestOffset).streak;
-    const max = calculateMaxStreakForActivity(bestActivityMap);
+    const current = computeStreakFromActivity(activityMap, offset).streak;
+    const max = calculateMaxStreakForActivity(activityMap);
 
     return { current, max };
   } catch (err) {
