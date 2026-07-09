@@ -460,4 +460,4 @@ async function updateDiscordStreakRole(client, discordId, currentStreak) {
   }
 }
 
-module.exports = { startRatingSync, syncAllRatings, updateDashboard };
+module.exports = { startRatingSync, syncAllRatings, updateDashboard, calculateCFStreak, calculateACStreak };

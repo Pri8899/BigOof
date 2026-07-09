@@ -251,6 +251,16 @@ async function runSubmissionFeed(client) {
       } catch (err) {
         console.error(`[SubmissionFeed] Error updating CF stats for ${user.cf_handle}:`, err.message);
       }
+      try {
+        const { calculateCFStreak } = require('./ratingSync');
+        const streakInfo = await calculateCFStreak(user.cf_handle);
+        if (streakInfo) {
+          const { upsertStreak } = require('../database/db');
+          upsertStreak(user.discord_id, 'cf', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+        }
+      } catch (err) {
+        console.error(`[SubmissionFeed] Error updating CF streak for ${user.cf_handle}:`, err.message);
+      }
       shouldUpdateDashboard = true;
     }
 
@@ -263,6 +273,16 @@ async function runSubmissionFeed(client) {
         }
       } catch (err) {
         console.error(`[SubmissionFeed] Error updating AC stats for ${user.ac_handle}:`, err.message);
+      }
+      try {
+        const { calculateACStreak } = require('./ratingSync');
+        const streakInfo = await calculateACStreak(user.ac_handle);
+        if (streakInfo) {
+          const { upsertStreak } = require('../database/db');
+          upsertStreak(user.discord_id, 'ac', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+        }
+      } catch (err) {
+        console.error(`[SubmissionFeed] Error updating AC streak for ${user.ac_handle}:`, err.message);
       }
       shouldUpdateDashboard = true;
     }
