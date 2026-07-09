@@ -290,11 +290,29 @@ function contestExists(contestId) {
 }
 
 function upsertContest(contestId, platform, name, startTime, durationSec, url) {
-  db.prepare(`
-    INSERT INTO notified_contests (contest_id, platform, name, start_time, duration_sec, url)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(contest_id) DO NOTHING
-  `).run(contestId, platform, name, startTime, durationSec, url);
+  const existing = db.prepare('SELECT start_time FROM notified_contests WHERE contest_id = ?').get(contestId);
+  
+  if (existing) {
+    let query = `
+      UPDATE notified_contests 
+      SET name = ?, start_time = ?, duration_sec = ?, url = ?
+    `;
+    const params = [name, startTime, durationSec, url];
+
+    if (existing.start_time !== startTime) {
+      query += `, notified_24h = 0, notified_1h = 0`;
+    }
+    
+    query += ` WHERE contest_id = ?`;
+    params.push(contestId);
+    
+    db.prepare(query).run(...params);
+  } else {
+    db.prepare(`
+      INSERT INTO notified_contests (contest_id, platform, name, start_time, duration_sec, url)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(contestId, platform, name, startTime, durationSec, url);
+  }
 }
 
 function getUpcomingContests(maxSeconds = 7 * 24 * 3600) {
