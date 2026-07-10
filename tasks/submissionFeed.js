@@ -124,11 +124,17 @@ async function fetchCFSubmissions(user) {
     const nowSec = Math.floor(Date.now() / 1000);
     const minTime = nowSec - 10800; // 3 hours
 
+    let lowestPendingId = Infinity;
+    for (const sub of submissions) {
+      if (sub.verdict === 'TESTING' || !sub.verdict) {
+        lowestPendingId = Math.min(lowestPendingId, sub.id);
+      }
+    }
+
     for (const sub of submissions) {
       const isNew = lastId !== null ? (sub.id > lastId) : (sub.creationTimeSeconds >= minTime);
       
       if (isNew) {
-        highestId = Math.max(highestId, sub.id);
         if (sub.verdict === 'OK' && sub.problem) {
           const contestName = await getOrFetchContestName(sub.problem.contestId);
           const isGym = Number(sub.problem.contestId) >= 100000;
@@ -144,7 +150,10 @@ async function fetchCFSubmissions(user) {
             contestName: contestName
           });
         }
-      } else if (lastId === null) {
+      }
+      
+      // Safely advance the highestId only for submissions that are fully processed
+      if (sub.id < lowestPendingId && (lastId === null || sub.id > lastId)) {
         highestId = Math.max(highestId, sub.id);
       }
     }
