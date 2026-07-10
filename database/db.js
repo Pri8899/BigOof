@@ -255,6 +255,10 @@ function unlinkPlatform(discordId, platform) {
   const col = `${platform}_handle`;
   db.prepare(`UPDATE users SET ${col} = NULL WHERE discord_id = ?`).run(discordId);
   db.prepare(`DELETE FROM ratings WHERE discord_id = ? AND platform = ?`).run(discordId, platform);
+  db.prepare(`DELETE FROM last_submissions WHERE discord_id = ? AND platform = ?`).run(discordId, platform);
+  db.prepare(`DELETE FROM streaks WHERE discord_id = ? AND platform = ?`).run(discordId, platform);
+  db.prepare(`DELETE FROM weekly_snapshots WHERE discord_id = ? AND platform = ?`).run(discordId, platform);
+  db.prepare(`DELETE FROM rating_history WHERE discord_id = ? AND platform = ?`).run(discordId, platform);
 }
 
 function getAllUsers() {
