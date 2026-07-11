@@ -6,38 +6,47 @@ const path = require('path');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('restoredb')
-    .setDescription('Upload your cpbot.db to restore the database.')
-    .addAttachmentOption(option => 
-      option.setName('database_file')
-        .setDescription('Upload your cpbot.db file here')
+    .setDescription('Admin only: Upload a cpbot.db file to restore the database.')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addAttachmentOption(option =>
+      option.setName('database')
+        .setDescription('The cpbot.db file to upload')
         .setRequired(true)
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    ),
 
   async execute(interaction) {
-    const attachment = interaction.options.getAttachment('database_file');
+    await interaction.deferReply({ ephemeral: true });
+
+    const attachment = interaction.options.getAttachment('database');
 
     if (!attachment.name.endsWith('.db') && !attachment.name.endsWith('.sqlite')) {
-      return interaction.reply({ content: '❌ Invalid file type. Please upload your `cpbot.db` file.', ephemeral: true });
+      return interaction.editReply('❌ Please upload a valid .db or .sqlite file!');
     }
 
-    await interaction.reply({ content: '📥 Downloading and restoring database... please wait.', ephemeral: true });
-
-    // Path to the database in the root folder
-    const dbPath = path.join(__dirname, '..', '..', 'cpbot.db');
+    const dbPath = path.join(__dirname, '../../cpbot.db');
     
-    // Download and overwrite
+    // Backup the current empty one just in case
+    if (fs.existsSync(dbPath)) {
+      fs.copyFileSync(dbPath, dbPath + '.backup');
+    }
+
     const file = fs.createWriteStream(dbPath);
+    
     https.get(attachment.url, (response) => {
       response.pipe(file);
       file.on('finish', () => {
         file.close();
-        interaction.editReply({ content: '✅ Database successfully restored! All your streaks and leaderboard stats are back! Please restart your bot on Railway to apply the changes.' });
+        interaction.editReply('✅ Database successfully restored! The bot will now restart to load the new data. Please wait 10 seconds.');
+        
+        // Exit process to allow Railway/PM2 to auto-restart the bot and load the new DB
+        setTimeout(() => {
+          process.exit(0);
+        }, 2000);
       });
     }).on('error', (err) => {
-      fs.unlink(dbPath, () => {}); // delete the file on error
+      fs.unlink(dbPath, () => {});
       console.error(err);
-      interaction.editReply({ content: '❌ Failed to download the database: ' + err.message });
+      interaction.editReply('❌ Failed to download the database file.');
     });
   },
 };
