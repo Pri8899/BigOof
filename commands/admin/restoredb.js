@@ -23,7 +23,7 @@ module.exports = {
       return interaction.editReply('❌ Please upload a valid .db or .sqlite file!');
     }
 
-    const dbPath = path.join(__dirname, '../../cpbot.db');
+    const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../cpbot.db');
     
     // Backup the current empty one just in case
     if (fs.existsSync(dbPath)) {
