@@ -15,10 +15,23 @@ if (process.env.RAILWAY_ENVIRONMENT) {
 }
 
 const DB_PATH = process.env.DATABASE_PATH || defaultDbPath;
-const db = new Database(DB_PATH);
-
-// Enable WAL mode for better performance
-db.pragma('journal_mode = WAL');
+let db;
+try {
+  db = new Database(DB_PATH);
+  // Enable WAL mode for better performance
+  db.pragma('journal_mode = WAL');
+} catch (err) {
+  if (err.message.includes('malformed')) {
+    console.warn('[Database] Database is malformed! Deleting corrupt files and creating a fresh one...');
+    if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
+    if (fs.existsSync(DB_PATH + '-wal')) fs.unlinkSync(DB_PATH + '-wal');
+    if (fs.existsSync(DB_PATH + '-shm')) fs.unlinkSync(DB_PATH + '-shm');
+    db = new Database(DB_PATH);
+    db.pragma('journal_mode = WAL');
+  } else {
+    throw err;
+  }
+}
 
 // ─── Create Tables ───────────────────────────────────────────
 db.exec(`

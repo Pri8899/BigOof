@@ -23,11 +23,20 @@ module.exports = {
       return interaction.editReply('❌ Please upload a valid .db or .sqlite file!');
     }
 
+    const { db } = require('../../database/db');
     const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../cpbot.db');
     
     // Backup the current empty one just in case
     if (fs.existsSync(dbPath)) {
       fs.copyFileSync(dbPath, dbPath + '.backup');
+    }
+
+    try {
+      db.close();
+      if (fs.existsSync(dbPath + '-wal')) fs.unlinkSync(dbPath + '-wal');
+      if (fs.existsSync(dbPath + '-shm')) fs.unlinkSync(dbPath + '-shm');
+    } catch (e) {
+      console.warn("Could not close db or delete wal files before restore:", e);
     }
 
     const file = fs.createWriteStream(dbPath);
