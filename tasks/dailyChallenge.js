@@ -71,6 +71,8 @@ async function postDailySuggestions(client, targetDate = null) {
   let p1 = null;
   let p2 = null;
   let p3 = null;
+  let p4 = null;
+  let p5 = null;
 
   if (existingDaily) {
     console.log(`[Suggest] Today's suggestions already exist in DB. Re-using original problems...`);
@@ -93,6 +95,8 @@ async function postDailySuggestions(client, targetDate = null) {
         p1 = findProb(existingDaily.p1_id);
         p2 = findProb(existingDaily.p2_id);
         p3 = findProb(existingDaily.p3_id);
+        p4 = findProb(existingDaily.p4_id);
+        p5 = findProb(existingDaily.p5_id);
       }
     } catch (err) {
       console.error('[Suggest] Failed to fetch existing problem details from Codeforces:', err.message);
@@ -100,7 +104,7 @@ async function postDailySuggestions(client, targetDate = null) {
   }
 
   // If they don't exist in DB (or if CF API failed to fetch details), generate new ones!
-  if (!p1 && !p2 && !p3) {
+  if (!p1 && !p2 && !p3 && !p4 && !p5) {
     console.log(`[Suggest] Generating new daily recommendations...`);
     const solvedSet = await getMergedSolvedSet();
 
@@ -120,37 +124,43 @@ async function postDailySuggestions(client, targetDate = null) {
       baseRating = Math.round(avgRating / 100) * 100;
     }
 
-    let easyRating = 800;
-    let mediumRating = 1000;
-    let hardRating = 1200;
+    // 5 Tiers: From 800 to potentially 3500
+    let r1 = 800;
+    let r2 = Math.min(3500, Math.max(900, baseRating));
+    let r3 = Math.min(3500, Math.max(1100, baseRating + 200));
+    let r4 = Math.min(3500, Math.max(1400, baseRating + 500));
+    let r5 = Math.min(3500, Math.max(1800, baseRating + 900));
 
-    if (baseRating <= 900) {
-      easyRating = 800;
-      mediumRating = 900;
-      hardRating = 1000;
-    } else if (baseRating === 1000) {
-      easyRating = 800;
-      mediumRating = 1000;
-      hardRating = 1100;
-    } else {
-      easyRating = Math.max(800, baseRating - 200);
-      mediumRating = Math.max(800, baseRating);
-      hardRating = Math.max(800, baseRating + 200);
-    }
+    // Space them out at least
+    if (r2 <= r1) r2 = r1 + 100;
+    if (r3 <= r2) r3 = r2 + 200;
+    if (r4 <= r3) r4 = r3 + 300;
+    if (r5 <= r4) r5 = r4 + 400;
 
-    const tiers = [
-      { min: easyRating, max: easyRating },
-      { min: mediumRating, max: mediumRating },
-      { min: hardRating, max: hardRating }
-    ];
+    r1 = Math.min(r1, 3500);
+    r2 = Math.min(r2, 3500);
+    r3 = Math.min(r3, 3500);
+    r4 = Math.min(r4, 3500);
+    r5 = Math.min(r5, 3500);
 
-    const cfResults = await Promise.all(tiers.map(tier => getCFProblems(tier.min, tier.max, null, 1, solvedSet)));
-    p1 = cfResults[0]?.length > 0 ? cfResults[0][0] : null;
-    p2 = cfResults[1]?.length > 0 ? cfResults[1][0] : null;
-    p3 = cfResults[2]?.length > 0 ? cfResults[2][0] : null;
+    const usedTags = new Set();
+    const fetchTier = async (rating) => {
+      const res = await getCFProblems(rating, rating, null, 1, solvedSet, null, usedTags);
+      const prob = res?.length > 0 ? res[0] : null;
+      if (prob) {
+        prob.tags.forEach(t => usedTags.add(t.toLowerCase()));
+      }
+      return prob;
+    };
+
+    p1 = await fetchTier(r1);
+    p2 = await fetchTier(r2);
+    p3 = await fetchTier(r3);
+    p4 = await fetchTier(r4);
+    p5 = await fetchTier(r5);
     
     // Save to DB
-    setDailyProblems(todayDateStr, p1?.id || null, p2?.id || null, p3?.id || null);
+    setDailyProblems(todayDateStr, p1?.id || null, p2?.id || null, p3?.id || null, p4?.id || null, p5?.id || null);
   }
 
   // ── Codeforces Section ──
@@ -158,17 +168,18 @@ async function postDailySuggestions(client, targetDate = null) {
   const emojis = await getPlatformEmojis(channel.guild);
 
   const cfEmbed = new EmbedBuilder()
-    .setColor(0x1F8DD6)
-    .setDescription(`# \u2003\u2003${emojis.cf} Codeforces — Daily Practice Problems\n### \u2003\u2003\u2003💡 Daily Problem Suggestions — ${today}\n\nSharpen your skills! The **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\u200b`);
-
-  if (p1) cfEmbed.addFields({ name: `🟢 Easy (Rating ${p1.rating})`, value: `**[${p1.name}](${p1.url})**\n🏷️ ${p1.tags.join(', ') || 'N/A'}`, inline: false });
-  if (p2) cfEmbed.addFields({ name: `🔵 Medium (Rating ${p2.rating})`, value: `**[${p2.name}](${p2.url})**\n🏷️ ${p2.tags.join(', ') || 'N/A'}`, inline: false });
-  if (p3) cfEmbed.addFields({ name: `🔴 Hard (Rating ${p3.rating})`, value: `**[${p3.name}](${p3.url})**\n🏷️ ${p3.tags.join(', ') || 'N/A'}`, inline: false });
-
-  cfEmbed
-    .addFields({ name: '\u200b', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', inline: false })
+    .setColor(0x2B2D31)
+    .setAuthor({ name: 'Codeforces Daily Challenges', iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png' })
+    .setTitle(`📅 Daily Problem Suggestions — ${today}`)
+    .setDescription(`Sharpen your skills with today's progressive challenges! 🚀\nThe **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`)
     .setFooter({ text: 'Bot checks for First Blood automatically every 5 minutes!' })
     .setTimestamp();
+
+  if (p1) cfEmbed.addFields({ name: `🌱 Level 1 (Rating ${p1.rating})`, value: `**[${p1.name}](${p1.url})**\n\`${p1.tags.join(', ') || 'N/A'}\``, inline: false });
+  if (p2) cfEmbed.addFields({ name: `⚔️ Level 2 (Rating ${p2.rating})`, value: `**[${p2.name}](${p2.url})**\n\`${p2.tags.join(', ') || 'N/A'}\``, inline: false });
+  if (p3) cfEmbed.addFields({ name: `🔥 Level 3 (Rating ${p3.rating})`, value: `**[${p3.name}](${p3.url})**\n\`${p3.tags.join(', ') || 'N/A'}\``, inline: false });
+  if (p4) cfEmbed.addFields({ name: `⚡ Level 4 (Rating ${p4.rating})`, value: `**[${p4.name}](${p4.url})**\n\`${p4.tags.join(', ') || 'N/A'}\``, inline: false });
+  if (p5) cfEmbed.addFields({ name: `👑 Level 5 (Rating ${p5.rating})`, value: `**[${p5.name}](${p5.url})**\n\`${p5.tags.join(', ') || 'N/A'}\``, inline: false });
 
   // Clean up old suggestion messages
   try {
@@ -227,9 +238,11 @@ async function checkFirstBloods(client) {
 
     const users = getAllUsers().filter(u => u.cf_handle);
     const problemsToCheck = [
-      { id: daily.p1_id, bloodField: 'first_blood_1', currentBlood: daily.first_blood_1, label: '🟢 Easy' },
-      { id: daily.p2_id, bloodField: 'first_blood_2', currentBlood: daily.first_blood_2, label: '🔵 Medium' },
-      { id: daily.p3_id, bloodField: 'first_blood_3', currentBlood: daily.first_blood_3, label: '🔴 Hard' }
+      { id: daily.p1_id, bloodField: 'first_blood_1', currentBlood: daily.first_blood_1, label: '🌱 Level 1' },
+      { id: daily.p2_id, bloodField: 'first_blood_2', currentBlood: daily.first_blood_2, label: '⚔️ Level 2' },
+      { id: daily.p3_id, bloodField: 'first_blood_3', currentBlood: daily.first_blood_3, label: '🔥 Level 3' },
+      { id: daily.p4_id, bloodField: 'first_blood_4', currentBlood: daily.first_blood_4, label: '⚡ Level 4' },
+      { id: daily.p5_id, bloodField: 'first_blood_5', currentBlood: daily.first_blood_5, label: '👑 Level 5' }
     ];
 
     const problemDetails = {};
@@ -247,7 +260,7 @@ async function checkFirstBloods(client) {
             
             // Validate that submission is within active window
             if (sub.creationTimeSeconds >= startTimeUtc && sub.creationTimeSeconds < endTimeUtc) {
-              if (pId === daily.p1_id || pId === daily.p2_id || pId === daily.p3_id) {
+              if (pId === daily.p1_id || pId === daily.p2_id || pId === daily.p3_id || pId === daily.p4_id || pId === daily.p5_id) {
                 solvedInWindow.add(pId);
                 if (!problemDetails[pId]) {
                   problemDetails[pId] = {
@@ -269,14 +282,13 @@ async function checkFirstBloods(client) {
                   
                   const embed = new EmbedBuilder()
                     .setColor(0xE74C3C)
-                    .setTitle(`🩸 FIRST BLOOD! 🩸`)
-                    .setDescription(`<@${user.discord_id}> is the absolute first person to solve the daily **${p.label}** problem!`)
+                    .setAuthor({ name: 'FIRST BLOOD ACHIVED! 🩸', iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png' })
+                    .setDescription(`**<@${user.discord_id}>** is the absolute first person to solve the **${p.label}** daily challenge!\n\n**Problem:** [${sub.problem.name}](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})`)
                     .addFields(
-                      { name: 'Problem', value: `**[${sub.problem.name}](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})**`, inline: false },
-                      { name: 'Execution Time', value: `⏱️ ${timeSec} s`, inline: true },
-                      { name: 'Memory', value: `💾 ${memMb} MB`, inline: true }
+                      { name: '⏱️ Time', value: `${timeSec} s`, inline: true },
+                      { name: '💾 Memory', value: `${memMb} MB`, inline: true }
                     )
-                    .setThumbnail('https://cdn-icons-png.flaticon.com/512/833/833472.png')
+                    .setThumbnail(`https://cdn-icons-png.flaticon.com/512/3112/3112946.png`)
                     .setTimestamp();
 
                   await channel.send({ content: `<@${user.discord_id}>`, embeds: [embed] }).catch(() => {});
@@ -288,7 +300,7 @@ async function checkFirstBloods(client) {
         }
 
         // Check if user solved all suggested problems
-        const suggestedProblemIds = [daily.p1_id, daily.p2_id, daily.p3_id].filter(Boolean);
+        const suggestedProblemIds = [daily.p1_id, daily.p2_id, daily.p3_id, daily.p4_id, daily.p5_id].filter(Boolean);
         if (suggestedProblemIds.length > 0 && suggestedProblemIds.every(id => solvedInWindow.has(id))) {
           let sweepAnnounced = [];
           try {
@@ -314,18 +326,20 @@ async function checkFirstBloods(client) {
 
             const sweepEmbed = new EmbedBuilder()
               .setColor(0xF1C40F) // Gold
-              .setTitle('🏆 DAILY CHALLENGE SWEEP! 🏆')
-              .setDescription(`🎉 **Congratulations to <@${user.discord_id}>!** 🎉\n\nThey have successfully solved **all 3** of the daily practice problems within the active daily cycle!`)
+              .setAuthor({ name: '🏆 ULTIMATE DAILY SWEEP! 🏆', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
+              .setDescription(`**<@${user.discord_id}> is unstoppable!**\nThey have successfully solved **ALL 5** of the daily practice problems today!`)
               .addFields(
-                { name: `🟢 Easy`, value: getProbLink(daily.p1_id, 'Easy Problem'), inline: false },
-                { name: `🔵 Medium`, value: getProbLink(daily.p2_id, 'Medium Problem'), inline: false },
-                { name: `🔴 Hard`, value: getProbLink(daily.p3_id, 'Hard Problem'), inline: false }
+                { name: `🌱 Level 1`, value: getProbLink(daily.p1_id, 'Problem'), inline: false },
+                { name: `⚔️ Level 2`, value: getProbLink(daily.p2_id, 'Problem'), inline: false },
+                { name: `🔥 Level 3`, value: getProbLink(daily.p3_id, 'Problem'), inline: false },
+                { name: `⚡ Level 4`, value: getProbLink(daily.p4_id, 'Problem'), inline: false },
+                { name: `👑 Level 5`, value: getProbLink(daily.p5_id, 'Problem'), inline: false }
               )
-              .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
-              .setFooter({ text: 'Daily Sweep achieved!' })
+              .setImage('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3ZhcHhqMmxzbHoxMWh6dmd3NXl1OG1lMnNweWhkZWxobDcwcmJ5ZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26n6WvwCRGC16EqyQ/giphy.gif')
+              .setFooter({ text: 'A legendary achievement!' })
               .setTimestamp();
 
-            await channel.send({ content: `🏆 **Daily Sweep!** <@${user.discord_id}> has cleared all 3 daily problems!`, embeds: [sweepEmbed] }).catch(() => {});
+            await channel.send({ content: `**<@${user.discord_id}> just swept the daily challenges!** 🔥`, embeds: [sweepEmbed] }).catch(() => {});
             console.log(`[Sweep] Announced ${user.cf_handle} for daily sweep of date ${activeDateStr}`);
           }
         }

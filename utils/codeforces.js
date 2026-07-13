@@ -173,8 +173,9 @@ function matchesDivision(contestName, division) {
  * @param {number} count - how many to return
  * @param {Set} excludeIds - solved problem IDs
  * @param {string|null} division - 'div1', 'div2', 'div3', 'div4'
+ * @param {Set} excludeTags - tags to exclude
  */
-async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, count = 5, excludeIds = new Set(), division = null) {
+async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, count = 5, excludeIds = new Set(), division = null, excludeTags = new Set()) {
   try {
     const now = Date.now();
     
@@ -237,6 +238,13 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
         }
       }
       
+      // Check exclude tags
+      if (excludeTags && excludeTags.size > 0 && p.tags) {
+        for (const t of p.tags) {
+          if (excludeTags.has(t.toLowerCase())) return false;
+        }
+      }
+      
       return true;
     });
 
@@ -268,6 +276,11 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
         if (division) {
           const contestName = cachedContests ? cachedContests[p.contestId] : null;
           if (!matchesDivision(contestName, division)) return false;
+        }
+        if (excludeTags && excludeTags.size > 0 && p.tags) {
+          for (const t of p.tags) {
+            if (excludeTags.has(t.toLowerCase())) return false;
+          }
         }
         return true;
       });

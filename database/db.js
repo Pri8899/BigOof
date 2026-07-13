@@ -150,9 +150,13 @@ db.exec(`
     p1_id TEXT,
     p2_id TEXT,
     p3_id TEXT,
+    p4_id TEXT,
+    p5_id TEXT,
     first_blood_1 TEXT,
     first_blood_2 TEXT,
     first_blood_3 TEXT,
+    first_blood_4 TEXT,
+    first_blood_5 TEXT,
     sweep_announced TEXT DEFAULT '[]'
   );
 
@@ -191,6 +195,15 @@ try {
 } catch (e) {
   // Column already exists
 }
+
+// Run migrations to add 5-level problem columns
+['p4_id', 'p5_id', 'first_blood_4', 'first_blood_5'].forEach(col => {
+  try {
+    db.exec(`ALTER TABLE daily_problems ADD COLUMN ${col} TEXT;`);
+  } catch (e) {
+    // Column already exists
+  }
+});
 
 // Run migration to add time_na column to notified_contests if it doesn't exist
 try {
@@ -443,13 +456,14 @@ function getActiveVCForChannel(channelId) {
 }
 
 // ─── Daily Problems Helpers ─────────────────────────────────────
-function setDailyProblems(dateStr, p1_id, p2_id, p3_id) {
+function setDailyProblems(dateStr, p1_id, p2_id, p3_id, p4_id, p5_id) {
   db.prepare(`
-    INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id, p4_id, p5_id)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(date_str) DO UPDATE SET
-      p1_id = excluded.p1_id, p2_id = excluded.p2_id, p3_id = excluded.p3_id
-  `).run(dateStr, p1_id, p2_id, p3_id);
+      p1_id = excluded.p1_id, p2_id = excluded.p2_id, p3_id = excluded.p3_id,
+      p4_id = excluded.p4_id, p5_id = excluded.p5_id
+  `).run(dateStr, p1_id, p2_id, p3_id, p4_id, p5_id);
 }
 
 function getDailyProblems(dateStr) {
