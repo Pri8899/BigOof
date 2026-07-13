@@ -78,7 +78,8 @@ client.once('ready', async () => {
       let msg = `🤖 **Bot Startup Diagnostic (v1.0.3)**\n`;
       msg += `**Time:** ${new Date().toISOString()}\n`;
       msg += `**Feed Channel ID:** \`${channelId}\` (Resolved: \`${channelResolved ? '#' + channelResolved.name : 'null'}\`)\n`;
-      msg += `**Database Users:**\n\`\`\`json\n${JSON.stringify(debugUsers, null, 2)}\n\`\`\`\n`;
+      const debugUsersFiltered = debugUsers.map(({ lc_handle, ...rest }) => rest);
+      msg += `**Database Users:**\n\`\`\`json\n${JSON.stringify(debugUsersFiltered, null, 2)}\n\`\`\`\n`;
       msg += `**Last Submissions:**\n\`\`\`json\n${JSON.stringify(debugLastSubs, null, 2)}\n\`\`\``;
       await owner.send(msg).catch(() => {});
     }
