@@ -463,19 +463,11 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
 
   const platformLabel = isCF ? `${emojis.cf} Codeforces` : isAC ? `${emojis.ac} AtCoder` : `${emojis.toph} Toph`;
 
-  // ── Resolve custom emoji ID to use the clean circular server logo as thumbnail on the right side
-  let emojiId = null;
-  const match = (emojis[platform] || '').match(/:(\d+)>/);
-  if (match) {
-    emojiId = match[1];
-  }
-  const thumbnailUrl = emojiId
-    ? `https://cdn.discordapp.com/emojis/${emojiId}.png`
-    : isCF
-      ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
-      : isAC
-        ? 'https://img.atcoder.jp/assets/logo.png'
-        : 'https://toph.co/images/toph-logo.png';
+  const thumbnailUrl = isCF
+    ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
+    : isAC
+      ? 'https://img.atcoder.jp/assets/logo.png'
+      : 'https://toph.co/images/appleicon.png';
 
   // ── Category label in title
   const catLabel = category ? ` (${category})` : '';
