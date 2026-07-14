@@ -130,7 +130,8 @@ async function getTophUser(handle) {
 
     // Extract solved count
     let solved = 0;
-    const solvedMatch = html.match(/(\d+)\s*(?:problem|Problem)s?\s*(?:solved|Solved)/i) ||
+    const solvedMatch = html.match(/class="?dashlet__stat"?>(?:<[^>]+>)*\s*(\d+)\s*\/\s*\d+(?:<[^>]+>)*\s*<\/div>\s*Problems Solved/i) ||
+                        html.match(/(\d+)\s*(?:problem|Problem)s?\s*(?:solved|Solved)/i) ||
                         html.match(/Solved[^<]*<[^>]+>\s*(\d+)/i);
     if (solvedMatch) solved = parseInt(solvedMatch[1], 10) || 0;
 
