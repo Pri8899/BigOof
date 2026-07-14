@@ -9,6 +9,7 @@ const {
 } = require('../database/db');
 const { getCFUser }              = require('../utils/codeforces');
 const { getACUser }              = require('../utils/atcoder');
+const { getTophUser, calculateTophStreak } = require('../utils/toph');
 const { buildDashboardEmbed } = require('../utils/embeds');
 const { computeLeaderboard }  = require('../commands/leaderboard');
 
@@ -85,7 +86,7 @@ async function postRatingChange(client, discordId, username, platform, oldRating
 
   const { getPlatformEmojis } = require('../utils/emojis');
   const emojis = await getPlatformEmojis(channel.guild);
-  const platformName = { cf: `Codeforces ${emojis.cf}`, ac: `AtCoder ${emojis.ac}` }[platform] ?? platform;
+  const platformName = { cf: `Codeforces ${emojis.cf}`, ac: `AtCoder ${emojis.ac}`, toph: `Toph 🟣` }[platform] ?? platform;
 
   const embed = new EmbedBuilder()
     .setColor(color)
@@ -174,6 +175,33 @@ async function syncAllRatings(client) {
       }
 
       await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
+    }
+    if (user.toph_handle) {
+      try {
+        const stats = await getTophUser(user.toph_handle);
+        if (stats) {
+          const hasExisting = existing['toph'] !== undefined;
+          const oldRating = existing['toph']?.rating ?? 0;
+          upsertRating(user.discord_id, 'toph', stats);
+          insertRatingHistory(user.discord_id, 'toph', stats.rating);
+          if (client && hasExisting && oldRating !== stats.rating) {
+            await postRatingChange(client, user.discord_id, user.username, 'toph', oldRating, stats.rating, stats.rank_title, null);
+          }
+        }
+      } catch (err) {
+        console.error(`[RatingSync] Toph error ${user.toph_handle}:`, err.message);
+      }
+
+      try {
+        const streakInfo = await calculateTophStreak(user.toph_handle);
+        if (streakInfo && (streakInfo.current > 0 || streakInfo.max > 0)) {
+          upsertStreak(user.discord_id, 'toph', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+        }
+      } catch (err) {
+        console.error(`[RatingSync] Toph streak error for ${user.toph_handle}:`, err.message);
+      }
+
+      await new Promise(r => setTimeout(r, 1000)); // Rate limit safety
     }
   }
 

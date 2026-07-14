@@ -41,6 +41,7 @@ db.exec(`
     cf_handle    TEXT,
     lc_handle    TEXT,
     ac_handle    TEXT,
+    toph_handle  TEXT,
     joined_at    INTEGER DEFAULT (strftime('%s','now'))
   );
 
@@ -215,6 +216,13 @@ try {
 // Run migration to add division column to vs_matches if it doesn't exist
 try {
   db.exec("ALTER TABLE vs_matches ADD COLUMN division TEXT;");
+} catch (e) {
+  // Column already exists
+}
+
+// Run migration to add toph_handle column to users if it doesn't exist
+try {
+  db.exec("ALTER TABLE users ADD COLUMN toph_handle TEXT;");
 } catch (e) {
   // Column already exists
 }

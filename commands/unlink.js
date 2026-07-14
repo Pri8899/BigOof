@@ -13,17 +13,19 @@ module.exports = {
         .setRequired(true)
         .addChoices(
           { name: '🔵 Codeforces', value: 'cf' },
-          { name: '🔴 AtCoder',    value: 'ac' }
+          { name: '🔴 AtCoder',    value: 'ac' },
+          { name: '🟣 Toph',       value: 'toph' }
         )),
 
   async execute(interaction) {
     const platform = interaction.options.getString('platform');
     const userId   = interaction.user.id;
-    const names    = { cf: 'Codeforces', ac: 'AtCoder' };
+    const names    = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
+    const emojis   = { cf: '🔵', ac: '🔴', toph: '🟣' };
 
     const { getPlatformEmojis } = require('../utils/emojis');
-    const emojis = await getPlatformEmojis(interaction.guild);
-    const platformEmoji = platform === 'cf' ? emojis.cf : emojis.ac;
+    const guildEmojis = await getPlatformEmojis(interaction.guild);
+    const platformEmoji = platform === 'cf' ? guildEmojis.cf : platform === 'ac' ? guildEmojis.ac : '🟣';
 
     const user = getUser(userId);
     if (!user || !user[`${platform}_handle`]) {

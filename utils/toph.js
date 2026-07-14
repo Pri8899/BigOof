@@ -85,4 +85,73 @@ async function getTophContests() {
   }
 }
 
-module.exports = { getTophContests };
+/**
+ * Validate a Toph handle by checking if the profile page exists
+ */
+async function validateTophHandle(handle) {
+  try {
+    const res = await axios.get(`https://toph.co/u/${handle}`, {
+      timeout: 10000,
+      headers: BROWSER_HEADERS,
+      validateStatus: status => status < 500
+    });
+    return res.status === 200;
+  } catch (err) {
+    console.error(`[Toph] Validate handle error for ${handle}:`, err.message);
+    return false;
+  }
+}
+
+/**
+ * Fetch user stats from toph.co profile page
+ * Returns: { rating, max_rating, rank_title, solved, acceptance }
+ */
+async function getTophUser(handle) {
+  try {
+    const res = await axios.get(`https://toph.co/u/${handle}`, {
+      timeout: 10000,
+      headers: BROWSER_HEADERS
+    });
+
+    const html = res.data;
+
+    // Extract rating (e.g. data-rating="1234" or class="rating" content)
+    let rating = 0;
+    const ratingMatch = html.match(/class="[^"]*rating[^"]*"[^>]*>\s*(\d+)/i) ||
+                        html.match(/"currentRating"\s*:\s*(\d+)/i) ||
+                        html.match(/Rating[^<]*<\/[^>]+>\s*<[^>]+>\s*(\d+)/i);
+    if (ratingMatch) rating = parseInt(ratingMatch[1], 10) || 0;
+
+    // Extract rating label (rank)
+    let rank_title = 'Unrated';
+    const rankMatch = html.match(/currentRatingLabel['"]\s*:\s*['"]([^'"]+)['"]/i) ||
+                      html.match(/class="[^"]*handle[^"]*-([a-z]+)"/i);
+    if (rankMatch) rank_title = rankMatch[1];
+
+    // Extract solved count
+    let solved = 0;
+    const solvedMatch = html.match(/(\d+)\s*(?:problem|Problem)s?\s*(?:solved|Solved)/i) ||
+                        html.match(/Solved[^<]*<[^>]+>\s*(\d+)/i);
+    if (solvedMatch) solved = parseInt(solvedMatch[1], 10) || 0;
+
+    return { rating, max_rating: rating, rank_title, solved, acceptance: 0 };
+  } catch (err) {
+    console.error(`[Toph] Get user error for ${handle}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Get Toph submission streak by fetching activity data
+ */
+async function calculateTophStreak(handle) {
+  try {
+    // Toph doesn't have a submissions API, so we return 0 for now
+    // We can track it through contest participation
+    return { current: 0, max: 0 };
+  } catch (err) {
+    return { current: 0, max: 0 };
+  }
+}
+
+module.exports = { getTophContests, validateTophHandle, getTophUser, calculateTophStreak };

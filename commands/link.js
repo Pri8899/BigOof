@@ -1,8 +1,9 @@
-// commands/link.js — Link CP platform accounts (CF + AtCoder only)
+// commands/link.js — Link CP platform accounts (CF + AtCoder + Toph)
 const { SlashCommandBuilder } = require('discord.js');
 const { getUser, upsertUser, linkPlatform, upsertRating } = require('../database/db');
 const { validateCFHandle, getCFUser } = require('../utils/codeforces');
 const { validateACHandle, getACUser } = require('../utils/atcoder');
+const { validateTophHandle, getTophUser } = require('../utils/toph');
 const { successEmbed, errorEmbed }    = require('../utils/embeds');
 
 module.exports = {
@@ -15,7 +16,8 @@ module.exports = {
         .setRequired(true)
         .addChoices(
           { name: '🔵 Codeforces', value: 'cf' },
-          { name: '🔴 AtCoder',    value: 'ac' }
+          { name: '🔴 AtCoder',    value: 'ac' },
+          { name: '🟣 Toph',       value: 'toph' }
         ))
     .addStringOption(opt =>
       opt.setName('handle')
@@ -32,14 +34,15 @@ module.exports = {
 
     upsertUser(userId, username);
 
-    const platformNames = { cf: 'Codeforces', ac: 'AtCoder' };
+    const platformNames = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
     const { getPlatformEmojis } = require('../utils/emojis');
     const emojis = await getPlatformEmojis(interaction.guild);
-    const platformEmoji = platform === 'cf' ? emojis.cf : emojis.ac;
+    const platformEmoji = platform === 'cf' ? emojis.cf : platform === 'ac' ? emojis.ac : '🟣';
 
     let valid = false;
-    if (platform === 'cf') valid = await validateCFHandle(handle);
-    if (platform === 'ac') valid = await validateACHandle(handle);
+    if (platform === 'cf')   valid = await validateCFHandle(handle);
+    if (platform === 'ac')   valid = await validateACHandle(handle);
+    if (platform === 'toph') valid = await validateTophHandle(handle);
 
     if (!valid) {
       return interaction.editReply({
@@ -61,12 +64,12 @@ module.exports = {
 
     try {
       let stats = null;
-      if (platform === 'cf') stats = await getCFUser(handle);
-      if (platform === 'ac') stats = await getACUser(handle);
+      if (platform === 'cf')   stats = await getCFUser(handle);
+      if (platform === 'ac')   stats = await getACUser(handle);
+      if (platform === 'toph') stats = await getTophUser(handle);
       if (stats) {
         upsertRating(userId, platform, stats);
         const { syncAllRatings, updateDashboard } = require('../tasks/ratingSync');
-        // Immediately sync ratings, streaks, and roles for the newly linked user
         await syncAllRatings(interaction.client).catch(() => {});
         await updateDashboard(interaction.client).catch(err => console.error('[link] Dashboard update failed:', err.message));
       }

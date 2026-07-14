@@ -141,52 +141,84 @@ function buildProfileEmbed(member, user, ratings, emojis = { cf: '🔵', ac: '�
  * @param {Array} rows  - from computeLeaderboard
  * @param {Array} streaks - from getAllStreaks()
  */
-function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '🔴' }) {
+function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
   const medals = ['🥇', '🥈', '🥉'];
 
-  // Build streak lookup: discord_id -> max streak across platforms
+  // Build streak lookup per user per platform
   const streakMap = {};
   for (const s of streaks) {
-    if (!streakMap[s.discord_id] || s.current_streak > streakMap[s.discord_id]) {
-      streakMap[s.discord_id] = s.current_streak;
-    }
+    if (!streakMap[s.discord_id]) streakMap[s.discord_id] = {};
+    streakMap[s.discord_id][s.platform] = s.current_streak;
+  }
+
+  function streakFire(n) {
+    if (!n || n < 1) return '';
+    if (n >= 30) return `💫 **${n}d**`;
+    if (n >= 15) return `👑 **${n}d**`;
+    if (n >= 7)  return `🔥 **${n}d**`;
+    return `⚡ **${n}d**`;
   }
 
   let description = '';
+
   if (rows.length === 0) {
-    description = '_No members have linked their accounts yet.\nUse `/link` commands to get started!_';
+    description = '_No members have linked their accounts yet.\nUse `/link` to get started!_';
   } else {
-    const lines = rows.map((row, i) => {
-      const medal   = medals[i] ?? `\`${String(i + 1).padStart(2, ' ')}\``;
-      const cfStr   = row.cf_linked
-        ? (row.cf_rating > 0 ? `CF: **${row.cf_rating}** (Solved: **${row.cf_solved}**)` : `CF: Unrated (Solved: **${row.cf_solved}**)`)
-        : `CF: —`;
-      const acStr   = row.ac_linked
-        ? (row.ac_rating > 0 ? `AC: **${row.ac_rating}** (Solved: **${row.ac_solved}**)` : `AC: Unrated (Solved: **${row.ac_solved}**)`)
-        : `AC: —`;
-      const streak  = streakMap[row.discord_id];
-      const fire    = streak >= 30 ? ` 💫${streak}d` :
-                      streak >= 15 ? ` 👑${streak}d` :
-                      streak >= 7  ? ` 🔥${streak}d` :
-                      streak >= 1  ? ` ⚡${streak}d` : '';
-      const displayName = row.cf_handle || row.username || 'Unknown';
-      const escapedName = displayName.replace(/([_*~|`\\])/g, '\\$1');
-      return `${medal} **${escapedName}**${fire} — ${cfStr} | ${acStr}`;
+    const sections = rows.map((row, i) => {
+      const medal = medals[i] ?? `\`#${i + 1}\``;
+      const displayName = (row.cf_handle || row.toph_handle || row.username || 'Unknown').replace(/([_*~|`\\])/g, '\\$1');
+      const cfStreak    = streakMap[row.discord_id]?.cf   ?? row.cf_streak   ?? 0;
+      const acStreak    = streakMap[row.discord_id]?.ac   ?? row.ac_streak   ?? 0;
+      const tophStreak  = streakMap[row.discord_id]?.toph ?? row.toph_streak ?? 0;
+
+      // Best streak badge
+      const bestStreak = Math.max(cfStreak, acStreak, tophStreak);
+      const badge = bestStreak >= 30 ? ' 💫' : bestStreak >= 15 ? ' 👑' : bestStreak >= 7 ? ' 🔥' : bestStreak >= 1 ? ' ⚡' : '';
+
+      let lines = [`${medal} **${displayName}**${badge}`];
+
+      if (row.cf_linked) {
+        const s = streakFire(cfStreak);
+        const ratingStr = row.cf_rating > 0 ? `**${row.cf_rating}**` : `Unrated`;
+        const rankStr = row.cf_rank && row.cf_rank !== 'Unrated' ? ` _(${row.cf_rank})_` : '';
+        lines.push(`> ${emojis.cf || '🔵'} CF${rankStr} · Rating: ${ratingStr} · Solved: **${row.cf_solved}**${s ? ` · ${s}` : ''}`);
+      }
+      if (row.ac_linked) {
+        const s = streakFire(acStreak);
+        const ratingStr = row.ac_rating > 0 ? `**${row.ac_rating}**` : `Unrated`;
+        const rankStr = row.ac_rank && row.ac_rank !== 'Unrated' ? ` _(${row.ac_rank})_` : '';
+        lines.push(`> ${emojis.ac || '🔴'} AC${rankStr} · Rating: ${ratingStr} · Solved: **${row.ac_solved}**${s ? ` · ${s}` : ''}`);
+      }
+      if (row.toph_linked) {
+        const s = streakFire(tophStreak);
+        const ratingStr = row.toph_rating > 0 ? `**${row.toph_rating}**` : `Unrated`;
+        const rankStr = row.toph_rank && row.toph_rank !== 'Unrated' ? ` _(${row.toph_rank})_` : '';
+        lines.push(`> ${emojis.toph || '🟣'} Toph${rankStr} · Rating: ${ratingStr} · Solved: **${row.toph_solved}**${s ? ` · ${s}` : ''}`);
+      }
+
+      return lines.join('\n');
     });
-    description = lines.join('\n');
+    description = sections.join('\n\n');
   }
+
+  // Build platforms string
+  const platformParts = [];
+  if (rows.some(r => r.cf_linked))   platformParts.push(`${emojis.cf || '🔵'} Codeforces`);
+  if (rows.some(r => r.ac_linked))   platformParts.push(`${emojis.ac || '🔴'} AtCoder`);
+  if (rows.some(r => r.toph_linked)) platformParts.push(`${emojis.toph || '🟣'} Toph`);
 
   return new EmbedBuilder()
     .setColor(0x2ECC71)
     .setDescription(`# \u2003\u2003\u2003🏅 CP Server Leaderboard\n\n${description}`)
     .addFields(
-      { name: '📊 Platforms',     value: `${emojis.cf} Codeforces · ${emojis.ac} AtCoder`, inline: false },
-      { name: '🔢 Total Members', value: `${rows.length} ranked`,                     inline: true },
-      { name: '🔥 Streak',        value: '🔥 7+ Day Streak\n👑 15+ Day Streak\n💫 30+ Day Streak', inline: true }
+      { name: '📊 Platforms',     value: platformParts.join(' · ') || 'None', inline: false },
+      { name: '🔢 Total Members', value: `${rows.length} ranked`,              inline: true },
+      { name: '🔥 Streak Legend', value: '⚡ 1d+  🔥 7d+  👑 15d+  💫 30d+',  inline: true }
     )
     .setFooter({ text: `Last updated` })
     .setTimestamp();
 }
+
 
 /**
  * Build a success embed
