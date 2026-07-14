@@ -45,6 +45,8 @@ async function runWeeklyWrapup(client) {
     let cfEnd = 0;
     let acStart = 0;
     let acEnd = 0;
+    let tophStart = 0;
+    let tophEnd = 0;
 
     // CF stats
     let cfSolved = null;
@@ -138,7 +140,30 @@ async function runWeeklyWrapup(client) {
       }
     }
 
-    // Hybrid calculation: Use API data if available, otherwise fall back to DB snapshots
+    // Toph stats (from DB history, no public submissions API)
+    let tophSolved = null;
+    let tophGain   = null;
+    if (user.toph_handle) {
+      try {
+        const oldRatingRow = db.prepare(`
+          SELECT rating FROM rating_history
+          WHERE discord_id = ? AND platform = 'toph' AND recorded_at < ?
+          ORDER BY recorded_at DESC LIMIT 1
+        `).get(user.discord_id, sevenDaysAgo);
+
+        const tophDbRating = ratings.find(r => r.platform === 'toph');
+        if (tophDbRating) {
+          const currentRating = tophDbRating.rating;
+          const ratingSevenDaysAgo = oldRatingRow ? oldRatingRow.rating : 0;
+          tophGain  = Math.max(0, currentRating - ratingSevenDaysAgo);
+          tophStart = ratingSevenDaysAgo;
+          tophEnd   = currentRating;
+          tophSolved = tophDbRating.solved;
+        }
+      } catch (err) {
+        console.error(`[WeeklyWrapUp] Toph Local History error for ${user.username}:`, err.message);
+      }
+    }
     if (user.cf_handle) {
       const cfDbRating = ratings.find(r => r.platform === 'cf');
       const snap = getWeeklySnapshot(user.discord_id, 'cf');
@@ -206,20 +231,16 @@ async function runWeeklyWrapup(client) {
       discord_id: user.discord_id,
       solved_this_week: userTotalSolved,
       cf_solved: cfSolved || 0,
-      ac_solved: acSolved || 0
+      ac_solved: acSolved || 0,
+      toph_solved: tophSolved || 0
     });
-    
+
     allRatingGains.push({
       discord_id: user.discord_id,
       rating_gained: userTotalRatingGain,
-      cf_gain: cfGain || 0,
-      cf_start: cfStart,
-      cf_end: cfEnd,
-      cf_linked: !!user.cf_handle,
-      ac_gain: acGain || 0,
-      ac_start: acStart,
-      ac_end: acEnd,
-      ac_linked: !!user.ac_handle
+      cf_gain:    cfGain   || 0, cf_start: cfStart,   cf_end: cfEnd,   cf_linked:   !!user.cf_handle,
+      ac_gain:    acGain   || 0, ac_start: acStart,   ac_end: acEnd,   ac_linked:   !!user.ac_handle,
+      toph_gain:  tophGain || 0, toph_start: tophStart, toph_end: tophEnd, toph_linked: !!user.toph_handle
     });
 
     if (user.cf_handle) {

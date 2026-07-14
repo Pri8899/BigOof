@@ -245,7 +245,7 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
         const streak = streakBadge(tophStreak);
         const rankRaw = row.toph_rank && row.toph_rank !== 'Unrated' ? `**${row.toph_rank}**` : 'Unrated';
         const rating = row.toph_rating > 0 ? `**${row.toph_rating}**` : `—`;
-        lines.push(`> 🟣${streak ? ` ${streak}` : ''} ─ Toph ${rankRaw}`);
+        lines.push(`> ${emojis.toph || '🟣'}${streak ? ` ${streak}` : ''} ─ Toph ${rankRaw}`);
         lines.push(`> ${IND}· Rating: ${rating}`);
         lines.push(`> ${IND}· Solved: **${row.toph_solved}**`);
       }
@@ -265,7 +265,7 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
   return new EmbedBuilder()
     .setColor(0x2ECC71)
     .setDescription(
-      `# \u3000\u3000\u3000\u3000🏅 CP Server Leaderboard\n` +
+      `# \u3000\u3000\u3000\u3000\u3000\u3000\u3000 Leaderboard\n` +
       `\u200b\n` +
       description
     )
@@ -491,24 +491,26 @@ function buildSubmissionEmbed(user, problem, platform) {
 /**
  * Build Weekly Wrap-Up Embed
  */
-function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵', ac: '🔴' }) {
+function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
   const embed = new EmbedBuilder()
-    .setColor(0xD4AF37) // Legendary Gold
+    .setColor(0xD4AF37)
     .setDescription(`### 👑 CP SERVER WEEKLY CHAMPIONS 👑\n\nHappy Sunday! Let's celebrate the top performers who dominated the competitive programming charts this week!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png') // Gold trophy icon
+    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
     .setTimestamp();
 
-  // 1. Solves Champion (handles ties)
+  // 1. Solves Champion
   let solvedValue = '';
   if (allSolved.length > 0 && allSolved[0].solved_this_week > 0) {
     const maxSolved = allSolved[0].solved_this_week;
-    const coChamps = allSolved.filter(u => u.solved_this_week === maxSolved);
-    const mentions = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
-    
+    const coChamps  = allSolved.filter(u => u.solved_this_week === maxSolved);
+    const mentions  = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
+
     const lines = coChamps.map(u => {
-      return `🎉 Huge congratulations to ${mentions} for an outstanding performance this week!
-> ${emojis.cf} **Codeforces**: \`${u.cf_solved}\` solved  ·  ${emojis.ac} **AtCoder**: \`${u.ac_solved}\` solved
-> 📊 **Total Solved**: **${maxSolved}** problems solved this week! Absolute beast mode! 🚀`;
+      const parts = [];
+      if (u.cf_solved   > 0) parts.push(`${emojis.cf   || '🔵'} CF: \`${u.cf_solved}\``);
+      if (u.ac_solved   > 0) parts.push(`${emojis.ac   || '🔴'} AC: \`${u.ac_solved}\``);
+      if (u.toph_solved > 0) parts.push(`${emojis.toph || '🟣'} Toph: \`${u.toph_solved}\``);
+      return `🎉 Huge congratulations to ${mentions} for an outstanding performance this week!\n> ${parts.join('  ·  ')}\n> 📊 **Total Solved**: **${maxSolved}** problems this week! Absolute beast mode! 🚀`;
     }).join('\n\n');
 
     solvedValue = `🏆 **Weekly Solves Champion**\n\n${lines}`;
@@ -517,19 +519,19 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵'
   }
   embed.addFields({ name: '\u200b', value: solvedValue, inline: false });
 
-  // 2. Rating Champion (handles ties)
+  // 2. Rating Champion
   let ratingValue = '';
   if (allRatingGains.length > 0 && allRatingGains[0].rating_gained > 0) {
     const maxRating = allRatingGains[0].rating_gained;
-    const coChamps = allRatingGains.filter(u => u.rating_gained === maxRating);
-    const mentions = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
+    const coChamps  = allRatingGains.filter(u => u.rating_gained === maxRating);
+    const mentions  = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
 
     const lines = coChamps.map(u => {
-      const cfText = u.cf_linked ? `\`+${u.cf_gain}\` (${u.cf_start} → ${u.cf_end})` : `_Not linked_`;
-      const acText = u.ac_linked ? `\`+${u.ac_gain}\` (${u.ac_start} → ${u.ac_end})` : `_Not linked_`;
-      return `🎉 Amazing job by ${mentions} for showing incredible skill and progress!
-> ${emojis.cf} **Codeforces**: ${cfText}  ·  ${emojis.ac} **AtCoder**: ${acText}
-> 📈 **Total Gain**: **+${maxRating}** rating points this week! Incredible progress and skill! 📈`;
+      const parts = [];
+      if (u.cf_linked)   parts.push(`${emojis.cf   || '🔵'} CF: \`+${u.cf_gain}\` (${u.cf_start} → ${u.cf_end})`);
+      if (u.ac_linked)   parts.push(`${emojis.ac   || '🔴'} AC: \`+${u.ac_gain}\` (${u.ac_start} → ${u.ac_end})`);
+      if (u.toph_linked) parts.push(`${emojis.toph || '🟣'} Toph: \`+${u.toph_gain}\` (${u.toph_start} → ${u.toph_end})`);
+      return `🎉 Amazing job by ${mentions} for showing incredible skill and progress!\n> ${parts.join('  ·  ')}\n> 📈 **Total Gain**: **+${maxRating}** rating points this week! Incredible progress! 📈`;
     }).join('\n\n');
 
     ratingValue = `📈 **Weekly Rating Champion**\n\n${lines}`;
@@ -541,6 +543,7 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵'
   embed.setFooter({ text: 'Consistency is the key to mastery! Keep coding!' });
   return embed;
 }
+
 
 
 module.exports = {

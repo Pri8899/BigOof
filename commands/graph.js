@@ -3,8 +3,8 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getUser, getRatingHistory }          = require('../database/db');
 const { errorEmbed }                         = require('../utils/embeds');
 
-const PLATFORM_NAMES  = { cf: 'Codeforces', ac: 'AtCoder' };
-const PLATFORM_COLORS = { cf: '#1F8DD6',    ac: '#E74C3C' };
+const PLATFORM_NAMES  = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
+const PLATFORM_COLORS = { cf: '#1F8DD6',    ac: '#E74C3C', toph: '#7B2FBE' };
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -16,7 +16,8 @@ module.exports = {
         .setRequired(true)
         .addChoices(
           { name: '🔵 Codeforces', value: 'cf' },
-          { name: '🔴 AtCoder',    value: 'ac' }
+          { name: '🔴 AtCoder',    value: 'ac' },
+          { name: '🟣 Toph',       value: 'toph' }
         ))
     .addUserOption(opt =>
       opt.setName('member')
@@ -89,7 +90,7 @@ module.exports = {
     const embedColor = parseInt(PLATFORM_COLORS[platform].replace('#', ''), 16);
     const { getPlatformEmojis } = require('../utils/emojis');
     const emojis = await getPlatformEmojis(interaction.guild);
-    const platformEmoji = platform === 'cf' ? emojis.cf : emojis.ac;
+    const platformEmoji = platform === 'cf' ? emojis.cf : platform === 'ac' ? emojis.ac : emojis.toph || '🟣';
 
     const embed = new EmbedBuilder()
       .setColor(embedColor)
