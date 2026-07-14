@@ -79,32 +79,40 @@ async function postRatingChange(client, discordId, username, platform, oldRating
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel) return;
 
-  const diff   = newRating - oldRating;
-  const arrow  = diff > 0 ? '📈' : '📉';
-  const sign   = diff > 0 ? `+${diff}` : `${diff}`;
-  const color  = diff > 0 ? 0x2ECC71 : 0xE74C3C;
+  const diff  = newRating - oldRating;
+  const isUp  = diff > 0;
+  const sign  = isUp ? `+${diff}` : `${diff}`;
+  const color = isUp ? 0x2ECC71 : 0xE74C3C;
+  const trend = isUp ? '📈' : '📉';
+  const bar   = isUp ? '🟩'.repeat(Math.min(5, Math.ceil(Math.abs(diff) / 50))) : '🟥'.repeat(Math.min(5, Math.ceil(Math.abs(diff) / 50)));
 
   const { getPlatformEmojis } = require('../utils/emojis');
   const emojis = await getPlatformEmojis(channel.guild);
-  const platformName = { cf: `Codeforces ${emojis.cf}`, ac: `AtCoder ${emojis.ac}`, toph: `Toph 🟣` }[platform] ?? platform;
+  const platEmoji = { cf: emojis.cf || '🔵', ac: emojis.ac || '🔴', toph: emojis.toph || '🟣' }[platform] ?? '🔵';
+  const platName  = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' }[platform] ?? platform;
+
+  const desc =
+    `\u200b\n` +
+    `> ${platEmoji} **${platName}**  ·  ${trend} **${sign}** rating\n` +
+    `> \`\`\`\n` +
+    `> ${oldRating}  →  ${newRating}\n` +
+    `> \`\`\`\n` +
+    `> 🏅 **Current Rank** \u00a0 ${rankTitle ?? 'Unrated'}\n` +
+    (lastContest ? `> 🏆 **Contest** \u00a0\u00a0\u00a0\u00a0\u00a0 ${lastContest.contestName}  ·  Rank **#${lastContest.rank}**\n` : '') +
+    `> ${bar}\n` +
+    `\u200b`;
 
   const embed = new EmbedBuilder()
     .setColor(color)
-    .setTitle(`${arrow} Rating Update — ${username}`)
-    .setDescription(`**${platformName}**\n\`\`\`diff\n${oldRating} → ${newRating}  (${sign})\n\`\`\``)
-    .addFields({ name: '🏅 Current Rank', value: rankTitle ?? 'Unrated', inline: true })
-    .setTimestamp();
-
-  if (lastContest) {
-    embed.addFields({
-      name: '🏆 Last Contest',
-      value: `**${lastContest.contestName}**\nPlace: \`#${lastContest.rank}\``,
-      inline: false
-    });
-  }
+    .setAuthor({ name: `${isUp ? '⬆️ Rating Increased' : '⬇️ Rating Decreased'} — ${platName}` })
+    .setTitle(`${trend} ${username}'s rating changed!`)
+    .setDescription(`<@${discordId}>\n${desc}`)
+    .setTimestamp()
+    .setFooter({ text: 'Keep pushing! 💪' });
 
   await channel.send({ content: `<@${discordId}>`, embeds: [embed] }).catch(() => {});
 }
+
 
 // ─── Sync All Ratings ────────────────────────────────────────
 async function syncAllRatings(client) {

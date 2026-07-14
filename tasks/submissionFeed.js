@@ -231,17 +231,20 @@ async function runSubmissionFeed(client) {
   const users = getAllUsers();
   let shouldUpdateDashboard = false;
   
+  const { getPlatformEmojis } = require('../utils/emojis');
+  const emojis = await getPlatformEmojis(channel.guild);
+
   for (const user of users) {
     const cfNew = await fetchCFSubmissions(user);
     const { newAc: acNew, highestTime } = await fetchACSubmissions(user);
     
     for (const sub of cfNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'cf');
+      const embed = buildSubmissionEmbed(user, sub, 'cf', emojis);
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
     
     for (const sub of acNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'ac');
+      const embed = buildSubmissionEmbed(user, sub, 'ac', emojis);
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
 

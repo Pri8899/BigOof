@@ -220,8 +220,22 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
       const acStreak   = streakMap[row.discord_id]?.ac   ?? row.ac_streak   ?? 0;
       const tophStreak = streakMap[row.discord_id]?.toph ?? row.toph_streak ?? 0;
 
+      // RCG: colour dot before username based on CF rating
+      function rcgDot(rating) {
+        if (!rating || rating === 0) return '⚪'; // gray
+        if (rating >= 3000) return '🔴'; // legendary GM
+        if (rating >= 2400) return '🟠'; // grandmaster
+        if (rating >= 2100) return '🟡'; // master
+        if (rating >= 1900) return '🟣'; // cand master
+        if (rating >= 1600) return '🔵'; // expert
+        if (rating >= 1400) return '🟦'; // specialist
+        if (rating >= 1200) return '🟢'; // pupil
+        return '⚪'; // newbie
+      }
+      const colorDot = rcgDot(row.cf_rating || 0);
+
       let lines = [];
-      lines.push(`${medal} **${displayName}**`);
+      lines.push(`${medal} ${colorDot} **${displayName}**`);
 
       if (row.cf_linked) {
         const streak = streakBadge(cfStreak);
@@ -400,147 +414,151 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
   }
 
   const dhakaTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
-  let hr = dhakaTime.getHours();
-  if (dhakaTime.getMinutes() > 50) hr += 1;
-  hr = hr % 24;
-  const ampm = hr >= 12 ? 'pm' : 'am';
-  const displayHr = hr % 12 === 0 ? 12 : hr % 12;
-  const timeStr = `${displayHr}:00 ${ampm}`;
+  let hr = dfunction buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
+  const isCF   = platform === 'cf';
+  const isAC   = platform === 'ac';
+  const isToph = platform === 'toph';
 
-  embed
-    .setDescription(`${header}\n\n` + sections.join('\n\n'))
-    .setFooter({ text: `${displayedCount} total upcoming contests  •  Refreshes every 12 hours  •  ${timeStr}` });
-
-  return embed;
-}
-
-
-/**
- * Build submission embed for Live Feed
- */
-function buildSubmissionEmbed(user, problem, platform) {
-  const isCF = platform === 'cf';
-  let titleSuffix = '';
-  let embedColor = isCF ? COLORS.Codeforces : COLORS.AtCoder;
-  let authorName = `${isCF ? '🔵 Codeforces' : '🔴 AtCoder'} — Live Accepted!`;
-  
-  if (isCF) {
-    if (problem.contestName) {
-      let category = null;
-      if (/ICPC/i.test(problem.contestName)) {
-        category = 'ICPC';
-      } else {
-        const match = problem.contestName.match(/Div\.\s*\d+(\s*\+\s*Div\.\s*\d+)*/i);
-        const match2 = problem.contestName.match(/Div\s*\d+(\s*\+\s*Div\s*\d+)*/i);
-        if (match) category = match[0];
-        else if (match2) category = match2[0];
-        else if (problem.contestName.includes("Educational")) category = "Educational Round";
-        else if (problem.contestName.includes("Global Round")) category = "Global Round";
-        else if (problem.contestName.includes("Kotlin Heroes")) category = "Kotlin Heroes";
-        else if (problem.contestName.includes("VK Cup")) category = "VK Cup";
-        else {
-          let clean = problem.contestName
-            .replace(/\(.*?\)/g, '')
-            .replace(/Codeforces/gi, '')
-            .replace(/Round\s*\d+/gi, 'Round')
-            .trim();
-          if (clean.toLowerCase() === 'round') clean = 'CF Round';
-          category = clean || null;
-        }
-      }
-      
-      if (category) {
-        titleSuffix = ` (${category})`;
-        if (category === 'ICPC') {
-          embedColor = 0xD4AF37; // Gold
-          authorName = `🏆 Codeforces (ICPC) — Live Accepted!`;
-        }
-      }
+  // ── Determine category / contest type ──────────────────────────
+  let category = null;
+  if (isCF && problem.contestName) {
+    if (/ICPC/i.test(problem.contestName))                       category = '🏆 ICPC';
+    else if (problem.contestName.includes('Educational'))        category = '📚 Educational';
+    else if (problem.contestName.includes('Global Round'))       category = '🌏 Global Round';
+    else {
+      const m = problem.contestName.match(/Div\.?\s*\d+(​\s*\+\s*Div\.?\s*\d+)*/i);
+      if (m) category = m[0];
     }
-  } else {
-    if (problem.contestId) {
-      const lower = problem.contestId.toLowerCase();
-      let div = null;
-      if (lower.startsWith('abc')) div = 'ABC';
-      else if (lower.startsWith('arc')) div = 'ARC';
-      else if (lower.startsWith('agc')) div = 'AGC';
-      else if (lower.startsWith('ahc')) div = 'AHC';
-      
-      if (div) titleSuffix = ` (${div})`;
-    }
+  } else if (isAC && problem.contestId) {
+    const l = problem.contestId.toLowerCase();
+    if (l.startsWith('abc')) category = 'ABC';
+    else if (l.startsWith('arc')) category = 'ARC';
+    else if (l.startsWith('agc')) category = 'AGC';
+    else if (l.startsWith('ahc')) category = 'AHC';
   }
 
-  const embed = new EmbedBuilder()
+  // ── Colors & labels ────────────────────────────────────────────
+  let embedColor  = isCF ? COLORS.Codeforces : isAC ? COLORS.AtCoder : 0x7B2FBE;
+  if (category === '🏆 ICPC') embedColor = 0xD4AF37;
+
+  const platformLabel = isCF ? `${emojis.cf} Codeforces` : isAC ? `${emojis.ac} AtCoder` : `${emojis.toph} Toph`;
+  const catLabel      = category ? `  ·  ${category}` : '';
+
+  // ── Difficulty badge ───────────────────────────────────────────
+  const diffVal = problem.rating || problem.difficulty;
+  let diffBadge = '';
+  if (diffVal) {
+    const d = Number(diffVal);
+    if (d >= 2400) diffBadge = `🔴 **${d}** _(Very Hard)_`;
+    else if (d >= 1900) diffBadge = `🟠 **${d}** _(Hard)_`;
+    else if (d >= 1400) diffBadge = `🟡 **${d}** _(Medium)_`;
+    else if (d >= 800)  diffBadge = `🟢 **${d}** _(Easy)_`;
+    else                diffBadge = `⚪ **${d}** _(Beginner)_`;
+  }
+
+  const desc =
+    `​\n` +
+    `> 📌 **Platform**    ${platformLabel}${catLabel}\n` +
+    `> 🧮 **Problem**    [${problem.name}](${problem.url})\n` +
+    (diffBadge ? `> 📊 **Difficulty** ${diffBadge}\n` : '') +
+    (problem.tags?.length ? `> 🏷️ **Tags**       ${problem.tags.slice(0, 4).join(' · ')}\n` : '') +
+    `​`;
+
+  return new EmbedBuilder()
     .setColor(embedColor)
-    .setAuthor({ name: authorName })
-    .setTitle(`🎉 ${user.username}${titleSuffix} just got an Accepted (AC)!`)
-    .setDescription(`<@${user.discord_id}> solved **[${problem.name}](${problem.url})**!`)
-    .setThumbnail(isCF ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' : 'https://img.atcoder.jp/assets/logo.png')
-    .setTimestamp();
-
-  if (problem.rating || problem.difficulty) {
-    embed.addFields({ name: 'Difficulty', value: String(problem.rating || problem.difficulty), inline: true });
-  }
-  if (problem.tags && problem.tags.length > 0) {
-    embed.addFields({ name: 'Tags', value: problem.tags.join(', '), inline: true });
-  }
-
-  return embed;
+    .setAuthor({ name: `✨ NEW ACCEPTED ✨` })
+    .setTitle(`🎉 ${user.username} solved a problem!`)
+    .setDescription(`<@${user.discord_id}> got **Accepted**!\n${desc}`)
+    .setTimestamp()
+    .setFooter({ text: 'Keep grinding! 💪' });
 }
+
+
+
 
 /**
  * Build Weekly Wrap-Up Embed
  */
 function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
+  const now  = new Date();
+  const week = `${now.toLocaleString('en-US', { month: 'short', timeZone: 'Asia/Dhaka' })} ${now.getFullYear()}`;
+
   const embed = new EmbedBuilder()
-    .setColor(0xD4AF37)
-    .setDescription(`### 👑 CP SERVER WEEKLY CHAMPIONS 👑\n\nHappy Sunday! Let's celebrate the top performers who dominated the competitive programming charts this week!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
+    .setColor(0xF1C40F)
+    .setDescription(
+      `# 　　　🏆 Weekly Wrap-Up
+\u200b
+**Week of ${week}** · Sunday Edition
+──────────────────────────────`
+    )
     .setTimestamp();
 
-  // 1. Solves Champion
-  let solvedValue = '';
+  // ── 1. Solves Champion ─────────────────────────────────────────
   if (allSolved.length > 0 && allSolved[0].solved_this_week > 0) {
     const maxSolved = allSolved[0].solved_this_week;
     const coChamps  = allSolved.filter(u => u.solved_this_week === maxSolved);
-    const mentions  = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
+    const names     = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
 
-    const lines = coChamps.map(u => {
+    const breakdown = coChamps.map(u => {
       const parts = [];
-      if (u.cf_solved   > 0) parts.push(`${emojis.cf   || '🔵'} CF: \`${u.cf_solved}\``);
-      if (u.ac_solved   > 0) parts.push(`${emojis.ac   || '🔴'} AC: \`${u.ac_solved}\``);
-      if (u.toph_solved > 0) parts.push(`${emojis.toph || '🟣'} Toph: \`${u.toph_solved}\``);
-      return `🎉 Huge congratulations to ${mentions} for an outstanding performance this week!\n> ${parts.join('  ·  ')}\n> 📊 **Total Solved**: **${maxSolved}** problems this week! Absolute beast mode! 🚀`;
-    }).join('\n\n');
+      if (u.cf_solved   > 0) parts.push(`${emojis.cf   || '🔵'} **${u.cf_solved}** CF`);
+      if (u.ac_solved   > 0) parts.push(`${emojis.ac   || '🔴'} **${u.ac_solved}** AC`);
+      if (u.toph_solved > 0) parts.push(`${emojis.toph || '🟣'} **${u.toph_solved}** Toph`);
+      return `> ${parts.join('  ·  ')}`;
+    }).join('\n');
 
-    solvedValue = `🏆 **Weekly Solves Champion**\n\n${lines}`;
+    embed.addFields({
+      name: '🧩 Solves Champion   💥',
+      value:
+        `👑 ${names}\n` +
+        `> 📊 **${maxSolved}** problems crushed this week!\n` +
+        breakdown +
+        `\n\u200b`,
+      inline: false
+    });
   } else {
-    solvedValue = `🏆 **Weekly Solves Champion**\n\n_No one solved any problems this week. Let's get active next week!_`;
+    embed.addFields({
+      name: '🧩 Solves Champion',
+      value: '_No problems solved this week. Let\'s go harder next week!_\n\u200b',
+      inline: false
+    });
   }
-  embed.addFields({ name: '\u200b', value: solvedValue, inline: false });
 
-  // 2. Rating Champion
-  let ratingValue = '';
+  // ── 2. Rating Champion ─────────────────────────────────────────
   if (allRatingGains.length > 0 && allRatingGains[0].rating_gained > 0) {
-    const maxRating = allRatingGains[0].rating_gained;
-    const coChamps  = allRatingGains.filter(u => u.rating_gained === maxRating);
-    const mentions  = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
+    const maxGain   = allRatingGains[0].rating_gained;
+    const coChamps  = allRatingGains.filter(u => u.rating_gained === maxGain);
+    const names     = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
 
-    const lines = coChamps.map(u => {
+    const breakdown = coChamps.map(u => {
       const parts = [];
-      if (u.cf_linked)   parts.push(`${emojis.cf   || '🔵'} CF: \`+${u.cf_gain}\` (${u.cf_start} → ${u.cf_end})`);
-      if (u.ac_linked)   parts.push(`${emojis.ac   || '🔴'} AC: \`+${u.ac_gain}\` (${u.ac_start} → ${u.ac_end})`);
-      if (u.toph_linked) parts.push(`${emojis.toph || '🟣'} Toph: \`+${u.toph_gain}\` (${u.toph_start} → ${u.toph_end})`);
-      return `🎉 Amazing job by ${mentions} for showing incredible skill and progress!\n> ${parts.join('  ·  ')}\n> 📈 **Total Gain**: **+${maxRating}** rating points this week! Incredible progress! 📈`;
-    }).join('\n\n');
+      if (u.cf_linked && u.cf_gain > 0)     parts.push(`${emojis.cf   || '🔵'} CF \`${u.cf_start} → ${u.cf_end}\` **(+${u.cf_gain})**`);
+      if (u.ac_linked && u.ac_gain > 0)     parts.push(`${emojis.ac   || '🔴'} AC \`${u.ac_start} → ${u.ac_end}\` **(+${u.ac_gain})**`);
+      if (u.toph_linked && u.toph_gain > 0) parts.push(`${emojis.toph || '🟣'} Toph \`${u.toph_start} → ${u.toph_end}\` **(+${u.toph_gain})**`);
+      return parts.map(p => `> ${p}`).join('\n');
+    }).join('\n');
 
-    ratingValue = `📈 **Weekly Rating Champion**\n\n${lines}`;
+    embed.addFields({
+      name: '📈 Rating Champion   ⚡',
+      value:
+        `👑 ${names}\n` +
+        `> 🚀 **+${maxGain}** total rating gained this week!\n` +
+        breakdown +
+        `\n\u200b`,
+      inline: false
+    });
   } else {
-    ratingValue = `📈 **Weekly Rating Champion**\n\n_No rating gains recorded this week._`;
+    embed.addFields({
+      name: '📈 Rating Champion',
+      value: '_No rating gains this week. Contest more!_\n\u200b',
+      inline: false
+    });
   }
-  embed.addFields({ name: '\u200b', value: ratingValue, inline: false });
 
-  embed.setFooter({ text: 'Consistency is the key to mastery! Keep coding!' });
+  embed
+    .addFields({ name: '\u200b', value: '──────────────────────────────', inline: false })
+    .setFooter({ text: 'See you next Sunday · Consistency beats talent 💪' });
+
   return embed;
 }
 
