@@ -18,15 +18,15 @@ async function getPlatformEmojis(guild) {
 
     const { getConfig, setConfig } = require('../database/db');
 
-    // v2 flag: delete & re-upload all logos (bumped to force new Toph circle logo)
-    if (getConfig('reset_circle_emojis_v2') !== 'true') {
-      console.log(`[Emojis] v2 reset — deleting old logos and re-uploading...`);
+    // v3 flag: delete & re-upload all logos (bumped to force new Toph circle logo on server)
+    if (getConfig('reset_circle_emojis_v3') !== 'true') {
+      console.log(`[Emojis] v3 reset — deleting old logos and re-uploading...`);
       for (const name of ['codeforces', 'atcoder', 'toph']) {
         const old = guild.emojis.cache.find(e => e.name === name);
         if (old) await old.delete().catch(() => {});
       }
       await guild.emojis.fetch().catch(() => {});
-      setConfig('reset_circle_emojis_v2', 'true');
+      setConfig('reset_circle_emojis_v3', 'true');
     }
 
     // ── Codeforces ─────────────────────────────────────────────────

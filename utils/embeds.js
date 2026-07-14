@@ -235,7 +235,7 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
       const colorDot = rcgDot(row.cf_rating || 0);
 
       let lines = [];
-      lines.push(`${medal} ${colorDot} **${displayName}**`);
+      lines.push(`${medal} **${displayName}**`);
 
       if (row.cf_linked) {
         const streak = streakBadge(cfStreak);
@@ -274,12 +274,15 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
   const platformParts = [];
   if (rows.some(r => r.cf_linked))   platformParts.push(`${emojis.cf || '🔵'} Codeforces`);
   if (rows.some(r => r.ac_linked))   platformParts.push(`${emojis.ac || '🔴'} AtCoder`);
-  if (rows.some(r => r.toph_linked)) platformParts.push(`🟣 Toph`);
+  if (rows.some(r => r.toph_linked)) platformParts.push(`${emojis.toph || '🟣'} Toph`);
 
   return new EmbedBuilder()
     .setColor(0x2ECC71)
-    .setTitle('Leaderboard')
-    .setDescription(`\u200b\n` + description)
+    .setDescription(
+      `# 　　　Leaderboard\n` +
+      `\u200b\n` +
+      description
+    )
     .addFields(
       { name: '📊 Platforms',     value: platformParts.join('  ·  ') || 'None linked', inline: false },
       { name: '🔢 Total Members', value: `**${rows.length}** ranked`,                  inline: true  },
