@@ -463,11 +463,11 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
 
   const platformLabel = isCF ? `${emojis.cf} Codeforces` : isAC ? `${emojis.ac} AtCoder` : `${emojis.toph} Toph`;
 
-  const thumbnailUrl = isCF
-    ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
-    : isAC
-      ? 'https://img.atcoder.jp/assets/logo.png'
-      : 'https://toph.co/images/appleicon.png';
+  const fileName = isCF ? 'codeforces.png' : isAC ? 'atcoder.png' : 'toph.png';
+  const filePath = require('path').join(__dirname, '..', 'assets', fileName);
+  const { AttachmentBuilder } = require('discord.js');
+  const file = new AttachmentBuilder(filePath, { name: fileName });
+  const thumbnailUrl = `attachment://${fileName}`;
 
   // ── Category label in title
   const catLabel = category ? ` (${category})` : '';
@@ -486,7 +486,7 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
   if (problem.tags?.length) extra.push({ name: '🏷️ Tags',        value: problem.tags.slice(0, 5).join(', '), inline: true });
   if (problem.contestName)  extra.push({ name: '🏆 Contest',     value: problem.contestName,                 inline: false });
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(embedColor)
     .setAuthor({ name: `${platformLabel}${catLabel} — Live Accepted!` })
     .setTitle(`🎉 ${user.username} just got Accepted!`)
@@ -495,6 +495,8 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
     .addFields(...extra)
     .setTimestamp()
     .setFooter({ text: 'Keep grinding! 💪' });
+
+  return { embed, file };
 }
 
 

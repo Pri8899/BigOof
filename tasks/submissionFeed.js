@@ -239,13 +239,13 @@ async function runSubmissionFeed(client) {
     const { newAc: acNew, highestTime } = await fetchACSubmissions(user);
     
     for (const sub of cfNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'cf', emojis);
-      await channel.send({ embeds: [embed] }).catch(() => {});
+      const { embed, file } = buildSubmissionEmbed(user, sub, 'cf', emojis);
+      await channel.send({ embeds: [embed], files: [file] }).catch(() => {});
     }
     
     for (const sub of acNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'ac', emojis);
-      await channel.send({ embeds: [embed] }).catch(() => {});
+      const { embed, file } = buildSubmissionEmbed(user, sub, 'ac', emojis);
+      await channel.send({ embeds: [embed], files: [file] }).catch(() => {});
     }
 
     if (highestTime !== null) {
