@@ -89,13 +89,13 @@ function buildContestEmbed(contest, timeUntilLabel) {
 /**
  * Build user profile embed
  */
-function buildProfileEmbed(member, user, ratings, emojis = { cf: '🔵', ac: '🔴' }) {
+function buildProfileEmbed(member, user, ratings, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
   const ratingMap = {};
   for (const r of ratings) ratingMap[r.platform] = r;
 
-  const cf = ratingMap['cf'];
-  const lc = ratingMap['lc'];
-  const ac = ratingMap['ac'];
+  const cf   = ratingMap['cf'];
+  const ac   = ratingMap['ac'];
+  const toph = ratingMap['toph'];
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.default)
@@ -106,27 +106,38 @@ function buildProfileEmbed(member, user, ratings, emojis = { cf: '🔵', ac: '�
 
   if (user?.cf_handle) {
     fields.push({
-      name: `${emojis.cf} Codeforces`,
+      name: `${emojis.cf || '🔵'} Codeforces`,
       value: cf
-        ? `Handle: \`${user.cf_handle}\`\nRating: **${cf.rating}** (Max: ${cf.max_rating})\nRank: ${cf.rank_title}\nSolved: ${cf.solved}`
+        ? `Handle: \`${user.cf_handle}\`\nRating: **${cf.rating}** _(Max: ${cf.max_rating})_\nRank: ${cf.rank_title}\nSolved: **${cf.solved}**`
         : `Handle: \`${user.cf_handle}\`\n_Stats loading..._`,
       inline: true
     });
   } else {
-    fields.push({ name: `${emojis.cf} Codeforces`, value: '_Not linked_\nUse `/link codeforces <handle>`', inline: true });
+    fields.push({ name: `${emojis.cf || '🔵'} Codeforces`, value: '_Not linked_\nUse `/link` to add', inline: true });
   }
-
 
   if (user?.ac_handle) {
     fields.push({
-      name: `${emojis.ac} AtCoder`,
+      name: `${emojis.ac || '🔴'} AtCoder`,
       value: ac
-        ? `Handle: \`${user.ac_handle}\`\nRating: **${ac.rating}** (Max: ${ac.max_rating})\nRank: ${ac.rank_title}\nSolved: ${ac.solved}`
+        ? `Handle: \`${user.ac_handle}\`\nRating: **${ac.rating}** _(Max: ${ac.max_rating})_\nRank: ${ac.rank_title}\nSolved: **${ac.solved}**`
         : `Handle: \`${user.ac_handle}\`\n_Stats loading..._`,
       inline: true
     });
   } else {
-    fields.push({ name: `${emojis.ac} AtCoder`, value: '_Not linked_\nUse `/link atcoder <handle>`', inline: true });
+    fields.push({ name: `${emojis.ac || '🔴'} AtCoder`, value: '_Not linked_\nUse `/link` to add', inline: true });
+  }
+
+  if (user?.toph_handle) {
+    fields.push({
+      name: `🟣 Toph`,
+      value: toph
+        ? `Handle: \`${user.toph_handle}\`\nRating: **${toph.rating}**\nRank: ${toph.rank_title}\nSolved: **${toph.solved}**`
+        : `Handle: \`${user.toph_handle}\`\n_Stats loading..._`,
+      inline: true
+    });
+  } else {
+    fields.push({ name: `🟣 Toph`, value: '_Not linked_\nUse `/link` to add', inline: true });
   }
 
   embed.addFields(fields);
@@ -136,6 +147,7 @@ function buildProfileEmbed(member, user, ratings, emojis = { cf: '🔵', ac: '�
   return embed;
 }
 
+
 /**
  * Build the leaderboard / dashboard embed
  * @param {Array} rows  - from computeLeaderboard
@@ -144,20 +156,53 @@ function buildProfileEmbed(member, user, ratings, emojis = { cf: '🔵', ac: '�
 function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
   const medals = ['🥇', '🥈', '🥉'];
 
-  // Build streak lookup per user per platform
+  // Streak lookup per user per platform
   const streakMap = {};
   for (const s of streaks) {
     if (!streakMap[s.discord_id]) streakMap[s.discord_id] = {};
     streakMap[s.discord_id][s.platform] = s.current_streak;
   }
 
-  function streakFire(n) {
+  function streakBadge(n) {
     if (!n || n < 1) return '';
-    if (n >= 30) return `💫 **${n}d**`;
-    if (n >= 15) return `👑 **${n}d**`;
-    if (n >= 7)  return `🔥 **${n}d**`;
-    return `⚡ **${n}d**`;
+    if (n >= 30) return `💫 ${n}d`;
+    if (n >= 15) return `👑 ${n}d`;
+    if (n >= 7)  return `🔥 ${n}d`;
+    return `⚡ ${n}d`;
   }
+
+  // Rank color labels for CF
+  function cfRankLabel(rating) {
+    if (!rating || rating === 0) return 'Unrated';
+    if (rating >= 3000) return '**Legendary GM**';
+    if (rating >= 2600) return '**Intl. GM**';
+    if (rating >= 2400) return '**Grandmaster**';
+    if (rating >= 2300) return '**Intl. Master**';
+    if (rating >= 2100) return '**Master**';
+    if (rating >= 1900) return '**Cand. Master**';
+    if (rating >= 1600) return '**Expert**';
+    if (rating >= 1400) return '**Specialist**';
+    if (rating >= 1200) return '**Pupil**';
+    return '**Newbie**';
+  }
+
+  // AC rank labels
+  function acRankLabel(rating) {
+    if (!rating || rating === 0) return 'Unrated';
+    if (rating >= 2800) return '**Red**';
+    if (rating >= 2400) return '**Orange**';
+    if (rating >= 2000) return '**Yellow**';
+    if (rating >= 1600) return '**Blue**';
+    if (rating >= 1200) return '**Cyan**';
+    if (rating >= 800)  return '**Green**';
+    if (rating >= 400)  return '**Brown**';
+    return '**Gray**';
+  }
+
+  // Blank line separator for readability
+  const SEP = '\u200b';
+  // indent spacer
+  const IND = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0';
 
   let description = '';
 
@@ -166,58 +211,74 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
   } else {
     const sections = rows.map((row, i) => {
       const medal = medals[i] ?? `\`#${i + 1}\``;
-      const displayName = (row.cf_handle || row.toph_handle || row.username || 'Unknown').replace(/([_*~|`\\])/g, '\\$1');
-      const cfStreak    = streakMap[row.discord_id]?.cf   ?? row.cf_streak   ?? 0;
-      const acStreak    = streakMap[row.discord_id]?.ac   ?? row.ac_streak   ?? 0;
-      const tophStreak  = streakMap[row.discord_id]?.toph ?? row.toph_streak ?? 0;
 
-      // Best streak badge
-      const bestStreak = Math.max(cfStreak, acStreak, tophStreak);
-      const badge = bestStreak >= 30 ? ' 💫' : bestStreak >= 15 ? ' 👑' : bestStreak >= 7 ? ' 🔥' : bestStreak >= 1 ? ' ⚡' : '';
+      // Display name: prefer CF handle (has rank system), else Toph, else AC, else username
+      const displayName = (row.cf_handle || row.toph_handle || row.ac_handle || row.username || 'Unknown')
+        .replace(/([_*~|`\\])/g, '\\$1');
 
-      let lines = [`${medal} **${displayName}**${badge}`];
+      const cfStreak   = streakMap[row.discord_id]?.cf   ?? row.cf_streak   ?? 0;
+      const acStreak   = streakMap[row.discord_id]?.ac   ?? row.ac_streak   ?? 0;
+      const tophStreak = streakMap[row.discord_id]?.toph ?? row.toph_streak ?? 0;
+
+      let lines = [];
+      lines.push(`${medal} **${displayName}**`);
 
       if (row.cf_linked) {
-        const s = streakFire(cfStreak);
-        const ratingStr = row.cf_rating > 0 ? `**${row.cf_rating}**` : `Unrated`;
-        const rankStr = row.cf_rank && row.cf_rank !== 'Unrated' ? ` _(${row.cf_rank})_` : '';
-        lines.push(`> ${emojis.cf || '🔵'} CF${rankStr} · Rating: ${ratingStr} · Solved: **${row.cf_solved}**${s ? ` · ${s}` : ''}`);
+        const streak = streakBadge(cfStreak);
+        const rank   = cfRankLabel(row.cf_rating);
+        const rating = row.cf_rating > 0 ? `**${row.cf_rating}**` : `—`;
+        lines.push(`> ${emojis.cf || '🔵'}${streak ? ` ${streak}` : ''} ─ CF ${rank}`);
+        lines.push(`> ${IND}· Rating: ${rating}`);
+        lines.push(`> ${IND}· Solved: **${row.cf_solved}**`);
       }
+
       if (row.ac_linked) {
-        const s = streakFire(acStreak);
-        const ratingStr = row.ac_rating > 0 ? `**${row.ac_rating}**` : `Unrated`;
-        const rankStr = row.ac_rank && row.ac_rank !== 'Unrated' ? ` _(${row.ac_rank})_` : '';
-        lines.push(`> ${emojis.ac || '🔴'} AC${rankStr} · Rating: ${ratingStr} · Solved: **${row.ac_solved}**${s ? ` · ${s}` : ''}`);
+        const streak = streakBadge(acStreak);
+        const rank   = acRankLabel(row.ac_rating);
+        const rating = row.ac_rating > 0 ? `**${row.ac_rating}**` : `—`;
+        lines.push(`> ${emojis.ac || '🔴'}${streak ? ` ${streak}` : ''} ─ AC ${rank}`);
+        lines.push(`> ${IND}· Rating: ${rating}`);
+        lines.push(`> ${IND}· Solved: **${row.ac_solved}**`);
       }
+
       if (row.toph_linked) {
-        const s = streakFire(tophStreak);
-        const ratingStr = row.toph_rating > 0 ? `**${row.toph_rating}**` : `Unrated`;
-        const rankStr = row.toph_rank && row.toph_rank !== 'Unrated' ? ` _(${row.toph_rank})_` : '';
-        lines.push(`> ${emojis.toph || '🟣'} Toph${rankStr} · Rating: ${ratingStr} · Solved: **${row.toph_solved}**${s ? ` · ${s}` : ''}`);
+        const streak = streakBadge(tophStreak);
+        const rankRaw = row.toph_rank && row.toph_rank !== 'Unrated' ? `**${row.toph_rank}**` : 'Unrated';
+        const rating = row.toph_rating > 0 ? `**${row.toph_rating}**` : `—`;
+        lines.push(`> 🟣${streak ? ` ${streak}` : ''} ─ Toph ${rankRaw}`);
+        lines.push(`> ${IND}· Rating: ${rating}`);
+        lines.push(`> ${IND}· Solved: **${row.toph_solved}**`);
       }
 
       return lines.join('\n');
     });
+
     description = sections.join('\n\n');
   }
 
-  // Build platforms string
+  // Only show platforms that at least one user has linked
   const platformParts = [];
   if (rows.some(r => r.cf_linked))   platformParts.push(`${emojis.cf || '🔵'} Codeforces`);
   if (rows.some(r => r.ac_linked))   platformParts.push(`${emojis.ac || '🔴'} AtCoder`);
-  if (rows.some(r => r.toph_linked)) platformParts.push(`${emojis.toph || '🟣'} Toph`);
+  if (rows.some(r => r.toph_linked)) platformParts.push(`🟣 Toph`);
 
   return new EmbedBuilder()
     .setColor(0x2ECC71)
-    .setDescription(`# \u2003\u2003\u2003🏅 CP Server Leaderboard\n\n${description}`)
+    .setDescription(
+      `# \u3000\u3000\u3000\u3000🏅 CP Server Leaderboard\n` +
+      `\u200b\n` +
+      description
+    )
     .addFields(
-      { name: '📊 Platforms',     value: platformParts.join(' · ') || 'None', inline: false },
-      { name: '🔢 Total Members', value: `${rows.length} ranked`,              inline: true },
-      { name: '🔥 Streak Legend', value: '⚡ 1d+  🔥 7d+  👑 15d+  💫 30d+',  inline: true }
+      { name: '📊 Platforms',     value: platformParts.join('  ·  ') || 'None linked', inline: false },
+      { name: '🔢 Total Members', value: `**${rows.length}** ranked`,                  inline: true  },
+      { name: '🔥 Streak Guide',  value: '⚡ 1d+  🔥 7d+  👑 15d+  💫 30d+',           inline: true  }
     )
     .setFooter({ text: `Last updated` })
     .setTimestamp();
 }
+
+
 
 
 /**
