@@ -463,11 +463,11 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
 
   const platformLabel = isCF ? `${emojis.cf} Codeforces` : isAC ? `${emojis.ac} AtCoder` : `${emojis.toph} Toph`;
 
-  const fileName = isCF ? 'codeforces.png' : isAC ? 'atcoder.png' : 'toph.png';
-  const filePath = require('path').join(__dirname, '..', 'assets', fileName);
-  const { AttachmentBuilder } = require('discord.js');
-  const file = new AttachmentBuilder(filePath, { name: fileName });
-  const thumbnailUrl = `attachment://${fileName}`;
+  const thumbnailUrl = isCF
+    ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
+    : isAC
+      ? 'https://img.atcoder.jp/assets/logo.png'
+      : 'https://toph.co/images/appleicon.png';
 
   // ── Category label in title
   const catLabel = category ? ` (${category})` : '';
@@ -496,7 +496,7 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
     .setTimestamp()
     .setFooter({ text: 'Keep grinding! 💪' });
 
-  return { embed, file };
+  return embed;
 }
 
 
