@@ -74,19 +74,11 @@ function startContestFetcher(client) {
     db.prepare(`ALTER TABLE notified_contests ADD COLUMN discord_msg_id TEXT`).run();
   } catch (_) {}
 
-  // Run immediately on boot if last refresh was more than 12 hours ago (43200 seconds)
+  // Run immediately on boot
   setTimeout(async () => {
     try {
-      const lastFetchStr = getConfig('last_contest_fetch_time');
-      const lastFetch = lastFetchStr ? parseInt(lastFetchStr, 10) : 0;
-      const now = Math.floor(Date.now() / 1000);
-      
-      if (now - lastFetch >= 43200) {
-        console.log(`[ContestFetcher] Startup trigger: last fetch was ${now - lastFetch}s ago. Performing full refresh...`);
-        await performContestRefresh(client);
-      } else {
-        console.log(`[ContestFetcher] Startup trigger: last fetch was only ${now - lastFetch}s ago. Skipping refresh to prevent duplicate pings.`);
-      }
+      console.log(`[ContestFetcher] Startup trigger: Performing full refresh...`);
+      await performContestRefresh(client);
     } catch (err) {
       console.error('[ContestFetcher Startup Error]', err);
     }

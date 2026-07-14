@@ -35,7 +35,7 @@ async function getPlatformEmojis(guild) {
       const p = path.join(__dirname, '..', 'assets', 'codeforces.png');
       if (fs.existsSync(p)) {
         console.log(`[Emojis] Uploading Codeforces logo...`);
-        cfEmoji = await guild.emojis.create({ attachment: p, name: 'codeforces' }).catch(err => {
+        cfEmoji = await guild.emojis.create({ attachment: fs.readFileSync(p), name: 'codeforces' }).catch(err => {
           console.warn(`[Emojis] codeforces emoji failed:`, err.message); return null;
         });
       }
@@ -47,7 +47,7 @@ async function getPlatformEmojis(guild) {
       const p = path.join(__dirname, '..', 'assets', 'atcoder.png');
       if (fs.existsSync(p)) {
         console.log(`[Emojis] Uploading AtCoder logo...`);
-        acEmoji = await guild.emojis.create({ attachment: p, name: 'atcoder' }).catch(err => {
+        acEmoji = await guild.emojis.create({ attachment: fs.readFileSync(p), name: 'atcoder' }).catch(err => {
           console.warn(`[Emojis] atcoder emoji failed:`, err.message); return null;
         });
       }
@@ -61,7 +61,7 @@ async function getPlatformEmojis(guild) {
       const p = fs.existsSync(circle) ? circle : fs.existsSync(fallback) ? fallback : null;
       if (p) {
         console.log(`[Emojis] Uploading Toph circle logo...`);
-        tophEmoji = await guild.emojis.create({ attachment: p, name: 'toph' }).catch(err => {
+        tophEmoji = await guild.emojis.create({ attachment: fs.readFileSync(p), name: 'toph' }).catch(err => {
           console.warn(`[Emojis] toph emoji failed:`, err.message); return null;
         });
       }
