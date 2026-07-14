@@ -474,17 +474,23 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
 
   // ── Difficulty badge
   const diffVal = problem.rating || problem.difficulty;
-  let diffStr = '';
-  if (diffVal) {
+  let diffStr = '⚪ Unrated';
+  if (diffVal !== null && diffVal !== undefined && diffVal !== 0) {
     const d = Number(diffVal);
     const tier = d >= 2400 ? '🔴 Very Hard' : d >= 1900 ? '🟠 Hard' : d >= 1400 ? '🟡 Medium' : d >= 800 ? '🟢 Easy' : '⚪ Beginner';
     diffStr = `${tier}  \`${d}\``;
+  } else if (isCF || isAC) {
+    diffStr = '⚪ Beginner  `0`';
   }
 
-  const extra = [];
-  if (diffStr)             extra.push({ name: '📊 Difficulty', value: diffStr,                              inline: true });
-  if (problem.tags?.length) extra.push({ name: '🏷️ Tags',        value: problem.tags.slice(0, 5).join(', '), inline: true });
-  if (problem.contestName)  extra.push({ name: '🏆 Contest',     value: problem.contestName,                 inline: false });
+  const tagsStr = problem.tags?.length ? problem.tags.slice(0, 5).join(', ') : 'None';
+  const contestStr = problem.contestName || problem.contestId || 'Practice';
+
+  const extra = [
+    { name: '📊 Difficulty', value: diffStr, inline: true },
+    { name: '🏷️ Tags', value: tagsStr, inline: true },
+    { name: '🏆 Contest', value: contestStr, inline: false }
+  ];
 
   const embed = new EmbedBuilder()
     .setColor(embedColor)
