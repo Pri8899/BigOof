@@ -235,8 +235,10 @@ async function runSubmissionFeed(client) {
   const emojis = await getPlatformEmojis(channel.guild);
 
   for (const user of users) {
+    const { fetchTophSubmissions } = require('../utils/toph');
     const cfNew = await fetchCFSubmissions(user);
     const { newAc: acNew, highestTime } = await fetchACSubmissions(user);
+    const tophNew = await fetchTophSubmissions(user);
     
     for (const sub of cfNew) {
       const embed = buildSubmissionEmbed(user, sub, 'cf', emojis);
@@ -245,6 +247,11 @@ async function runSubmissionFeed(client) {
     
     for (const sub of acNew) {
       const embed = buildSubmissionEmbed(user, sub, 'ac', emojis);
+      await channel.send({ embeds: [embed] }).catch(() => {});
+    }
+
+    for (const sub of tophNew) {
+      const embed = buildSubmissionEmbed(user, sub, 'toph', emojis);
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
 
@@ -295,6 +302,20 @@ async function runSubmissionFeed(client) {
         }
       } catch (err) {
         console.error(`[SubmissionFeed] Error updating AC streak for ${user.ac_handle}:`, err.message);
+      }
+      shouldUpdateDashboard = true;
+    }
+
+    if (tophNew.length > 0) {
+      try {
+        const { getTophUser } = require('../utils/toph');
+        const tophStats = await getTophUser(user.toph_handle);
+        if (tophStats) {
+          const { upsertRating } = require('../database/db');
+          upsertRating(user.discord_id, 'toph', tophStats);
+        }
+      } catch (err) {
+        console.error(`[SubmissionFeed] Error updating Toph stats for ${user.toph_handle}:`, err.message);
       }
       shouldUpdateDashboard = true;
     }

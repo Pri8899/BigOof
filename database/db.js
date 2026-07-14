@@ -176,6 +176,11 @@ db.exec(`
     snapshot_date TEXT,
     PRIMARY KEY (discord_id, platform)
   );
+
+  CREATE TABLE IF NOT EXISTS processed_submissions (
+    id TEXT PRIMARY KEY,
+    timestamp INTEGER NOT NULL
+  );
 `);
 
 // Add new columns to existing database tables if they do not exist

@@ -154,4 +154,57 @@ async function calculateTophStreak(handle) {
   }
 }
 
-module.exports = { getTophContests, validateTophHandle, getTophUser, calculateTophStreak };
+/**
+ * Scrape recent submissions from Toph profile's Activities feed
+ */
+async function fetchTophSubmissions(user) {
+  if (!user.toph_handle) return [];
+  const { db } = require('../database/db'); // lazy load to avoid circular deps if any
+  try {
+    const res = await axios.get(`https://toph.co/u/${user.toph_handle}`, {
+      timeout: 10000,
+      headers: BROWSER_HEADERS
+    });
+    const html = res.data;
+    
+    const regex = /Solved\s+<a\s+href=\/problems\/([^>]+)>([^<]+)<\/a>\.<\/div>[\s\S]*?data-timestamp=(\d+)/g;
+    let m;
+    const newSubs = [];
+    const now = Math.floor(Date.now() / 1000);
+    
+    while ((m = regex.exec(html)) !== null) {
+      const slug = m[1].trim();
+      const name = m[2].trim();
+      const timestamp = parseInt(m[3], 10);
+      
+      // Skip submissions older than 3 hours to prevent spam on first run
+      if (timestamp < now - 10800) continue;
+      
+      const uniqueId = `toph_${user.discord_id}_${slug}_${timestamp}`;
+      
+      const existing = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(uniqueId);
+      if (!existing) {
+        db.prepare('INSERT INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(uniqueId, timestamp);
+        newSubs.push({
+          id: uniqueId,
+          name: name,
+          url: `https://toph.co/p/${slug}`,
+          difficulty: 0,
+          tags: [],
+          contestName: 'Practice'
+        });
+      }
+    }
+    
+    return newSubs.sort((a, b) => {
+      const ta = parseInt(a.id.split('_').pop());
+      const tb = parseInt(b.id.split('_').pop());
+      return ta - tb;
+    });
+  } catch (err) {
+    console.error(`[Toph] fetchTophSubmissions error for ${user.toph_handle}:`, err.message);
+    return [];
+  }
+}
+
+module.exports = { getTophContests, validateTophHandle, getTophUser, calculateTophStreak, fetchTophSubmissions };
