@@ -6,34 +6,40 @@ const {
 } = require('../database/db');
 const { getCFContests }     = require('../utils/codeforces');
 const { getACContests }     = require('../utils/atcoder');
+const { getTophContests }   = require('../utils/toph');
 const { buildContestEmbed, buildContestListEmbed } = require('../utils/embeds');
 
 /**
  * Fetch all contests from all platforms and store new ones
  */
 async function fetchAndStoreContests() {
-  console.log('[ContestFetcher] Fetching from Codeforces, AtCoder...');
-  const [cfRes, acRes] = await Promise.allSettled([
+  console.log('[ContestFetcher] Fetching from Codeforces, AtCoder, Toph...');
+  const [cfRes, acRes, tophRes] = await Promise.allSettled([
     getCFContests(),
-    getACContests()
+    getACContests(),
+    getTophContests()
   ]);
 
-  const cfList = cfRes.status === 'fulfilled' ? cfRes.value : [];
-  const acList = acRes.status === 'fulfilled' ? acRes.value : [];
+  const cfList   = cfRes.status === 'fulfilled'   ? cfRes.value   : [];
+  const acList   = acRes.status === 'fulfilled'   ? acRes.value   : [];
+  const tophList = tophRes.status === 'fulfilled' ? tophRes.value : [];
 
   // Update API status in DB config
-  const cfSuccess = cfRes.status === 'fulfilled' && cfList.length > 0;
-  const acSuccess = acRes.status === 'fulfilled' && acList.length > 0;
-  setConfig('cf_api_online', cfSuccess ? '1' : '0');
-  setConfig('ac_api_online', acSuccess ? '1' : '0');
+  const cfSuccess   = cfRes.status === 'fulfilled'   && cfList.length > 0;
+  const acSuccess   = acRes.status === 'fulfilled'   && acList.length > 0;
+  const tophSuccess = tophRes.status === 'fulfilled' && tophList.length >= 0; // 0 is OK (no upcoming)
+  setConfig('cf_api_online',   cfSuccess   ? '1' : '0');
+  setConfig('ac_api_online',   acSuccess   ? '1' : '0');
+  setConfig('toph_api_online', tophSuccess ? '1' : '0');
 
   // Log per-platform results
-  if (!cfSuccess) console.error('[ContestFetcher] CF fetch failed or returned empty.');
-  if (!acSuccess) console.error('[ContestFetcher] AC fetch failed or returned empty.');
+  if (!cfSuccess)   console.error('[ContestFetcher] CF fetch failed or returned empty.');
+  if (!acSuccess)   console.error('[ContestFetcher] AC fetch failed or returned empty.');
+  if (!tophSuccess) console.error('[ContestFetcher] Toph fetch failed.');
 
-  console.log(`[ContestFetcher] 🔵 Codeforces: ${cfList.length} | 🔴 AtCoder: ${acList.length}`);
+  console.log(`[ContestFetcher] 🔵 Codeforces: ${cfList.length} | 🔴 AtCoder: ${acList.length} | 🟣 Toph: ${tophList.length}`);
 
-  const all = [...cfList, ...acList];
+  const all = [...cfList, ...acList, ...tophList];
   for (const c of all) {
     upsertContest(c.id, c.platform, c.name, c.startTime, c.durationSec, c.url);
   }
@@ -119,13 +125,14 @@ async function postContestSummary(client) {
     console.log(`[ContestFetcher] Found ${contests.length} upcoming/running contests.`);
     
     // Read API status from DB config
-    const cfStatus = getConfig('cf_api_online') !== '0';
-    const acStatus = getConfig('ac_api_online') !== '0';
-    console.log(`[ContestFetcher] API status - CF: ${cfStatus}, AC: ${acStatus}`);
+    const cfStatus   = getConfig('cf_api_online')   !== '0';
+    const acStatus   = getConfig('ac_api_online')   !== '0';
+    const tophStatus = getConfig('toph_api_online') !== '0';
+    console.log(`[ContestFetcher] API status - CF: ${cfStatus}, AC: ${acStatus}, Toph: ${tophStatus}`);
 
     const { getPlatformEmojis } = require('../utils/emojis');
     const emojis = await getPlatformEmojis(channel.guild);
-    const embed = buildContestListEmbed(contests, 'all', { cf: cfStatus, ac: acStatus }, emojis);
+    const embed = buildContestListEmbed(contests, 'all', { cf: cfStatus, ac: acStatus, toph: tophStatus }, emojis);
 
     // Fetch recent messages in the channel to find any existing summary messages sent by the bot
     let existingMessages = [];

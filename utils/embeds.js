@@ -5,6 +5,7 @@ const { EmbedBuilder } = require('discord.js');
 const COLORS = {
   Codeforces: 0x1F8DD6,
   AtCoder:    0x222222,
+  Toph:       0x7B2FBE,
   Custom:     0xD4AF37,
   default:    0x5865F2
 };
@@ -13,6 +14,7 @@ const COLORS = {
 const PLATFORM_EMOJI = {
   cf: '🔵',
   ac: '🔴',
+  toph: '🟣',
   custom: '🏆'
 };
 
@@ -20,6 +22,7 @@ const PLATFORM_EMOJI = {
 const PLATFORM_BADGE = {
   Codeforces: '🔵 Codeforces',
   AtCoder:    '🔴 AtCoder',
+  Toph:       '🟣 Toph',
   Custom:     '🏆 Custom'
 };
 
@@ -211,7 +214,7 @@ function errorEmbed(title, description) {
  * Build upcoming contests list embed — grouped by platform
  * Order: Codeforces → AtCoder
  */
-function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emojis = { cf: '🔵', ac: '🔴' }) {
+function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
   const hasCustom = contests.some(c => c.platform === 'Custom');
   const PLATFORM_ORDER = [];
   if (hasCustom || platform.toLowerCase().startsWith('custom')) {
@@ -223,18 +226,23 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
   if (platform === 'all' || platform.toLowerCase().startsWith('atcoder')) {
     PLATFORM_ORDER.push('AtCoder');
   }
+  if (platform === 'all' || platform.toLowerCase().startsWith('toph')) {
+    PLATFORM_ORDER.push('Toph');
+  }
   
-  const cfStatus = apiStatus.cf ?? true;
-  const acStatus = apiStatus.ac ?? true;
+  const cfStatus   = apiStatus.cf   ?? true;
+  const acStatus   = apiStatus.ac   ?? true;
+  const tophStatus = apiStatus.toph ?? true;
 
   const PLATFORM_HEADER = {
     Custom:     `🏆 ───────── CUSTOM ─────────`,
-    Codeforces: `${emojis.cf} ─────── CODEFORCES ───────${cfStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`,
-    AtCoder:    `${emojis.ac} ──────── ATCODER ─────────${acStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`
+    Codeforces: `${emojis.cf || '🔵'} ─────── CODEFORCES ───────${cfStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`,
+    AtCoder:    `${emojis.ac || '🔴'} ──────── ATCODER ─────────${acStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`,
+    Toph:       `${emojis.toph || '🟣'} ──────────── TOPH ────────${tophStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`
   };
 
   const filtered = platform === 'all'
-    ? contests.filter(c => ['Custom', 'Codeforces', 'AtCoder'].includes(c.platform))
+    ? contests.filter(c => ['Custom', 'Codeforces', 'AtCoder', 'Toph'].includes(c.platform))
     : contests.filter(c => c.platform.toLowerCase().startsWith(platform.toLowerCase()));
 
   const embed = new EmbedBuilder()
