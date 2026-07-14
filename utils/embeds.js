@@ -522,16 +522,14 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵'
     const coChamps  = allSolved.filter(u => u.solved_this_week === maxSolved);
     const names     = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
 
-    // Best platform per user (only highest)
+    // Show all platforms separately where solved count > 0
     const perUserLines = coChamps.map(u => {
       const opts = [
         { emoji: emojis.cf   || '🔵', label: 'CF',   count: u.cf_solved   ?? 0 },
         { emoji: emojis.ac   || '🔴', label: 'AC',   count: u.ac_solved   ?? 0 },
         { emoji: emojis.toph || '🟣', label: 'Toph', count: u.toph_solved ?? 0 }
       ].filter(o => o.count > 0);
-      if (opts.length === 0) return '';
-      const best = opts.reduce((a, b) => b.count > a.count ? b : a);
-      return `> ${best.emoji} **${best.label}** — **${best.count}** problems`;
+      return opts.map(o => `> ${o.emoji} **${o.label}** — **${o.count}** problems`).join('\n');
     }).filter(Boolean).join('\n');
 
     embed.addFields({
@@ -553,16 +551,14 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵'
     const coChamps = allRatingGains.filter(u => u.rating_gained === maxGain);
     const names    = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
 
-    // Best platform per user (only highest gain)
+    // Show all platforms separately where rating gain > 0
     const perUserLines = coChamps.map(u => {
       const opts = [
         { emoji: emojis.cf   || '🔵', label: 'CF',   gain: u.cf_gain   ?? 0, start: u.cf_start,   end: u.cf_end   },
         { emoji: emojis.ac   || '🔴', label: 'AC',   gain: u.ac_gain   ?? 0, start: u.ac_start,   end: u.ac_end   },
         { emoji: emojis.toph || '🟣', label: 'Toph', gain: u.toph_gain ?? 0, start: u.toph_start, end: u.toph_end }
       ].filter(o => o.gain > 0);
-      if (opts.length === 0) return '';
-      const best = opts.reduce((a, b) => b.gain > a.gain ? b : a);
-      return `> ${best.emoji} **${best.label}** \`${best.start} → ${best.end}\` **(+${best.gain})**`;
+      return opts.map(o => `> ${o.emoji} **${o.label}** \`${o.start} → ${o.end}\` **(+${o.gain})**`).join('\n');
     }).filter(Boolean).join('\n');
 
     embed.addFields({
