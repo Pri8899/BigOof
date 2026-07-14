@@ -458,10 +458,12 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
   }
 
   // ── Colors & labels ────────────────────────────────────────────
-  let embedColor  = isCF ? COLORS.Codeforces : isAC ? COLORS.AtCoder : 0x7B2FBE;
+  // Unify CF, AC, and Toph into the same color theme (Codeforces Blue), only ICPC gets golden.
+  let embedColor  = COLORS.Codeforces;
   if (category === '🏆 ICPC') embedColor = 0xD4AF37;
 
-  const platformLabel = isCF ? `${emojis.cf} Codeforces` : isAC ? `${emojis.ac} AtCoder` : `${emojis.toph} Toph`;
+  // Do not include custom emojis here, Discord author field doesn't render them!
+  const platformLabel = isCF ? `Codeforces` : isAC ? `AtCoder` : `Toph`;
 
   const thumbnailUrl = isCF
     ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
