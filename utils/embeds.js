@@ -486,9 +486,11 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
   if (problem.tags?.length) extra.push({ name: '🏷️ Tags',        value: problem.tags.slice(0, 5).join(', '), inline: true });
   if (problem.contestName)  extra.push({ name: '🏆 Contest',     value: problem.contestName,                 inline: false });
 
+  const platformName = isCF ? `Codeforces` : isAC ? `AtCoder` : `Toph`;
+
   const embed = new EmbedBuilder()
     .setColor(embedColor)
-    .setAuthor({ name: `${platformLabel}${catLabel} — Live Accepted!` })
+    .setAuthor({ name: `${platformName}${catLabel} — Live Accepted!`, iconURL: thumbnailUrl })
     .setTitle(`🎉 ${user.username} just got Accepted!`)
     .setDescription(`<@${user.discord_id}> solved **[${problem.name}](${problem.url})**!`)
     .setThumbnail(thumbnailUrl)
