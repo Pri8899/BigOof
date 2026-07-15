@@ -244,7 +244,16 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
           if (excludeTags.has(t.toLowerCase())) return false;
         }
       }
-      
+
+      // Filter out Surprise Language Rounds and Gym contests — they don't allow C++
+      if (p.contestId >= 100000) return false; // Gym contest
+      if (cachedContests) {
+        const cName = (cachedContests[p.contestId] || '').toLowerCase();
+        if (cName.includes('surprise') || cName.includes('language round') || cName.includes('kotlin') || cName.includes('java') || cName.includes('scala')) {
+          return false;
+        }
+      }
+
       return true;
     });
 
@@ -281,6 +290,12 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
           for (const t of p.tags) {
             if (excludeTags.has(t.toLowerCase())) return false;
           }
+        }
+        // Exclude Surprise Language Rounds and Gym contests
+        if (p.contestId >= 100000) return false;
+        if (cachedContests) {
+          const cName = (cachedContests[p.contestId] || '').toLowerCase();
+          if (cName.includes('surprise') || cName.includes('language round') || cName.includes('kotlin') || cName.includes('java') || cName.includes('scala')) return false;
         }
         return true;
       });
