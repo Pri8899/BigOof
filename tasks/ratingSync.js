@@ -123,10 +123,17 @@ async function postRatingChange(client, discordId, username, platform, oldRating
 }
 
 
+// Track last streak sync time so streaks only update once per hour
+let lastStreakSyncTime = 0;
+
 // ─── Sync All Ratings ────────────────────────────────────────
 async function syncAllRatings(client) {
   const users = getAllUsers();
   console.log(`[RatingSync] Syncing ratings and streaks for ${users.length} users...`);
+
+  const now = Date.now();
+  const doStreaks = (now - lastStreakSyncTime) >= 60 * 60 * 1000; // Only every 1 hour
+  if (doStreaks) lastStreakSyncTime = now;
 
   for (const user of users) {
     const existing = {};
@@ -153,27 +160,30 @@ async function syncAllRatings(client) {
 
       await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
 
-      try {
-        const streakInfo = await calculateCFStreak(user.cf_handle);
-        upsertStreak(user.discord_id, 'cf', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
-        if (client) {
-          await updateDiscordStreakRole(client, user.discord_id, streakInfo.current);
+      if (doStreaks) {
+        try {
+          const streakInfo = await calculateCFStreak(user.cf_handle);
+          upsertStreak(user.discord_id, 'cf', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+          if (client) {
+            await updateDiscordStreakRole(client, user.discord_id, streakInfo.current);
+          }
+        } catch (err) {
+          console.error(`[RatingSync] CF streak error for ${user.cf_handle}:`, err.message);
         }
-      } catch (err) {
-        console.error(`[RatingSync] CF streak error for ${user.cf_handle}:`, err.message);
+        await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
       }
-
-      await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
     }
 
     if (user.ac_handle) {
-      try {
-        const streakInfo = await calculateACStreak(user.ac_handle);
-        if (streakInfo && (streakInfo.current > 0 || streakInfo.max > 0)) {
-          upsertStreak(user.discord_id, 'ac', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+      if (doStreaks) {
+        try {
+          const streakInfo = await calculateACStreak(user.ac_handle);
+          if (streakInfo && (streakInfo.current > 0 || streakInfo.max > 0)) {
+            upsertStreak(user.discord_id, 'ac', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+          }
+        } catch (err) {
+          console.error(`[RatingSync] AC streak error for ${user.ac_handle}:`, err.message);
         }
-      } catch (err) {
-        console.error(`[RatingSync] AC streak error for ${user.ac_handle}:`, err.message);
       }
 
       try {
@@ -193,6 +203,7 @@ async function syncAllRatings(client) {
 
       await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
     }
+
     if (user.toph_handle) {
       try {
         const stats = await getTophUser(user.toph_handle);
@@ -209,13 +220,15 @@ async function syncAllRatings(client) {
         console.error(`[RatingSync] Toph error ${user.toph_handle}:`, err.message);
       }
 
-      try {
-        const streakInfo = await calculateTophStreak(user.toph_handle);
-        if (streakInfo && (streakInfo.current > 0 || streakInfo.max > 0)) {
-          upsertStreak(user.discord_id, 'toph', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+      if (doStreaks) {
+        try {
+          const streakInfo = await calculateTophStreak(user.toph_handle);
+          if (streakInfo && (streakInfo.current > 0 || streakInfo.max > 0)) {
+            upsertStreak(user.discord_id, 'toph', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+          }
+        } catch (err) {
+          console.error(`[RatingSync] Toph streak error for ${user.toph_handle}:`, err.message);
         }
-      } catch (err) {
-        console.error(`[RatingSync] Toph streak error for ${user.toph_handle}:`, err.message);
       }
 
       await new Promise(r => setTimeout(r, 1000)); // Rate limit safety
@@ -309,29 +322,28 @@ async function updateDashboard(client) {
 
 // ─── Scheduler ───────────────────────────────────────────────
 function startRatingSync(client) {
-  // Run immediately on boot
-  setTimeout(async () => {
+  let isRunning = false;
+
+  const poll = async () => {
+    if (isRunning) return;
+    isRunning = true;
     try {
-      console.log(`[RatingSync] Startup trigger: Syncing ratings and updating dashboard...`);
+      console.log(`[RatingSync] Polling ratings...`);
       await syncAllRatings(client);
       await updateDashboard(client);
+      console.log(`[RatingSync] Poll complete.`);
     } catch (err) {
-      console.error('[RatingSync Startup Error]', err);
+      console.error('[RatingSync Poll Error]', err.message);
+    } finally {
+      isRunning = false;
     }
-  }, 10000);
+    // Schedule next poll 5 minutes after the previous one finishes
+    setTimeout(poll, 5 * 60 * 1000);
+  };
 
-  // Exactly at 12:00 AM and 12:00 PM in Asia/Dhaka time
-  cron.schedule('0 9 * * *', async () => {
-    try {
-      console.log(`[RatingSync] Scheduled 9 AM rating sync and dashboard update triggered.`);
-      await syncAllRatings(client);
-      await updateDashboard(client);
-    } catch (err) {
-      console.error('[RatingSync Scheduled Cron Error]', err);
-    }
-  }, { timezone: 'Asia/Dhaka' });
-
-  console.log('[RatingSync] Cron scheduler started (runs at 9:00 AM Dhaka time).');
+  // Run first poll 15 seconds after boot, then every 5 minutes
+  setTimeout(poll, 15000);
+  console.log('[RatingSync] Poller started — checks every 5 minutes for real-time rating changes.');
 }
 
 function epochToDateStr(epoch, offset) {
