@@ -84,12 +84,18 @@ async function postRatingChange(client, discordId, username, platform, oldRating
   const sign  = isUp ? `+${diff}` : `${diff}`;
   const color = isUp ? 0x2ECC71 : 0xE74C3C;
   const trend = isUp ? '📈' : '📉';
-  const bar   = isUp ? '🟩'.repeat(Math.min(5, Math.ceil(Math.abs(diff) / 50))) : '🟥'.repeat(Math.min(5, Math.ceil(Math.abs(diff) / 50)));
+  const bar   = isUp
+    ? '🟩'.repeat(Math.min(5, Math.ceil(Math.abs(diff) / 50)))
+    : '🟥'.repeat(Math.min(5, Math.ceil(Math.abs(diff) / 50)));
 
   const { getPlatformEmojis } = require('../utils/emojis');
   const emojis = await getPlatformEmojis(channel.guild);
   const platEmoji = { cf: emojis.cf || '🔵', ac: emojis.ac || '🔴', toph: emojis.toph || '🟣' }[platform] ?? '🔵';
   const platName  = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' }[platform] ?? platform;
+
+  const motiveLine = isUp
+    ? `> 🎉 Amazing performance! Keep it up!\n`
+    : `> 💪 Losses are lessons. Come back stronger!\n`;
 
   const desc =
     `\u200b\n` +
@@ -99,16 +105,19 @@ async function postRatingChange(client, discordId, username, platform, oldRating
     `> \`\`\`\n` +
     `> 🏅 **Current Rank** \u00a0 ${rankTitle ?? 'Unrated'}\n` +
     (lastContest ? `> 🏆 **Contest** \u00a0\u00a0\u00a0\u00a0\u00a0 ${lastContest.contestName}  ·  Rank **#${lastContest.rank}**\n` : '') +
+    motiveLine +
     `> ${bar}\n` +
     `\u200b`;
+
+  const footer = isUp ? 'Keep pushing! 💪' : 'Every champion falls. What matters is getting back up! 🔥';
 
   const embed = new EmbedBuilder()
     .setColor(color)
     .setAuthor({ name: `${isUp ? '⬆️ Rating Increased' : '⬇️ Rating Decreased'} — ${platName}` })
-    .setTitle(`${trend} ${username}'s rating changed!`)
+    .setTitle(`${trend} ${username}'s rating ${isUp ? 'went up' : 'went down'}!`)
     .setDescription(`<@${discordId}>\n${desc}`)
     .setTimestamp()
-    .setFooter({ text: 'Keep pushing! 💪' });
+    .setFooter({ text: footer });
 
   await channel.send({ content: `<@${discordId}>`, embeds: [embed] }).catch(() => {});
 }
@@ -496,4 +505,4 @@ async function updateDiscordStreakRole(client, discordId, currentStreak) {
   }
 }
 
-module.exports = { startRatingSync, syncAllRatings, updateDashboard, calculateCFStreak, calculateACStreak };
+module.exports = { startRatingSync, syncAllRatings, updateDashboard, calculateCFStreak, calculateACStreak, postRatingChange };
