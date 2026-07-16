@@ -68,32 +68,22 @@ async function getOrFetchContestName(contestId) {
     }
   }
 
-  // Fetch gym contest list if the ID looks like a Gym contest (usually >= 100000)
+  // For gym contests — fetch the name directly (gym list is too large and times out)
   if (Number(contestId) >= 100000) {
-    if (!gymContestListCache || (now - lastGymContestListFetchTime > 3600000)) {
-      try {
-        console.log('[SubmissionFeed] Fetching Codeforces gym contest list for cache...');
-        const res = await axios.get(`${CF_BASE}/contest.list?gym=true`, { timeout: 15000 });
-        if (res.data.status === 'OK') {
-          gymContestListCache = res.data.result;
-          lastGymContestListFetchTime = now;
-        }
-      } catch (err) {
-        console.error('[SubmissionFeed] Failed to fetch gym contest list:', err.message);
-      }
-    }
-
-    if (gymContestListCache) {
-      const contest = gymContestListCache.find(c => c.id === Number(contestId));
-      if (contest) {
-        name = contest.name;
+    try {
+      const res = await axios.get(`${CF_BASE}/contest.standings?contestId=${contestId}&from=1&count=1&showUnofficial=true`, { timeout: 8000 });
+      if (res.data.status === 'OK' && res.data.result && res.data.result.contest) {
+        name = res.data.result.contest.name;
         cacheContestName(contestId, name);
         return name;
       }
+    } catch (err) {
+      // Gym contest might be private — ignore
     }
+    return null; // gym contest name not found, embed will show "Practice"
   }
 
-  // Fallback to contest.ratingChanges if not found in list (e.g. if it is a very new contest)
+  // Fallback to contest.ratingChanges for very new regular contests
   try {
     const res = await axios.get(`${CF_BASE}/contest.ratingChanges?contestId=${contestId}`, { timeout: 5000 });
     if (res.data.status === 'OK' && res.data.result && res.data.result.length > 0) {
@@ -113,10 +103,10 @@ async function fetchCFSubmissions(user) {
   try {
     const res = await axios.get(`${CF_BASE}/user.status?handle=${user.cf_handle}&from=1&count=50`, { timeout: 8000 });
     if (res.data.status !== 'OK') return [];
-    
+
     let lastId = getLastSubmission(user.discord_id, 'cf');
     let highestId = lastId || 0;
-    
+
     // Sort submissions by ID ascending so we process oldest to newest
     const submissions = res.data.result.sort((a, b) => a.id - b.id);
     const newAc = [];
@@ -126,19 +116,25 @@ async function fetchCFSubmissions(user) {
 
     for (const sub of submissions) {
       const isNew = lastId !== null ? (sub.id > lastId) : (sub.creationTimeSeconds >= minTime);
-
       if (!isNew) continue;
 
       if (sub.verdict === 'TESTING' || !sub.verdict) {
-        // Still being judged — do NOT advance past this submission ID
-        // so next poll we can re-check if it became AC
-        break; // submissions are sorted ascending, so stop here
+        // Still being judged — stop here and re-check next poll
+        break;
       }
 
-      // Fully judged — always advance our pointer
+      // Advance pointer for all fully-judged submissions
       highestId = Math.max(highestId, sub.id);
 
       if (sub.verdict === 'OK' && sub.problem) {
+        // ── Per-submission dedup using processed_submissions table ──
+        const dedupKey = `cf_${user.discord_id}_${sub.id}`;
+        const alreadySeen = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(dedupKey);
+        if (alreadySeen) continue; // already announced — skip
+
+        // Mark as processed BEFORE announcing to prevent duplicates on restart
+        db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(dedupKey, sub.creationTimeSeconds);
+
         const contestName = await getOrFetchContestName(sub.problem.contestId);
         const isGym = Number(sub.problem.contestId) >= 100000;
         const problemUrl = isGym
@@ -153,7 +149,7 @@ async function fetchCFSubmissions(user) {
           contestName: contestName
         });
       }
-      // WA, TLE, etc. — advance pointer but don't announce
+      // WA, TLE etc — pointer advanced, nothing to announce
     }
 
     if (highestId > (lastId || 0)) {
