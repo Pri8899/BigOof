@@ -120,48 +120,46 @@ async function fetchCFSubmissions(user) {
     // Sort submissions by ID ascending so we process oldest to newest
     const submissions = res.data.result.sort((a, b) => a.id - b.id);
     const newAc = [];
-    
+
     const nowSec = Math.floor(Date.now() / 1000);
     const minTime = nowSec - 10800; // 3 hours
 
-    let lowestPendingId = Infinity;
-    for (const sub of submissions) {
-      if (sub.verdict === 'TESTING' || !sub.verdict) {
-        lowestPendingId = Math.min(lowestPendingId, sub.id);
-      }
-    }
-
     for (const sub of submissions) {
       const isNew = lastId !== null ? (sub.id > lastId) : (sub.creationTimeSeconds >= minTime);
-      
-      if (isNew) {
-        if (sub.verdict === 'OK' && sub.problem) {
-          const contestName = await getOrFetchContestName(sub.problem.contestId);
-          const isGym = Number(sub.problem.contestId) >= 100000;
-          const problemUrl = isGym
-            ? `https://codeforces.com/gym/${sub.problem.contestId}/problem/${sub.problem.index}`
-            : `https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`;
 
-          newAc.push({
-            name: sub.problem.name,
-            url: problemUrl,
-            rating: sub.problem.rating,
-            tags: sub.problem.tags,
-            contestName: contestName
-          });
-        }
+      if (!isNew) continue;
+
+      if (sub.verdict === 'TESTING' || !sub.verdict) {
+        // Still being judged — do NOT advance past this submission ID
+        // so next poll we can re-check if it became AC
+        break; // submissions are sorted ascending, so stop here
       }
-      
-      // Safely advance the highestId only for submissions that are fully processed
-      if (sub.id < lowestPendingId && (lastId === null || sub.id > lastId)) {
-        highestId = Math.max(highestId, sub.id);
+
+      // Fully judged — always advance our pointer
+      highestId = Math.max(highestId, sub.id);
+
+      if (sub.verdict === 'OK' && sub.problem) {
+        const contestName = await getOrFetchContestName(sub.problem.contestId);
+        const isGym = Number(sub.problem.contestId) >= 100000;
+        const problemUrl = isGym
+          ? `https://codeforces.com/gym/${sub.problem.contestId}/problem/${sub.problem.index}`
+          : `https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`;
+
+        newAc.push({
+          name: sub.problem.name,
+          url: problemUrl,
+          rating: sub.problem.rating,
+          tags: sub.problem.tags,
+          contestName: contestName
+        });
       }
+      // WA, TLE, etc. — advance pointer but don't announce
     }
-    
+
     if (highestId > (lastId || 0)) {
       setLastSubmission(user.discord_id, 'cf', highestId);
     }
-    
+
     return newAc;
   } catch (err) {
     console.error(`[SubmissionFeed] Error fetching Codeforces submissions for ${user.cf_handle}:`, err.message);
@@ -239,7 +237,12 @@ async function runSubmissionFeed(client) {
     const cfNew = await fetchCFSubmissions(user);
     const { newAc: acNew, highestTime } = await fetchACSubmissions(user);
     const tophNew = await fetchTophSubmissions(user);
-    
+
+    // Save AC pointer BEFORE sending embeds to prevent re-announcing on restart
+    if (highestTime !== null) {
+      setLastSubmission(user.discord_id, 'ac', highestTime);
+    }
+
     for (const sub of cfNew) {
       const embed = buildSubmissionEmbed(user, sub, 'cf', emojis);
       await channel.send({ embeds: [embed] }).catch(() => {});
@@ -255,9 +258,7 @@ async function runSubmissionFeed(client) {
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
 
-    if (highestTime !== null) {
-      setLastSubmission(user.discord_id, 'ac', highestTime);
-    }
+
 
     if (cfNew.length > 0) {
       try {
