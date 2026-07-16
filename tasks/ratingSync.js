@@ -134,6 +134,7 @@ async function syncAllRatings(client) {
   const now = Date.now();
   const doStreaks = (now - lastStreakSyncTime) >= 60 * 60 * 1000; // Only every 1 hour
   if (doStreaks) lastStreakSyncTime = now;
+  let ratingChanged = false;
 
   for (const user of users) {
     const existing = {};
@@ -150,6 +151,7 @@ async function syncAllRatings(client) {
           if (client) {
             await updateDiscordRole(client, user.discord_id, stats.rating);
             if (hasExisting && oldRating !== stats.rating) {
+              ratingChanged = true;
               await postRatingChange(client, user.discord_id, user.username, 'cf', oldRating, stats.rating, stats.rank_title, stats.lastContest);
             }
           }
@@ -194,6 +196,7 @@ async function syncAllRatings(client) {
           upsertRating(user.discord_id, 'ac', stats);
           insertRatingHistory(user.discord_id, 'ac', stats.rating);
           if (client && hasExisting && oldRating !== stats.rating) {
+            ratingChanged = true;
             await postRatingChange(client, user.discord_id, user.username, 'ac', oldRating, stats.rating, stats.rank_title, stats.lastContest);
           }
         }
@@ -213,6 +216,7 @@ async function syncAllRatings(client) {
           upsertRating(user.discord_id, 'toph', stats);
           insertRatingHistory(user.discord_id, 'toph', stats.rating);
           if (client && hasExisting && oldRating !== stats.rating) {
+            ratingChanged = true;
             await postRatingChange(client, user.discord_id, user.username, 'toph', oldRating, stats.rating, stats.rank_title, null);
           }
         }
@@ -235,7 +239,8 @@ async function syncAllRatings(client) {
     }
   }
 
-  console.log('[RatingSync] Sync complete.');
+  console.log(`[RatingSync] Sync complete. Rating changed: ${ratingChanged}`);
+  return ratingChanged; // caller decides whether to refresh dashboard
 }
 
 // ─── Update Dashboard ────────────────────────────────────────
@@ -324,26 +329,39 @@ async function updateDashboard(client) {
 function startRatingSync(client) {
   let isRunning = false;
 
+  // ── 5-min rating poller: only refreshes dashboard if a rating actually changed
   const poll = async () => {
     if (isRunning) return;
     isRunning = true;
     try {
       console.log(`[RatingSync] Polling ratings...`);
-      await syncAllRatings(client);
-      await updateDashboard(client);
-      console.log(`[RatingSync] Poll complete.`);
+      const changed = await syncAllRatings(client);
+      if (changed) {
+        console.log('[RatingSync] Rating change detected — refreshing dashboard.');
+        await updateDashboard(client);
+      }
     } catch (err) {
       console.error('[RatingSync Poll Error]', err.message);
     } finally {
       isRunning = false;
     }
-    // Schedule next poll 5 minutes after the previous one finishes
-    setTimeout(poll, 5 * 60 * 1000);
+    setTimeout(poll, 5 * 60 * 1000); // next check in 5 min
   };
 
-  // Run first poll 15 seconds after boot, then every 5 minutes
+  // Start first poll 15s after boot
   setTimeout(poll, 15000);
-  console.log('[RatingSync] Poller started — checks every 5 minutes for real-time rating changes.');
+
+  // ── Daily 9 AM dashboard refresh (unconditional, keeps leaderboard fresh)
+  cron.schedule('0 9 * * *', async () => {
+    try {
+      console.log('[RatingSync] Daily 9 AM dashboard refresh.');
+      await updateDashboard(client);
+    } catch (err) {
+      console.error('[RatingSync] Daily dashboard refresh error:', err.message);
+    }
+  }, { timezone: 'Asia/Dhaka' });
+
+  console.log('[RatingSync] Started: ratings polled every 5 min (dashboard only updates on change or daily 9 AM).');
 }
 
 function epochToDateStr(epoch, offset) {
