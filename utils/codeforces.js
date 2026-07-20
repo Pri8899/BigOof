@@ -132,37 +132,81 @@ async function initializeProblemCache() {
 }
 
 // Check if a contest name matches the selected division filter
-function matchesDivision(contestName, division) {
-  if (!contestName) return false;
+function matchesDivision(contestName, division, rating = null) {
+  if (!contestName) {
+    if (!rating) return true;
+    if (division === 'div1') return rating >= 1600;
+    if (division === 'div2') return rating <= 2200;
+    if (division === 'div3') return rating <= 1600;
+    if (division === 'div4') return rating <= 1400;
+    return true;
+  }
+  
   const lowerName = contestName.toLowerCase();
-  
-  if (division === 'div1') {
-    return (
-      (lowerName.includes('div. 1') || lowerName.includes('div 1')) &&
-      !lowerName.includes('div. 2') &&
-      !lowerName.includes('div 2')
-    ) || lowerName.includes('global round') || lowerName.includes('div. 1 + div. 2');
-  }
-  
-  if (division === 'div2') {
-    return (
-      (lowerName.includes('div. 2') || lowerName.includes('div 2')) &&
-      !lowerName.includes('div. 3') &&
-      !lowerName.includes('div 3') &&
-      !lowerName.includes('div. 4') &&
-      !lowerName.includes('div 4')
-    ) || lowerName.includes('educational') || lowerName.includes('div. 1 + div. 2');
-  }
-  
-  if (division === 'div3') {
-    return lowerName.includes('div. 3') || lowerName.includes('div 3');
-  }
-  
-  if (division === 'div4') {
-    return lowerName.includes('div. 4') || lowerName.includes('div 4');
-  }
-  
+  const hasDiv1 = /div\.?\s*1\b/i.test(lowerName) || lowerName.includes('global') || lowerName.includes('div. 1 + div. 2');
+  const hasDiv2 = /div\.?\s*2\b/i.test(lowerName) || lowerName.includes('educational') || lowerName.includes('div. 1 + div. 2');
+  const hasDiv3 = /div\.?\s*3\b/i.test(lowerName);
+  const hasDiv4 = /div\.?\s*4\b/i.test(lowerName);
+
+  if (division === 'div1') return hasDiv1;
+  if (division === 'div2') return hasDiv2;
+  if (division === 'div3') return hasDiv3;
+  if (division === 'div4') return hasDiv4;
+
   return true;
+}
+
+/**
+ * Helper to filter problem candidates from cache
+ */
+function filterProblemCandidates(problems, minRating, maxRating, tag, excludeIds, division, excludeTags, contestMap) {
+  return problems.filter(p => {
+    const pId = `${p.contestId}${p.index}`;
+    
+    // Check rating
+    if (p.rating === undefined || p.rating === null || p.rating < minRating || p.rating > maxRating) {
+      return false;
+    }
+    
+    // Check exclusions (solved problems)
+    if (excludeIds && excludeIds.has(pId)) {
+      return false;
+    }
+    
+    // Check tag if provided
+    if (tag) {
+      const lowerTag = tag.toLowerCase();
+      if (!p.tags || !p.tags.some(t => t.toLowerCase() === lowerTag)) {
+        return false;
+      }
+    }
+
+    // Check division if provided
+    if (division) {
+      const contestName = contestMap ? contestMap[p.contestId] : null;
+      if (!matchesDivision(contestName, division, p.rating)) {
+        return false;
+      }
+    }
+    
+    // Check exclude tags
+    if (excludeTags && excludeTags.size > 0 && p.tags) {
+      for (const t of p.tags) {
+        if (excludeTags.has(t.toLowerCase())) return false;
+      }
+    }
+
+    // Filter out Surprise Language Rounds and Gym contests — they don't allow C++
+    if (p.contestId >= 100000) return false; // Gym contest
+    if (contestMap) {
+      const cName = (contestMap[p.contestId] || '').toLowerCase();
+      if (cName.includes('surprise') || cName.includes('language round') || cName.includes('kotlin') || cName.includes('java') || cName.includes('scala')) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 }
 
 /**
@@ -182,7 +226,7 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
     // Fetch problemset cache if needed
     if (!cachedProblems || (now - lastCacheFetchTime > CACHE_DURATION)) {
       console.log('[CF] Cache expired or empty. Fetching full problemset from Codeforces API...');
-      const res = await axios.get(`${CF_BASE}/problemset.problems`, { timeout: 15000 });
+      const res = await axios.get(`${CF_BASE}/problemset.problems`, { timeout: 20000 });
       if (res.data && res.data.status === 'OK' && res.data.result && Array.isArray(res.data.result.problems)) {
         cachedProblems = res.data.result.problems;
         lastCacheFetchTime = now;
@@ -192,7 +236,7 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
 
     // Fetch contest list cache if needed
     if (!cachedContests || (now - lastContestCacheFetchTime > CACHE_DURATION)) {
-      const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 10000 }).catch(() => null);
+      const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 20000 }).catch(() => null);
       if (res && res.data && res.data.status === 'OK' && Array.isArray(res.data.result)) {
         const contestMap = {};
         for (const c of res.data.result) {
@@ -208,54 +252,34 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
       return [];
     }
 
-    // Filter locally from cache
-    let filtered = cachedProblems.filter(p => {
-      const pId = `${p.contestId}${p.index}`;
-      
-      // Check rating
-      if (p.rating === undefined || p.rating === null || p.rating < minRating || p.rating > maxRating) {
-        return false;
-      }
-      
-      // Check exclusions (solved problems)
-      if (excludeIds.has(pId)) {
-        return false;
-      }
-      
-      // Check tag if provided
-      if (tag) {
-        const lowerTag = tag.toLowerCase();
-        if (!p.tags || !p.tags.some(t => t.toLowerCase() === lowerTag)) {
-          return false;
-        }
-      }
+    // Attempt 1: Strict filter
+    let filtered = filterProblemCandidates(cachedProblems, minRating, maxRating, tag, excludeIds, division, excludeTags, cachedContests);
 
-      // Check division if provided
-      if (division) {
-        const contestName = cachedContests ? cachedContests[p.contestId] : null;
-        if (!matchesDivision(contestName, division)) {
-          return false;
-        }
-      }
-      
-      // Check exclude tags
-      if (excludeTags && excludeTags.size > 0 && p.tags) {
-        for (const t of p.tags) {
-          if (excludeTags.has(t.toLowerCase())) return false;
-        }
-      }
+    // Attempt 2: If no matches and minRating === maxRating, widen rating window (±100)
+    if (filtered.length === 0 && minRating === maxRating) {
+      const wMin = Math.max(800, minRating - 100);
+      const wMax = Math.min(3500, maxRating + 100);
+      filtered = filterProblemCandidates(cachedProblems, wMin, wMax, tag, excludeIds, division, excludeTags, cachedContests);
+    }
 
-      // Filter out Surprise Language Rounds and Gym contests — they don't allow C++
-      if (p.contestId >= 100000) return false; // Gym contest
-      if (cachedContests) {
-        const cName = (cachedContests[p.contestId] || '').toLowerCase();
-        if (cName.includes('surprise') || cName.includes('language round') || cName.includes('kotlin') || cName.includes('java') || cName.includes('scala')) {
-          return false;
-        }
-      }
+    // Attempt 3: If still no matches, widen rating window (±200)
+    if (filtered.length === 0 && (minRating === maxRating || minRating > 800 || maxRating < 3500)) {
+      const wMin = Math.max(800, minRating - 200);
+      const wMax = Math.min(3500, maxRating + 200);
+      filtered = filterProblemCandidates(cachedProblems, wMin, wMax, tag, excludeIds, division, excludeTags, cachedContests);
+    }
 
-      return true;
-    });
+    // Attempt 4: If still no matches and division was specified, relax division filter
+    if (filtered.length === 0 && division) {
+      const wMin = Math.max(800, minRating - 200);
+      const wMax = Math.min(3500, maxRating + 200);
+      filtered = filterProblemCandidates(cachedProblems, wMin, wMax, tag, excludeIds, null, excludeTags, cachedContests);
+    }
+
+    // Attempt 5: If still no matches, ignore excludeIds (if user solved everything matching criteria)
+    if (filtered.length === 0 && excludeIds && excludeIds.size > 0) {
+      filtered = filterProblemCandidates(cachedProblems, Math.max(800, minRating - 200), Math.min(3500, maxRating + 200), tag, null, null, excludeTags, cachedContests);
+    }
 
     // Shuffle and pick
     filtered = filtered.sort(() => Math.random() - 0.5).slice(0, count);
@@ -271,34 +295,11 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
     }));
   } catch (err) {
     console.error('[CF] getCFProblems error:', err.message);
-    // If the API call fails but we have cached problems, fall back to the cache!
     if (cachedProblems && cachedProblems.length > 0) {
-      console.log('[CF] Falling back to existing problem cache...');
-      let filtered = cachedProblems.filter(p => {
-        const pId = `${p.contestId}${p.index}`;
-        if (p.rating === undefined || p.rating === null || p.rating < minRating || p.rating > maxRating) return false;
-        if (excludeIds.has(pId)) return false;
-        if (tag) {
-          const lowerTag = tag.toLowerCase();
-          if (!p.tags || !p.tags.some(t => t.toLowerCase() === lowerTag)) return false;
-        }
-        if (division) {
-          const contestName = cachedContests ? cachedContests[p.contestId] : null;
-          if (!matchesDivision(contestName, division)) return false;
-        }
-        if (excludeTags && excludeTags.size > 0 && p.tags) {
-          for (const t of p.tags) {
-            if (excludeTags.has(t.toLowerCase())) return false;
-          }
-        }
-        // Exclude Surprise Language Rounds and Gym contests
-        if (p.contestId >= 100000) return false;
-        if (cachedContests) {
-          const cName = (cachedContests[p.contestId] || '').toLowerCase();
-          if (cName.includes('surprise') || cName.includes('language round') || cName.includes('kotlin') || cName.includes('java') || cName.includes('scala')) return false;
-        }
-        return true;
-      });
+      let filtered = filterProblemCandidates(cachedProblems, minRating, maxRating, tag, excludeIds, division, excludeTags, cachedContests);
+      if (filtered.length === 0) {
+        filtered = filterProblemCandidates(cachedProblems, Math.max(800, minRating - 200), Math.min(3500, maxRating + 200), tag, null, null, excludeTags, cachedContests);
+      }
       filtered = filtered.sort(() => Math.random() - 0.5).slice(0, count);
       return filtered.map(p => ({
         id:         `${p.contestId}${p.index}`,
@@ -313,6 +314,7 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
     return [];
   }
 }
+
 
 /**
  * Check solved status for a CF user on specific problems
