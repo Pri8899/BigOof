@@ -159,31 +159,80 @@ async function getTophUser(handle) {
 }
 
 /**
- * Get Toph submission streak by fetching activity data
+ * Calculate Toph submission streak by scraping activity timestamps from profile page.
+ * Uses Asia/Dhaka (UTC+6) timezone — same as CF/AC streak logic.
  */
-async function calculateTophStreak(discordId) {
+async function calculateTophStreak(handle) {
   try {
-    if (!discordId) return { current: 0, max: 0, last_active_date: null };
-    const { db } = require('../database/db');
-    const row = db.prepare('SELECT current_streak, max_streak, last_active_date FROM streaks WHERE discord_id = ? AND platform = "toph"').get(discordId);
-    if (!row) return { current: 0, max: 0, last_active_date: null };
-    
-    const offset = 6;
-    const now = new Date(new Date().getTime() + offset * 3600 * 1000);
-    const todayStr = now.toISOString().split('T')[0];
-    now.setDate(now.getDate() - 1);
-    const yesterdayStr = now.toISOString().split('T')[0];
-    
-    let { current_streak, max_streak, last_active_date } = row;
-    
-    // Break the streak if the last active date is neither today nor yesterday
-    if (last_active_date && last_active_date !== todayStr && last_active_date !== yesterdayStr) {
-      current_streak = 0;
+    const res = await tophGet(`https://toph.co/u/${handle}`);
+    const html = res.data;
+
+    // Extract all submission timestamps from the Activities panel
+    // Each "Solved ..." activity has a data-timestamp attribute
+    const activitiesPanelMatch = html.match(/\bActivities\b[\s\S]*?<div class=flow-sm>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/);
+    if (!activitiesPanelMatch) return { current: 0, max: 0 };
+
+    const activitiesHtml = activitiesPanelMatch[1];
+
+    // Build activity map: date -> count (UTC+6)
+    const OFFSET = 6; // Asia/Dhaka
+    const activityMap = {};
+
+    const itemRegex = /<div class="fg-1 fs-1 fb-0">([\s\S]*?)<\/div>\s*<div[^>]*>\s*<span[^>]*data-timestamp=(\d+)[^>]*>/g;
+    let m;
+    while ((m = itemRegex.exec(activitiesHtml)) !== null) {
+      const inner = m[1].trim();
+      const timestamp = parseInt(m[2], 10);
+      if (!inner.startsWith('Solved ')) continue;
+      if (!timestamp || isNaN(timestamp)) continue;
+
+      // Convert epoch to date string in UTC+6
+      const dateStr = new Date((timestamp + OFFSET * 3600) * 1000).toISOString().split('T')[0];
+      activityMap[dateStr] = (activityMap[dateStr] || 0) + 1;
     }
-    
-    return { current: current_streak, max: max_streak, last_active_date };
+
+    if (Object.keys(activityMap).length === 0) return { current: 0, max: 0 };
+
+    // Compute current streak (same algorithm as CF/AC)
+    const todayStr = new Date((Date.now() / 1000 + OFFSET * 3600) * 1000).toISOString().split('T')[0];
+    let checkDate = new Date(todayStr + 'T00:00:00Z');
+    if ((activityMap[todayStr] || 0) === 0) {
+      checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+    }
+    let current = 0;
+    while (true) {
+      const checkStr = checkDate.toISOString().split('T')[0];
+      if ((activityMap[checkStr] || 0) > 0) {
+        current++;
+        checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    // Compute max streak
+    const activeDates = Object.keys(activityMap).filter(d => activityMap[d] > 0).sort();
+    let max = 0, temp = 0;
+    let prevTime = null;
+    for (const dateStr of activeDates) {
+      const parts = dateStr.split('-');
+      const currTime = Date.UTC(+parts[0], +parts[1] - 1, +parts[2]);
+      if (prevTime === null) {
+        temp = 1;
+      } else {
+        const diff = Math.round((currTime - prevTime) / 86400000);
+        if (diff === 1) temp++;
+        else { max = Math.max(max, temp); temp = 1; }
+      }
+      prevTime = currTime;
+    }
+    max = Math.max(max, temp);
+
+    console.log(`[Toph Streak] ${handle}: current=${current}, max=${max}`);
+    return { current, max };
   } catch (err) {
-    return { current: 0, max: 0, last_active_date: null };
+    console.error(`[Toph Streak] Error for ${handle}:`, err.message);
+    return { current: 0, max: 0 };
   }
 }
 

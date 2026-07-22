@@ -60,7 +60,7 @@ function buildContestEmbed(contest, timeUntilLabel) {
     .setDescription(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
     .addFields(
       {
-        name:   '🗓️  Start Time',
+        name:   '📅  Start Time',
         value:  startTime ? `<t:${startTime}:F>` : 'N/A',
         inline: true
       },
