@@ -60,7 +60,7 @@ function buildContestEmbed(contest, timeUntilLabel) {
     .setDescription(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
     .addFields(
       {
-        name:   '📅  Start Time',
+        name:   '🗓️  Start Time',
         value:  startTime ? `<t:${startTime}:F>` : 'N/A',
         inline: true
       },
@@ -357,8 +357,8 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
     .setColor(COLORS.default);
 
   const titleText = platform === 'all'
-    ? '📅  Upcoming Contests — Full Overview'
-    : `📅  Upcoming Contests — ${platform.charAt(0).toUpperCase() + platform.slice(1)}`;
+    ? '🗓️  Upcoming Contests — Full Overview'
+    : `🗓️  Upcoming Contests — ${platform.charAt(0).toUpperCase() + platform.slice(1)}`;
   
   const header = `#    ${titleText}`;
 

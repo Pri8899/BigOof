@@ -226,9 +226,10 @@ async function syncAllRatings(client) {
 
       if (doStreaks) {
         try {
-          const streakInfo = await calculateTophStreak(user.toph_handle);
+          const streakInfo = await calculateTophStreak(user.discord_id);
           if (streakInfo && (streakInfo.current > 0 || streakInfo.max > 0)) {
-            upsertStreak(user.discord_id, 'toph', streakInfo.current, streakInfo.max, new Date().toISOString().split('T')[0]);
+            const dateToUse = streakInfo.last_active_date || new Date().toISOString().split('T')[0];
+            upsertStreak(user.discord_id, 'toph', streakInfo.current, streakInfo.max, dateToUse);
           }
         } catch (err) {
           console.error(`[RatingSync] Toph streak error for ${user.toph_handle}:`, err.message);

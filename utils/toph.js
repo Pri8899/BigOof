@@ -161,13 +161,29 @@ async function getTophUser(handle) {
 /**
  * Get Toph submission streak by fetching activity data
  */
-async function calculateTophStreak(handle) {
+async function calculateTophStreak(discordId) {
   try {
-    // Toph doesn't have a submissions API, so we return 0 for now
-    // We can track it through contest participation
-    return { current: 0, max: 0 };
+    if (!discordId) return { current: 0, max: 0, last_active_date: null };
+    const { db } = require('../database/db');
+    const row = db.prepare('SELECT current_streak, max_streak, last_active_date FROM streaks WHERE discord_id = ? AND platform = "toph"').get(discordId);
+    if (!row) return { current: 0, max: 0, last_active_date: null };
+    
+    const offset = 6;
+    const now = new Date(new Date().getTime() + offset * 3600 * 1000);
+    const todayStr = now.toISOString().split('T')[0];
+    now.setDate(now.getDate() - 1);
+    const yesterdayStr = now.toISOString().split('T')[0];
+    
+    let { current_streak, max_streak, last_active_date } = row;
+    
+    // Break the streak if the last active date is neither today nor yesterday
+    if (last_active_date && last_active_date !== todayStr && last_active_date !== yesterdayStr) {
+      current_streak = 0;
+    }
+    
+    return { current: current_streak, max: max_streak, last_active_date };
   } catch (err) {
-    return { current: 0, max: 0 };
+    return { current: 0, max: 0, last_active_date: null };
   }
 }
 

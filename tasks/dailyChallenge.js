@@ -170,7 +170,7 @@ async function postDailySuggestions(client, targetDate = null) {
   const cfEmbed = new EmbedBuilder()
     .setColor(0x2B2D31)
     .setAuthor({ name: 'Codeforces Daily Challenges', iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png' })
-    .setTitle(`📅 Daily Problem Suggestions — ${today}`)
+    .setTitle(`🗓️ Daily Problem Suggestions — ${today}`)
     .setDescription(`Sharpen your skills with today's progressive challenges! 🚀\nThe **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`)
     .setFooter({ text: 'Bot checks for First Blood automatically every 5 minutes!' })
     .setTimestamp();

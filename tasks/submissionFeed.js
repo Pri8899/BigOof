@@ -314,6 +314,36 @@ async function runSubmissionFeed(client) {
       } catch (err) {
         console.error(`[SubmissionFeed] Error updating Toph stats for ${user.toph_handle}:`, err.message);
       }
+
+      // Update Toph streak dynamically
+      try {
+        const { db, upsertStreak } = require('../database/db');
+        const offset = 6; // Dhaka time
+        const now = new Date(new Date().getTime() + offset * 3600 * 1000);
+        const todayStr = now.toISOString().split('T')[0];
+        
+        let row = db.prepare('SELECT current_streak, max_streak, last_active_date FROM streaks WHERE discord_id = ? AND platform = "toph"').get(user.discord_id);
+        let current = row ? row.current_streak : 0;
+        let max = row ? row.max_streak : 0;
+        let lastDate = row ? row.last_active_date : null;
+
+        if (lastDate !== todayStr) {
+          now.setDate(now.getDate() - 1);
+          const yesterdayStr = now.toISOString().split('T')[0];
+          
+          if (lastDate === yesterdayStr) {
+            current += 1;
+          } else {
+            current = 1;
+          }
+          if (current > max) max = current;
+          
+          upsertStreak(user.discord_id, 'toph', current, max, todayStr);
+        }
+      } catch (err) {
+        console.error(`[SubmissionFeed] Error updating Toph streak for ${user.toph_handle}:`, err.message);
+      }
+
       shouldUpdateDashboard = true;
     }
     
