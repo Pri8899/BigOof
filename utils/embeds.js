@@ -408,7 +408,7 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
           durLabel = dm > 0 ? `${dh}h ${dm}m` : `${dh}h`;
         }
         
-        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n      📅 ${dateLabel}\n      ⏱️ ${durLabel}${countdownLabel}`;
+        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n      🗓️ ${dateLabel}\n      ⏱️ ${durLabel}${countdownLabel}`;
       });
       sections.push(`${header}\n${lines.join('\n\n')}`);
     }
