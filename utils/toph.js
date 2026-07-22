@@ -236,6 +236,57 @@ async function calculateTophStreak(handle) {
   }
 }
 
+// In-memory cache so we don't re-fetch the same problem page
+const _problemDetailsCache = new Map();
+
+/**
+ * Scrape difficulty, tags, and contest info from a Toph problem page.
+ * Returns { difficulty, tags, contestName }.
+ */
+async function getTophProblemDetails(slug) {
+  if (_problemDetailsCache.has(slug)) return _problemDetailsCache.get(slug);
+
+  const result = { difficulty: 0, tags: [], contestName: 'Practice' };
+  try {
+    const res = await tophGet(`https://toph.co/p/${slug}`);
+    const html = res.data;
+
+    // ── Difficulty / points ──────────────────────────────────────
+    // Toph shows points like: <span>100</span> Points  or  100 Points
+    const pointsMatch =
+      html.match(/([\d,]+)\s*Points?/i) ||
+      html.match(/difficulty[^>]*>\s*([\d,]+)/i) ||
+      html.match(/score["']?\s*:\s*(\d+)/i);
+    if (pointsMatch) {
+      result.difficulty = parseInt(pointsMatch[1].replace(/,/g, ''), 10) || 0;
+    }
+
+    // ── Tags ─────────────────────────────────────────────────────
+    // Toph wraps tags in <a class="label ...">TagName</a> or similar
+    const tagMatches = [...html.matchAll(/class="[^"]*(?:label|tag)[^"]*"[^>]*>\s*([^<]{1,40})\s*<\/a>/gi)];
+    for (const t of tagMatches) {
+      const tag = t[1].trim();
+      if (tag && tag.length > 1 && !result.tags.includes(tag)) {
+        result.tags.push(tag);
+      }
+    }
+    // Limit to 5 tags
+    result.tags = result.tags.slice(0, 5);
+
+    // ── Contest name ─────────────────────────────────────────────
+    // Check if problem is part of a contest: look for a link to /c/something
+    const contestMatch = html.match(/href=["']?\/c\/([a-z0-9_-]+)["']?[^>]*>([^<]{1,80})<\/a>/i);
+    if (contestMatch) {
+      result.contestName = contestMatch[2].trim() || 'Contest';
+    }
+
+    _problemDetailsCache.set(slug, result);
+  } catch (err) {
+    console.warn(`[Toph] Could not fetch problem details for ${slug}: ${err.message}`);
+  }
+  return result;
+}
+
 /**
  * Scrape recent submissions from Toph profile's Activities feed
  */
@@ -288,13 +339,25 @@ async function fetchTophSubmissions(user) {
       const existing = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(uniqueId);
       if (!existing) {
         db.prepare('INSERT INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(uniqueId, timestamp);
+
+        // Fetch real problem details if we have a real slug (not private/contest)
+        let difficulty = 0, tags = [], contestName = 'Practice';
+        if (slug && !slug.startsWith('private_')) {
+          try {
+            const details = await getTophProblemDetails(slug);
+            difficulty    = details.difficulty;
+            tags          = details.tags;
+            contestName   = details.contestName;
+          } catch (_) {}
+        }
+
         newSubs.push({
           id: uniqueId,
-          name: name,
-          url: url,
-          difficulty: 0,
-          tags: [],
-          contestName: 'Practice'
+          name,
+          url,
+          difficulty,
+          tags,
+          contestName
         });
       }
     }
@@ -310,4 +373,4 @@ async function fetchTophSubmissions(user) {
   }
 }
 
-module.exports = { getTophContests, validateTophHandle, getTophUser, calculateTophStreak, fetchTophSubmissions };
+module.exports = { getTophContests, validateTophHandle, getTophUser, calculateTophStreak, fetchTophSubmissions, getTophProblemDetails };
