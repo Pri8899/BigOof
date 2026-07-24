@@ -243,16 +243,15 @@ const _problemDetailsCache = new Map();
  * Scrape difficulty, tags, and contest info from a Toph problem page.
  * Returns { difficulty, tags, contestName }.
  */
-async function getTophProblemDetails(slug) {
+async function getTophProblemDetails(slug, hintContestName = null) {
   if (_problemDetailsCache.has(slug)) return _problemDetailsCache.get(slug);
 
-  const result = { difficulty: 0, tags: [], contestName: 'Practice' };
+  const result = { difficulty: 0, tags: [], contestName: hintContestName || 'Practice' };
   try {
     const res = await tophGet(`https://toph.co/p/${slug}`);
     const html = res.data;
 
     // ── Difficulty / points ──────────────────────────────────────
-    // Toph shows points like: <span>100</span> Points  or  100 Points
     const pointsMatch =
       html.match(/([\d,]+)\s*Points?/i) ||
       html.match(/difficulty[^>]*>\s*([\d,]+)/i) ||
@@ -262,22 +261,21 @@ async function getTophProblemDetails(slug) {
     }
 
     // ── Tags ─────────────────────────────────────────────────────
-    // Toph wraps tags in <a class="label ...">TagName</a> or similar
     const tagMatches = [...html.matchAll(/class="[^"]*(?:label|tag)[^"]*"[^>]*>\s*([^<]{1,40})\s*<\/a>/gi)];
     for (const t of tagMatches) {
       const tag = t[1].trim();
-      if (tag && tag.length > 1 && !result.tags.includes(tag)) {
-        result.tags.push(tag);
-      }
+      if (tag && tag.length > 1 && !result.tags.includes(tag)) result.tags.push(tag);
     }
-    // Limit to 5 tags
     result.tags = result.tags.slice(0, 5);
 
-    // ── Contest name ─────────────────────────────────────────────
-    // Check if problem is part of a contest: look for a link to /c/something
-    const contestMatch = html.match(/href=["']?\/c\/([a-z0-9_-]+)["']?[^>]*>([^<]{1,80})<\/a>/i);
-    if (contestMatch) {
-      result.contestName = contestMatch[2].trim() || 'Contest';
+    // ── Contest name (from problem page /c/ link) ─────────────────────
+    // Only overwrite if we actually find a contest link on the page
+    // and we don't already have a better name from the activity feed
+    if (!hintContestName) {
+      const contestMatch = html.match(/href=["']?\/c\/([a-z0-9_-]+)["']?[^>]*>([^<]{2,80})<\/a>/i);
+      if (contestMatch) {
+        result.contestName = contestMatch[2].trim();
+      }
     }
 
     _problemDetailsCache.set(slug, result);
@@ -340,25 +338,29 @@ async function fetchTophSubmissions(user) {
       if (!existing) {
         db.prepare('INSERT INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(uniqueId, timestamp);
 
-        // Fetch real problem details if we have a real slug (not private/contest)
-        let difficulty = 0, tags = [], contestName = 'Practice';
+        // Try to extract contest name from activity HTML:
+        // Pattern: "Solved ProblemName in <a href=/c/slug>Contest Full Name</a>."
+        let activityContestName = null;
+        const contestInMatch = inner.match(/\bin\s+<a[^>]*href=["']?\/c\/[^"'>]+["']?[^>]*>([^<]{2,120})<\/a>/i);
+        if (contestInMatch) activityContestName = contestInMatch[1].trim();
+
+        // Fetch real problem details if we have a real slug
+        let difficulty = 0, tags = [], contestName = activityContestName || 'Practice';
         if (slug && !slug.startsWith('private_')) {
           try {
-            const details = await getTophProblemDetails(slug);
+            const details = await getTophProblemDetails(slug, activityContestName);
             difficulty    = details.difficulty;
             tags          = details.tags;
             contestName   = details.contestName;
           } catch (_) {}
         }
+        // For private/active contest problems without a public slug,
+        // use whatever contest name we found in the activity feed
+        if (slug.startsWith('private_') && activityContestName) {
+          contestName = activityContestName;
+        }
 
-        newSubs.push({
-          id: uniqueId,
-          name,
-          url,
-          difficulty,
-          tags,
-          contestName
-        });
+        newSubs.push({ id: uniqueId, name, url, difficulty, tags, contestName });
       }
     }
 

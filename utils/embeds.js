@@ -455,6 +455,10 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
     else if (l.startsWith('arc')) category = 'ARC';
     else if (l.startsWith('agc')) category = 'AGC';
     else if (l.startsWith('ahc')) category = 'AHC';
+  } else if (isToph && problem.contestName && problem.contestName !== 'Practice') {
+    // Show the contest name in the header (truncated to keep it readable)
+    const cn = problem.contestName;
+    category = cn.length > 40 ? cn.substring(0, 38) + '…' : cn;
   }
 
   // ── Colors & labels ────────────────────────────────────────────
