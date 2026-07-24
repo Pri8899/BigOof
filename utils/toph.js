@@ -338,10 +338,10 @@ async function fetchTophSubmissions(user) {
       if (!existing) {
         db.prepare('INSERT INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(uniqueId, timestamp);
 
-        // Try to extract contest name from activity HTML:
-        // Pattern: "Solved ProblemName in <a href=/c/slug>Contest Full Name</a>."
+        // Extract contest name from activity HTML — catch ANY link pattern:
+        // e.g. "in <a href=/c/slug>Name</a>" OR "in <a href=/arena/practice=id>Name</a>"
         let activityContestName = null;
-        const contestInMatch = inner.match(/\bin\s+<a[^>]*href=["']?\/c\/[^"'>]+["']?[^>]*>([^<]{2,120})<\/a>/i);
+        const contestInMatch = inner.match(/\bin\s+<a[^>]*>([^<]{2,120})<\/a>/i);
         if (contestInMatch) activityContestName = contestInMatch[1].trim();
 
         // Fetch real problem details if we have a real slug
