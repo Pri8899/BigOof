@@ -16,17 +16,20 @@ async function getPlatformEmojis(guild) {
   try {
     await guild.emojis.fetch().catch(e => console.warn(`[Emojis] Fetch failed:`, e.message));
 
-    const { getConfig, setConfig } = require('../database/db');
-
-    // v3 flag: delete & re-upload all logos (bumped to force new Toph circle logo on server)
-    if (getConfig('reset_circle_emojis_v3') !== 'true') {
-      console.log(`[Emojis] v3 reset — deleting old logos and re-uploading...`);
-      for (const name of ['codeforces', 'atcoder', 'toph']) {
-        const old = guild.emojis.cache.find(e => e.name === name);
-        if (old) await old.delete().catch(() => {});
+    // v3 flag: delete & re-upload all logos — only load DB when we actually need to check/set the flag
+    try {
+      const { getConfig, setConfig } = require('../database/db');
+      if (getConfig('reset_circle_emojis_v3') !== 'true') {
+        console.log(`[Emojis] v3 reset — deleting old logos and re-uploading...`);
+        for (const name of ['codeforces', 'atcoder', 'toph']) {
+          const old = guild.emojis.cache.find(e => e.name === name);
+          if (old) await old.delete().catch(() => {});
+        }
+        await guild.emojis.fetch().catch(() => {});
+        setConfig('reset_circle_emojis_v3', 'true');
       }
-      await guild.emojis.fetch().catch(() => {});
-      setConfig('reset_circle_emojis_v3', 'true');
+    } catch (_dbErr) {
+      // DB not available (e.g. sandbox patch scripts) — skip the reset check, use existing emojis
     }
 
     // ── Codeforces ─────────────────────────────────────────────────
