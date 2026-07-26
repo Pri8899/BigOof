@@ -549,7 +549,7 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵'
 
     embed.addFields({
       name: '🧩 Solves Champion   💥',
-      value: `👑 ${names}\n> 📊 **${maxSolved}** total problems this week!\n${perUserLines}\n\u200b`,
+      value: `👑 ${names}\n> 📊 **${(coChamps[0].cf_solved ?? 0) + (coChamps[0].ac_solved ?? 0) + (coChamps[0].toph_solved ?? 0)}** total problems this week!\n${perUserLines}\n\u200b`,
       inline: false
     });
   } else {

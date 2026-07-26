@@ -229,10 +229,11 @@ async function runWeeklyWrapup(client) {
     
     allSolved.push({
       discord_id: user.discord_id,
-      solved_this_week: userTotalSolved,
-      cf_solved: cfSolved || 0,
-      ac_solved: acSolved || 0,
-      toph_solved: tophSolved || 0
+      cf_solved:   cfSolved   || 0,
+      ac_solved:   acSolved   || 0,
+      toph_solved: tophSolved || 0,
+      // Total = sum of all platforms (Toph was previously missing from this)
+      solved_this_week: (cfSolved || 0) + (acSolved || 0) + (tophSolved || 0)
     });
 
     allRatingGains.push({
