@@ -501,7 +501,7 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
     .setColor(embedColor)
     .setAuthor({ name: `${platformLabel}${catLabel} — Live Accepted!` })
     .setTitle(`🎉 ${user.username} just got Accepted!`)
-    .setDescription(`<@${user.discord_id}> solved **[${problem.name}](${problem.url})**!`)
+    .setDescription(`<@${user.discord_id}> solved **[${problem.index ? `${problem.index}. ${problem.name}` : problem.name}](${problem.url})**!`)
     .setThumbnail(thumbnailUrl)
     .addFields(...extra)
     .setTimestamp()

@@ -143,6 +143,7 @@ async function fetchCFSubmissions(user) {
 
         newAc.push({
           name: sub.problem.name,
+          index: sub.problem.index,        // A, B, C, C1, D …
           url: problemUrl,
           rating: sub.problem.rating,
           tags: sub.problem.tags,
