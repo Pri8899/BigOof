@@ -448,13 +448,15 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
     else {
       const m = problem.contestName.match(/Div\.?\s*\d+(​\s*\+\s*Div\.?\s*\d+)*/i);
       if (m) category = m[0];
+      else   category = problem.contestName; // gym / non-standard → show full name
     }
   } else if (isAC && problem.contestId) {
     const l = problem.contestId.toLowerCase();
-    if (l.startsWith('abc')) category = 'ABC';
+    if      (l.startsWith('abc')) category = 'ABC';
     else if (l.startsWith('arc')) category = 'ARC';
     else if (l.startsWith('agc')) category = 'AGC';
     else if (l.startsWith('ahc')) category = 'AHC';
+    else if (problem.contestName)  category = problem.contestName; // non-standard AC contest
   } else if (isToph && problem.contestName && problem.contestName !== 'Practice') {
     // Show the full exact contest name in the header
     category = problem.contestName;
@@ -489,7 +491,7 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
   }
 
   const tagsStr = problem.tags?.length ? problem.tags.slice(0, 5).join(', ') : 'None';
-  const contestStr = problem.contestName || problem.contestId || 'Practice';
+  const contestStr = problem.contestName || (problem.contestId ? `Contest ${problem.contestId}` : 'Practice');
 
   const extra = [
     { name: '📊 Difficulty', value: diffStr, inline: true },

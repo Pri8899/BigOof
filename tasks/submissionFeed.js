@@ -38,6 +38,32 @@ let lastContestListFetchTime = 0;
 let gymContestListCache = null;
 let lastGymContestListFetchTime = 0;
 
+// ── AtCoder problem info cache (title + index from kenkoooo) ──────────────
+let atcoderProblemsCache = null;
+let lastAtcoderProblemsFetch = 0;
+const AC_PROBLEMS_CACHE_TTL = 24 * 3600 * 1000; // refresh every 24 h
+
+async function getAtcoderProblemInfo(problemId) {
+  const now = Date.now();
+  if (!atcoderProblemsCache || now - lastAtcoderProblemsFetch > AC_PROBLEMS_CACHE_TTL) {
+    try {
+      console.log('[SubmissionFeed] Fetching AtCoder problems list from kenkoooo...');
+      const res = await axiosGetWithRetry(
+        'https://kenkoooo.com/atcoder/resources/problems.json',
+        { timeout: 20000, headers: KENKOOOO_HEADERS }
+      );
+      if (Array.isArray(res.data)) {
+        atcoderProblemsCache = new Map(res.data.map(p => [p.id, p]));
+        lastAtcoderProblemsFetch = now;
+        console.log(`[SubmissionFeed] Cached ${atcoderProblemsCache.size} AtCoder problems.`);
+      }
+    } catch (err) {
+      console.warn('[SubmissionFeed] Failed to fetch AtCoder problems list:', err.message);
+    }
+  }
+  return atcoderProblemsCache ? (atcoderProblemsCache.get(problemId) || null) : null;
+}
+
 async function getOrFetchContestName(contestId) {
   if (!contestId) return null;
   let name = getCachedContestName(contestId);
@@ -142,11 +168,12 @@ async function fetchCFSubmissions(user) {
           : `https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`;
 
         newAc.push({
-          name: sub.problem.name,
-          index: sub.problem.index,        // A, B, C, C1, D …
-          url: problemUrl,
-          rating: sub.problem.rating,
-          tags: sub.problem.tags,
+          name:        sub.problem.name,
+          index:       sub.problem.index,   // A, B, C, C1, D …
+          url:         problemUrl,
+          rating:      sub.problem.rating,
+          tags:        sub.problem.tags,
+          contestId:   sub.problem.contestId, // numeric fallback if name lookup fails
           contestName: contestName
         });
       }
@@ -192,11 +219,26 @@ async function fetchACSubmissions(user) {
     for (const sub of submissions) {
       highestTime = Math.max(highestTime, sub.epoch_second);
       if (sub.result === 'AC') {
+        // Deduplicate by submission ID
+        const dedupKey = `ac_${user.discord_id}_${sub.id}`;
+        try {
+          const alreadySeen = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(dedupKey);
+          if (alreadySeen) continue;
+          db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(dedupKey, sub.epoch_second);
+        } catch (_) { /* DB unavailable in some envs — skip dedup */ }
+
+        // Fetch real problem title + index from kenkoooo problems list
+        const probInfo = await getAtcoderProblemInfo(sub.problem_id).catch(() => null);
+        const index = probInfo?.problem_index
+          || sub.problem_id.split('_').pop().toUpperCase(); // fallback: 'a' -> 'A'
+        const name  = probInfo?.name || sub.problem_id;     // fallback: raw id
+
         newAc.push({
-          name: `${sub.problem_id}`,
-          url: `https://atcoder.jp/contests/${sub.contest_id}/tasks/${sub.problem_id}`,
+          name,
+          index,
+          url:      `https://atcoder.jp/contests/${sub.contest_id}/tasks/${sub.problem_id}`,
           difficulty: null,
-          tags: [],
+          tags:     [],
           contestId: sub.contest_id
         });
       }
