@@ -147,6 +147,10 @@ async function syncAllRatings(client) {
           const hasExisting = existing['cf'] !== undefined;
           const oldRating = existing['cf']?.rating ?? 0;
           const oldSolved = existing['cf']?.solved ?? 0;
+          
+          // Safety: APIs often return 0 for solved count on partial failure/rate-limit.
+          if (!stats.solved) stats.solved = oldSolved;
+
           upsertRating(user.discord_id, 'cf', stats);
           insertRatingHistory(user.discord_id, 'cf', stats.rating);
           if (client) {
@@ -198,6 +202,9 @@ async function syncAllRatings(client) {
           const hasExisting = existing['ac'] !== undefined;
           const oldRating = existing['ac']?.rating ?? 0;
           const oldSolved = existing['ac']?.solved ?? 0;
+
+          if (!stats.solved) stats.solved = oldSolved;
+
           upsertRating(user.discord_id, 'ac', stats);
           insertRatingHistory(user.discord_id, 'ac', stats.rating);
           if (client) {
@@ -223,6 +230,9 @@ async function syncAllRatings(client) {
           const hasExisting = existing['toph'] !== undefined;
           const oldRating = existing['toph']?.rating ?? 0;
           const oldSolved = existing['toph']?.solved ?? 0;
+
+          if (!stats.solved) stats.solved = oldSolved;
+
           upsertRating(user.discord_id, 'toph', stats);
           insertRatingHistory(user.discord_id, 'toph', stats.rating);
           if (client) {
