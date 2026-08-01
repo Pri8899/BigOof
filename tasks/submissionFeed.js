@@ -162,8 +162,7 @@ async function fetchCFSubmissions(user) {
         const alreadySeen = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(dedupKey);
         if (alreadySeen) continue; // already announced — skip
 
-        // Mark as processed BEFORE announcing to prevent duplicates on restart
-        db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(dedupKey, sub.creationTimeSeconds);
+        // We will mark it as processed AFTER announcing it
 
         const contestName = await getOrFetchContestName(sub.problem.contestId);
         const isGym = Number(sub.problem.contestId) >= 100000;
@@ -178,20 +177,20 @@ async function fetchCFSubmissions(user) {
           rating:      sub.problem.rating,
           tags:        sub.problem.tags,
           contestId:   sub.problem.contestId, // numeric fallback if name lookup fails
-          contestName: contestName
+          contestName: contestName,
+          id:          sub.id,
+          timestamp:   sub.creationTimeSeconds,
+          dedupKey:    dedupKey
         });
       }
       // WA, TLE etc — pointer advanced, nothing to announce
     }
 
-    if (highestId > (lastId || 0)) {
-      setLastSubmission(user.discord_id, 'cf', highestId);
-    }
-
-    return newAc;
+    // Return both the new submissions and the new highestId
+    return { newAc, highestId: highestId > (lastId || 0) ? highestId : null };
   } catch (err) {
     console.error(`[SubmissionFeed] Error fetching Codeforces submissions for ${user.cf_handle}:`, err.message);
-    return [];
+    return { newAc: [], highestId: null };
   }
 }
 
@@ -228,7 +227,6 @@ async function fetchACSubmissions(user) {
         try {
           const alreadySeen = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(dedupKey);
           if (alreadySeen) continue;
-          db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(dedupKey, sub.epoch_second);
         } catch (_) { /* DB unavailable — skip dedup */ }
 
         // Extract index from problem_id (zero network, always works)
@@ -243,7 +241,10 @@ async function fetchACSubmissions(user) {
           url:      `https://atcoder.jp/contests/${sub.contest_id}/tasks/${sub.problem_id}`,
           difficulty: null,
           tags:     [],
-          contestId: sub.contest_id
+          contestId: sub.contest_id,
+          id:        sub.id,
+          timestamp: sub.epoch_second,
+          dedupKey:  dedupKey
         });
       }
     }
@@ -277,23 +278,33 @@ async function runSubmissionFeed(client) {
 
   for (const user of users) {
     const { fetchTophSubmissions } = require('../utils/toph');
-    const cfNew = await fetchCFSubmissions(user);
+    const { newAc: cfNew, highestId } = await fetchCFSubmissions(user);
     const { newAc: acNew, highestTime } = await fetchACSubmissions(user);
     const tophNew = await fetchTophSubmissions(user);
-
-    // Save AC pointer BEFORE sending embeds to prevent re-announcing on restart
-    if (highestTime !== null) {
-      setLastSubmission(user.discord_id, 'ac', highestTime);
-    }
 
     for (const sub of cfNew) {
       const embed = buildSubmissionEmbed(user, sub, 'cf', emojis);
       await channel.send({ embeds: [embed] }).catch(() => {});
+      // Mark as processed only AFTER successfully sending
+      if (sub.dedupKey) {
+        db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
+      }
+    }
+    if (highestId !== null) {
+      setLastSubmission(user.discord_id, 'cf', highestId);
     }
     
     for (const sub of acNew) {
       const embed = buildSubmissionEmbed(user, sub, 'ac', emojis);
       await channel.send({ embeds: [embed] }).catch(() => {});
+      if (sub.dedupKey) {
+        try {
+          db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
+        } catch (_) {}
+      }
+    }
+    if (highestTime !== null) {
+      setLastSubmission(user.discord_id, 'ac', highestTime);
     }
 
     for (const sub of tophNew) {
