@@ -146,6 +146,7 @@ async function syncAllRatings(client) {
         if (stats) {
           const hasExisting = existing['cf'] !== undefined;
           const oldRating = existing['cf']?.rating ?? 0;
+          const oldSolved = existing['cf']?.solved ?? 0;
           upsertRating(user.discord_id, 'cf', stats);
           insertRatingHistory(user.discord_id, 'cf', stats.rating);
           if (client) {
@@ -153,6 +154,9 @@ async function syncAllRatings(client) {
             if (hasExisting && oldRating !== stats.rating) {
               ratingChanged = true;
               await postRatingChange(client, user.discord_id, user.username, 'cf', oldRating, stats.rating, stats.rank_title, stats.lastContest);
+            } else if (hasExisting && oldSolved !== stats.solved) {
+              // Solve count changed (e.g. solved problems during ongoing round) — refresh dashboard
+              ratingChanged = true;
             }
           }
         }
@@ -193,11 +197,16 @@ async function syncAllRatings(client) {
         if (stats) {
           const hasExisting = existing['ac'] !== undefined;
           const oldRating = existing['ac']?.rating ?? 0;
+          const oldSolved = existing['ac']?.solved ?? 0;
           upsertRating(user.discord_id, 'ac', stats);
           insertRatingHistory(user.discord_id, 'ac', stats.rating);
-          if (client && hasExisting && oldRating !== stats.rating) {
-            ratingChanged = true;
-            await postRatingChange(client, user.discord_id, user.username, 'ac', oldRating, stats.rating, stats.rank_title, stats.lastContest);
+          if (client) {
+            if (hasExisting && oldRating !== stats.rating) {
+              ratingChanged = true;
+              await postRatingChange(client, user.discord_id, user.username, 'ac', oldRating, stats.rating, stats.rank_title, stats.lastContest);
+            } else if (hasExisting && oldSolved !== stats.solved) {
+              ratingChanged = true;
+            }
           }
         }
       } catch (err) {
@@ -213,11 +222,16 @@ async function syncAllRatings(client) {
         if (stats) {
           const hasExisting = existing['toph'] !== undefined;
           const oldRating = existing['toph']?.rating ?? 0;
+          const oldSolved = existing['toph']?.solved ?? 0;
           upsertRating(user.discord_id, 'toph', stats);
           insertRatingHistory(user.discord_id, 'toph', stats.rating);
-          if (client && hasExisting && oldRating !== stats.rating) {
-            ratingChanged = true;
-            await postRatingChange(client, user.discord_id, user.username, 'toph', oldRating, stats.rating, stats.rank_title, null);
+          if (client) {
+            if (hasExisting && oldRating !== stats.rating) {
+              ratingChanged = true;
+              await postRatingChange(client, user.discord_id, user.username, 'toph', oldRating, stats.rating, stats.rank_title, null);
+            } else if (hasExisting && oldSolved !== stats.solved) {
+              ratingChanged = true;
+            }
           }
         }
       } catch (err) {
