@@ -211,8 +211,14 @@ client.once('ready', async () => {
 
 // ─── Error Handling ───────────────────────────────────────────
 client.on('error', err => console.error('[Client Error]', err));
-process.on('unhandledRejection', err => console.error('[Unhandled Rejection]', err));
-process.on('uncaughtException', err => console.error('[Uncaught Exception]', err));
+process.on('unhandledRejection', (err) => {
+  console.error('[Unhandled Rejection]', err);
+  // Do NOT exit — let the bot keep running
+});
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught Exception]', err);
+  // Do NOT exit — log and continue so the bot stays online
+});
 
 // ─── Login ────────────────────────────────────────────────────
 client.login(process.env.DISCORD_TOKEN);

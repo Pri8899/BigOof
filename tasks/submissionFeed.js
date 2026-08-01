@@ -38,30 +38,34 @@ let lastContestListFetchTime = 0;
 let gymContestListCache = null;
 let lastGymContestListFetchTime = 0;
 
-// ── AtCoder problem info cache (title + index from kenkoooo) ──────────────
-let atcoderProblemsCache = null;
-let lastAtcoderProblemsFetch = 0;
-const AC_PROBLEMS_CACHE_TTL = 24 * 3600 * 1000; // refresh every 24 h
+// ── AtCoder problem info — lightweight per-problem fetch (no bulk cache) ──
+// Extract index directly from problem_id: 'abc123_a' -> 'A'
+function extractACIndex(problemId) {
+  const parts = problemId.split('_');
+  return parts[parts.length - 1].toUpperCase();
+}
 
-async function getAtcoderProblemInfo(problemId) {
-  const now = Date.now();
-  if (!atcoderProblemsCache || now - lastAtcoderProblemsFetch > AC_PROBLEMS_CACHE_TTL) {
-    try {
-      console.log('[SubmissionFeed] Fetching AtCoder problems list from kenkoooo...');
-      const res = await axiosGetWithRetry(
-        'https://kenkoooo.com/atcoder/resources/problems.json',
-        { timeout: 20000, headers: KENKOOOO_HEADERS }
-      );
-      if (Array.isArray(res.data)) {
-        atcoderProblemsCache = new Map(res.data.map(p => [p.id, p]));
-        lastAtcoderProblemsFetch = now;
-        console.log(`[SubmissionFeed] Cached ${atcoderProblemsCache.size} AtCoder problems.`);
-      }
-    } catch (err) {
-      console.warn('[SubmissionFeed] Failed to fetch AtCoder problems list:', err.message);
+// Fetch problem title from AtCoder page (few KB, cached per problemId)
+const acProblemTitleCache = new Map();
+async function getACProblemTitle(problemId, contestId) {
+  if (acProblemTitleCache.has(problemId)) return acProblemTitleCache.get(problemId);
+  try {
+    const url = `https://atcoder.jp/contests/${contestId}/tasks/${problemId}`;
+    const res = await axios.get(url, {
+      timeout: 6000,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CP-Bot/1.0)' },
+      maxContentLength: 100000 // cap at 100KB — we only need the <title>
+    });
+    // Extract from <title>: "A - Two Sum — AtCoder Beginner Contest 123"
+    const m = String(res.data).match(/<title>([^<]+)<\/title>/i);
+    if (m) {
+      // Strip the contest part after "—"
+      const title = m[1].replace(/\s*[—–-]\s*AtCoder.*/i, '').replace(/^\w+\s*-\s*/, '').trim();
+      acProblemTitleCache.set(problemId, title);
+      return title;
     }
-  }
-  return atcoderProblemsCache ? (atcoderProblemsCache.get(problemId) || null) : null;
+  } catch (_) { /* fail silently */ }
+  return null;
 }
 
 async function getOrFetchContestName(contestId) {
@@ -225,13 +229,13 @@ async function fetchACSubmissions(user) {
           const alreadySeen = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(dedupKey);
           if (alreadySeen) continue;
           db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(dedupKey, sub.epoch_second);
-        } catch (_) { /* DB unavailable in some envs — skip dedup */ }
+        } catch (_) { /* DB unavailable — skip dedup */ }
 
-        // Fetch real problem title + index from kenkoooo problems list
-        const probInfo = await getAtcoderProblemInfo(sub.problem_id).catch(() => null);
-        const index = probInfo?.problem_index
-          || sub.problem_id.split('_').pop().toUpperCase(); // fallback: 'a' -> 'A'
-        const name  = probInfo?.name || sub.problem_id;     // fallback: raw id
+        // Extract index from problem_id (zero network, always works)
+        const index = extractACIndex(sub.problem_id);
+        // Try to get real title from AtCoder page (lightweight, fails gracefully)
+        const title = await getACProblemTitle(sub.problem_id, sub.contest_id).catch(() => null);
+        const name  = title || sub.problem_id;
 
         newAc.push({
           name,
