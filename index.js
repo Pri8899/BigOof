@@ -104,14 +104,43 @@ client.once('ready', async () => {
     console.error('[Startup] Failed to restore June 5 suggestions in database:', err.message);
   }
 
-  // One-time startup check: Reset last_id and clear processed_submissions for 136-A to ensure solve is announced
+  // One-time direct announcement for missed 136-A solve (bypasses CF API entirely)
   try {
-    const targetId = '1367493270703444078';
-    db.prepare("DELETE FROM processed_submissions WHERE id LIKE '%136_A%' OR id LIKE '%136%A%'").run();
-    db.prepare("UPDATE last_submissions SET last_id = 385300000 WHERE discord_id = ? AND platform = 'cf'").run(targetId);
-    console.log('[Startup] Reset last_id to 385300000 and cleared processed_submissions for 136-A.');
+    const announceKey = 'announced_cf_136A_ImposterBhO0_v1';
+    const alreadyDone = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(announceKey);
+    if (!alreadyDone) {
+      const channelId = getConfig('feed_channel_id') || getConfig('dashboard_channel_id') || getConfig('rating_channel_id');
+      if (channelId) {
+        setTimeout(async () => {
+          try {
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel) { console.error('[Force Announce] Channel not found:', channelId); return; }
+            const { EmbedBuilder } = require('discord.js');
+            const embed = new EmbedBuilder()
+              .setColor(0x1F8DD6)
+              .setAuthor({ name: 'Codeforces — Live Accepted!' })
+              .setTitle('🎉 _Parth0_ just got Accepted!')
+              .setDescription('<@1367493270703444078> solved **[A. Presents](https://codeforces.com/problemset/problem/136/A)**!')
+              .setThumbnail('https://codeforces.org/s/0/images/codeforces-telegram-square.png')
+              .addFields(
+                { name: '📊 Difficulty', value: '🟢 Easy  `800`', inline: true },
+                { name: '🏷️ Tags', value: 'implementation', inline: true },
+                { name: '🏆 Contest', value: 'Codeforces Round 136', inline: false }
+              )
+              .setTimestamp()
+              .setFooter({ text: 'Keep grinding! 💪' });
+            await channel.send({ embeds: [embed] });
+            db.prepare("INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)").run('cf_prob_1367493270703444078_136_A', 1785691277);
+            db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(announceKey, 'true');
+            console.log('[Force Announce] Successfully posted 136-A announcement.');
+          } catch (err) {
+            console.error('[Force Announce] Failed:', err.message);
+          }
+        }, 5000); // 5s after bot is ready
+      }
+    }
   } catch (err) {
-    console.error('[Startup Reset Error]', err.message);
+    console.error('[Force Announce Error]', err.message);
   }
 
   // Live diagnostic logging to Railway console
