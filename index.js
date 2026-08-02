@@ -104,12 +104,17 @@ client.once('ready', async () => {
     console.error('[Startup] Failed to restore June 5 suggestions in database:', err.message);
   }
 
-  // One-time startup check: Reset last_id and clear processed_submissions for 136-A to ensure solve is announced
+  // One-time reset: clear 136-A dedup and roll back last_id so the poller can re-announce the missed solve
   try {
-    const targetId = '1367493270703444078';
-    db.prepare("DELETE FROM processed_submissions WHERE id LIKE '%136_A%' OR id LIKE '%136%A%'").run();
-    db.prepare("UPDATE last_submissions SET last_id = 385300000 WHERE discord_id = ? AND platform = 'cf'").run(targetId);
-    console.log('[Startup] Reset last_id to 385300000 and cleared processed_submissions for 136-A.');
+    const resetKey = 'reset_136A_for_ImposterBhO0_done';
+    const alreadyReset = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(resetKey);
+    if (!alreadyReset) {
+      const targetId = '1367493270703444078';
+      db.prepare("DELETE FROM processed_submissions WHERE id = 'cf_prob_1367493270703444078_136_A'").run();
+      db.prepare("UPDATE last_submissions SET last_id = 385300000 WHERE discord_id = ? AND platform = 'cf'").run(targetId);
+      db.prepare('INSERT OR REPLACE INTO guild_config (key, value) VALUES (?, ?)').run(resetKey, 'true');
+      console.log('[Startup] One-time reset: rolled back CF last_id for ImposterBhO0 to catch missed 136-A solve.');
+    }
   } catch (err) {
     console.error('[Startup Reset Error]', err.message);
   }
