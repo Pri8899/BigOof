@@ -284,10 +284,15 @@ async function runSubmissionFeed(client) {
 
     for (const sub of cfNew) {
       const embed = buildSubmissionEmbed(user, sub, 'cf', emojis);
-      await channel.send({ embeds: [embed] }).catch(() => {});
-      // Mark as processed only AFTER successfully sending
-      if (sub.dedupKey) {
-        db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
+      try {
+        await channel.send({ embeds: [embed] });
+        console.log(`[SubmissionFeed] Successfully sent CF announcement for ${user.cf_handle}: ${sub.id}`);
+        // Mark as processed only AFTER successfully sending
+        if (sub.dedupKey) {
+          db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
+        }
+      } catch (err) {
+        console.error(`[SubmissionFeed] FAILED to send embed for CF ${sub.id} (user: ${user.cf_handle}):`, err);
       }
     }
     if (highestId !== null) {
@@ -296,11 +301,13 @@ async function runSubmissionFeed(client) {
     
     for (const sub of acNew) {
       const embed = buildSubmissionEmbed(user, sub, 'ac', emojis);
-      await channel.send({ embeds: [embed] }).catch(() => {});
-      if (sub.dedupKey) {
-        try {
+      try {
+        await channel.send({ embeds: [embed] });
+        if (sub.dedupKey) {
           db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
-        } catch (_) {}
+        }
+      } catch (err) {
+        console.error(`[SubmissionFeed] FAILED to send embed for AC ${sub.id} (user: ${user.ac_handle}):`, err);
       }
     }
     if (highestTime !== null) {
@@ -309,11 +316,13 @@ async function runSubmissionFeed(client) {
 
     for (const sub of tophNew) {
       const embed = buildSubmissionEmbed(user, sub, 'toph', emojis);
-      await channel.send({ embeds: [embed] }).catch(() => {});
-      if (sub.dedupKey) {
-        try {
+      try {
+        await channel.send({ embeds: [embed] });
+        if (sub.dedupKey) {
           db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
-        } catch (_) {}
+        }
+      } catch (err) {
+        console.error(`[SubmissionFeed] FAILED to send embed for Toph ${sub.id} (user: ${user.toph_handle}):`, err);
       }
     }
 
