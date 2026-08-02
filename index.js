@@ -104,85 +104,14 @@ client.once('ready', async () => {
     console.error('[Startup] Failed to restore June 5 suggestions in database:', err.message);
   }
 
-  // One-time startup check to force-run the weekly wrap-up once on the production database
+  // One-time startup check: Reset last_id and clear processed_submissions for 136-A to ensure solve is announced
   try {
-    const forcedKey = 'force_weekly_wrapup_0607_v1';
-    const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(forcedKey);
-    if (!row) {
-      const { runWeeklyWrapup } = require('./tasks/weeklyWrapup');
-      console.log('[Startup] Forcing weekly wrap-up run to compile stats for all production users...');
-      runWeeklyWrapup(client)
-        .then(success => {
-          if (success) {
-            db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?)').run(forcedKey, 'true');
-            console.log('[Startup] Forced weekly wrap-up completed and flag saved.');
-          } else {
-            console.error('[Startup] Forced weekly wrap-up skipped or failed (no channel resolved).');
-          }
-        })
-        .catch(err => {
-          console.error('[Startup] Forced weekly wrap-up failed:', err.message);
-        });
-    }
+    const targetId = '1367493270703444078';
+    db.prepare("DELETE FROM processed_submissions WHERE id LIKE '%136_A%' OR id LIKE '%136%A%'").run();
+    db.prepare("UPDATE last_submissions SET last_id = 385300000 WHERE discord_id = ? AND platform = 'cf'").run(targetId);
+    console.log('[Startup] Reset last_id to 385300000 and cleared processed_submissions for 136-A.');
   } catch (err) {
-    console.error('[Startup] Failed to run forced weekly wrap-up:', err.message);
-  }
-
-  // One-time startup check to delete the previous wrapped weekly wrap-up and repost it correctly
-  try {
-    const repostKey = 'repost_weekly_0802_v3';
-    const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(repostKey);
-    if (!row) {
-      const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID;
-      if (channelId) {
-        client.channels.fetch(channelId)
-          .then(async channel => {
-            if (channel) {
-              console.log('[Startup Repost] Fetching messages to delete old weekly wrap-up...');
-              const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
-              if (messages) {
-                // Find old weekly message containing @everyone and WEEKLY CHAMPIONS in the description
-                const weeklyMsg = messages.find(m => m.author.id === client.user.id && m.embeds.some(e => e.description && e.description.includes('WEEKLY CHAMPIONS')));
-                if (weeklyMsg) {
-                  console.log(`[Startup Repost] Found old weekly wrap-up message (ID: ${weeklyMsg.id}). Deleting...`);
-                  await weeklyMsg.delete().catch(err => console.error('[Startup Repost] Delete error:', err.message));
-                } else {
-                  console.log('[Startup Repost] No old weekly wrap-up message found.');
-                }
-              }
-              
-              // --- ONE-TIME MANUAL SNAPSHOT CORRECTION FOR _Parth0_ ---
-              try {
-                const targetId = '1367493270703444078';
-                
-                // Rollback last_id for Codeforces to force re-evaluation of recent submissions (e.g. 136-A)
-                db.prepare("UPDATE last_submissions SET last_id = 385300000 WHERE discord_id = ? AND platform = 'cf'").run(targetId);
-                
-                console.log('[Startup Repost] Rolled back CF last_id to force re-fetch of missed submission for ' + targetId);
-              } catch (e) {
-                console.error('[Startup Repost] Snapshot correction failed:', e.message);
-              }
-              // --------------------------------------------------------
-
-              // Post the new wrap-up
-              const { runWeeklyWrapup } = require('./tasks/weeklyWrapup');
-              console.log('[Startup Repost] Generating new weekly wrap-up message...');
-              const success = await runWeeklyWrapup(client);
-              if (success) {
-                db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?)').run(repostKey, 'true');
-                console.log('[Startup Repost] Reposted weekly wrap-up completed and flag saved.');
-              } else {
-                console.error('[Startup Repost] Repost failed (no channel or early exit).');
-              }
-            }
-          })
-          .catch(err => {
-            console.error('[Startup Repost] Channel fetch failed:', err.message);
-          });
-      }
-    }
-  } catch (err) {
-    console.error('[Startup Repost] Failed to run repost:', err.message);
+    console.error('[Startup Reset Error]', err.message);
   }
 
   // Live diagnostic logging to Railway console

@@ -5,7 +5,7 @@ const { getAllUsers, getRatings, getWeeklySnapshot, setWeeklySnapshot, getConfig
 const { buildWeeklyWrapupEmbed } = require('../utils/embeds');
 
 
-async function runWeeklyWrapup(client) {
+async function runWeeklyWrapup(client, updateSnapshots = false) {
   // Try to use the rating channel as requested, fallback to dashboard
   const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID;
   if (!channelId) {
@@ -88,9 +88,11 @@ async function runWeeklyWrapup(client) {
       userTotalRatingGain += tophGain;
     }
     
-    // Save/update snapshot for the next week
-    for (const r of ratings) {
-      setWeeklySnapshot(user.discord_id, r.platform, r.rating, r.solved, todayStr);
+    // Save/update snapshot for the next week only when requested (e.g., Sunday Midnight Cron)
+    if (updateSnapshots) {
+      for (const r of ratings) {
+        setWeeklySnapshot(user.discord_id, r.platform, r.rating, r.solved, todayStr);
+      }
     }
     
     allSolved.push({
@@ -205,7 +207,7 @@ function startWeeklyWrapup(client) {
           setConfig('last_weekly_wrapup_date', targetDateStr);
         } else {
           console.log(`[WeeklyWrapUp] Startup catch-up check: Wrap-up for Sunday ${targetDateStr} not posted yet. Posting...`);
-          const success = await runWeeklyWrapup(client);
+          const success = await runWeeklyWrapup(client, true);
           if (success) {
             setConfig('last_weekly_wrapup_date', targetDateStr);
           } else {
@@ -222,7 +224,7 @@ function startWeeklyWrapup(client) {
   cron.schedule('0 21 * * 0', async () => {
     try {
       console.log('[WeeklyWrapUp] Sunday 9 PM triggered! Generating wrap up...');
-      const success = await runWeeklyWrapup(client);
+      const success = await runWeeklyWrapup(client, true);
       if (success) {
         const targetDateStr = getTargetWeeklyWrapupDate();
         setConfig('last_weekly_wrapup_date', targetDateStr);
