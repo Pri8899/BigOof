@@ -259,18 +259,24 @@ async function fetchACSubmissions(user) {
 
 async function runSubmissionFeed(client) {
   const channelId = getConfig('feed_channel_id') || getConfig('dashboard_channel_id') || getConfig('rating_channel_id') || process.env.FEED_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID || process.env.RATING_CHANNEL_ID || process.env.GENERAL_CHANNEL_ID;
+  console.log(`[SubmissionFeed] Resolved channelId: ${channelId || 'NONE'}`);
   if (!channelId) {
     console.warn('[SubmissionFeed] No feed/dashboard/rating channel configured. Please set one using /set-feed-channel or /set-dashboard-channel.');
     return;
   }
 
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+  const channel = await client.channels.fetch(channelId).catch(err => {
+    console.error(`[SubmissionFeed] Channel fetch failed for ID ${channelId}:`, err.message);
+    return null;
+  });
   if (!channel) {
     console.warn(`[SubmissionFeed] Configured channel ID ${channelId} could not be fetched.`);
     return;
   }
+  console.log(`[SubmissionFeed] Channel found: #${channel.name}`);
 
   const users = getAllUsers();
+  console.log(`[SubmissionFeed] Scanning ${users.length} users for new submissions...`);
   let shouldUpdateDashboard = false;
   
   const { getPlatformEmojis } = require('../utils/emojis');
@@ -281,6 +287,7 @@ async function runSubmissionFeed(client) {
     const { newAc: cfNew, highestId } = await fetchCFSubmissions(user);
     const { newAc: acNew, highestTime } = await fetchACSubmissions(user);
     const tophNew = await fetchTophSubmissions(user);
+    console.log(`[SubmissionFeed] User ${user.cf_handle || user.username}: CF=${cfNew.length} new, AC=${acNew.length} new, Toph=${tophNew.length} new | highestId=${highestId}`);
 
     for (const sub of cfNew) {
       const embed = buildSubmissionEmbed(user, sub, 'cf', emojis);
