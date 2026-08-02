@@ -130,7 +130,7 @@ client.once('ready', async () => {
 
   // One-time startup check to delete the previous wrapped weekly wrap-up and repost it correctly
   try {
-    const repostKey = 'repost_weekly_0802_v1';
+    const repostKey = 'repost_weekly_0802_v2';
     const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(repostKey);
     if (!row) {
       const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID;
@@ -156,13 +156,14 @@ client.once('ready', async () => {
                 const targetId = '1367493270703444078';
                 const cfSub = 28;
                 const tophSub = 3;
+                const cfRatingSub = 220;
                 
-                // Subtract 28 from CF snapshot solved
-                db.prepare('UPDATE weekly_snapshots SET solved = MAX(0, solved - ?) WHERE discord_id = ? AND platform = ?').run(cfSub, targetId, 'cf');
-                // Subtract 3 from Toph snapshot solved
+                // Subtract 28 from CF solved, and 220 from CF rating
+                db.prepare('UPDATE weekly_snapshots SET solved = MAX(0, solved - ?), rating = MAX(0, rating - ?) WHERE discord_id = ? AND platform = ?').run(cfSub, cfRatingSub, targetId, 'cf');
+                // Subtract 3 from Toph solved
                 db.prepare('UPDATE weekly_snapshots SET solved = MAX(0, solved - ?) WHERE discord_id = ? AND platform = ?').run(tophSub, targetId, 'toph');
                 
-                console.log('[Startup Repost] Adjusted snapshots for ' + targetId);
+                console.log('[Startup Repost] Adjusted snapshots (solved & rating) for ' + targetId);
               } catch (e) {
                 console.error('[Startup Repost] Snapshot correction failed:', e.message);
               }
