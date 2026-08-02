@@ -4,11 +4,6 @@ const axios = require('axios');
 const { getAllUsers, getRatings, getWeeklySnapshot, setWeeklySnapshot, getConfig, setConfig, db } = require('../database/db');
 const { buildWeeklyWrapupEmbed } = require('../utils/embeds');
 
-const KENKOOOO_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
-  'Origin':     'https://kenkoooo.com',
-  'Referer':    'https://kenkoooo.com/atcoder/'
-};
 
 async function runWeeklyWrapup(client) {
   // Try to use the rating channel as requested, fallback to dashboard
@@ -41,185 +36,56 @@ async function runWeeklyWrapup(client) {
     let userTotalSolved = 0;
     let userTotalRatingGain = 0;
     
-    let cfStart = 0;
-    let cfEnd = 0;
-    let acStart = 0;
-    let acEnd = 0;
-    let tophStart = 0;
-    let tophEnd = 0;
+    let cfStart = 0, cfEnd = 0, cfGain = 0, cfSolved = 0;
+    let acStart = 0, acEnd = 0, acGain = 0, acSolved = 0;
+    let tophStart = 0, tophEnd = 0, tophGain = 0, tophSolved = 0;
 
-    // CF stats
-    let cfSolved = null;
-    let cfGain = null;
     if (user.cf_handle) {
-      try {
-        const statusRes = await axios.get(`https://codeforces.com/api/user.status?handle=${user.cf_handle}`, { timeout: 8000 }).catch(() => null);
-        if (statusRes && statusRes.data && statusRes.data.status === 'OK' && statusRes.data.result) {
-          const solvedSet = new Set();
-          for (const sub of statusRes.data.result) {
-            if (sub.creationTimeSeconds < sevenDaysAgo) break;
-            if (sub.verdict === 'OK' && sub.problem) {
-              solvedSet.add(`${sub.problem.contestId}-${sub.problem.index}`);
-            }
-          }
-          cfSolved = solvedSet.size;
-        }
-      } catch (err) {
-        console.error(`[WeeklyWrapUp] CF Status API error for ${user.username}:`, err.message);
-      }
-
-      await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
-      
-      try {
-        const ratingRes = await axios.get(`https://codeforces.com/api/user.rating?handle=${user.cf_handle}`, { timeout: 6000 }).catch(() => null);
-        if (ratingRes && ratingRes.data && ratingRes.data.status === 'OK' && ratingRes.data.result) {
-          const history = ratingRes.data.result;
-          if (history.length > 0) {
-            let ratingSevenDaysAgo = history[0].oldRating;
-            for (const change of history) {
-              if (change.ratingUpdateTimeSeconds < sevenDaysAgo) {
-                ratingSevenDaysAgo = change.newRating;
-              } else {
-                break;
-              }
-            }
-            const currentRating = history[history.length - 1].newRating;
-            cfGain = Math.max(0, currentRating - ratingSevenDaysAgo);
-            cfStart = ratingSevenDaysAgo;
-            cfEnd = currentRating;
-          } else {
-            cfGain = 0;
-            cfStart = 0;
-            cfEnd = 0;
-          }
-        }
-      } catch (err) {
-        console.error(`[WeeklyWrapUp] CF Rating API error for ${user.username}:`, err.message);
-      }
-    }
-
-    // AtCoder stats
-    let acSolved = null;
-    let acGain = null;
-    if (user.ac_handle) {
-      try {
-        const resultsRes = await axios.get(`https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${user.ac_handle}&from_second=${sevenDaysAgo}`, {
-          timeout: 8000,
-          headers: KENKOOOO_HEADERS
-        }).catch(() => null);
-        if (resultsRes && resultsRes.data && Array.isArray(resultsRes.data)) {
-          const solvedSet = new Set();
-          for (const sub of resultsRes.data) {
-            if (sub.result === 'AC') {
-              solvedSet.add(sub.problem_id);
-            }
-          }
-          acSolved = solvedSet.size;
-        }
-      } catch (err) {
-        console.error(`[WeeklyWrapUp] AtCoder API error for ${user.username}:`, err.message);
-      }
-      
-      try {
-        const oldRatingRow = db.prepare(`
-          SELECT rating FROM rating_history
-          WHERE discord_id = ? AND platform = 'ac' AND recorded_at < ?
-          ORDER BY recorded_at DESC LIMIT 1
-        `).get(user.discord_id, sevenDaysAgo);
-        
-        const acDbRating = ratings.find(r => r.platform === 'ac');
-        if (acDbRating) {
-          const currentRating = acDbRating.rating;
-          const ratingSevenDaysAgo = oldRatingRow ? oldRatingRow.rating : 0;
-          acGain = Math.max(0, currentRating - ratingSevenDaysAgo);
-          acStart = ratingSevenDaysAgo;
-          acEnd = currentRating;
-        }
-      } catch (err) {
-        console.error(`[WeeklyWrapUp] AtCoder Local History error for ${user.username}:`, err.message);
-      }
-    }
-
-    // Toph stats (from DB history, no public submissions API)
-    let tophSolved = null;
-    let tophGain   = null;
-    if (user.toph_handle) {
-      try {
-        const oldRatingRow = db.prepare(`
-          SELECT rating FROM rating_history
-          WHERE discord_id = ? AND platform = 'toph' AND recorded_at < ?
-          ORDER BY recorded_at DESC LIMIT 1
-        `).get(user.discord_id, sevenDaysAgo);
-
-        const tophDbRating = ratings.find(r => r.platform === 'toph');
-        if (tophDbRating) {
-          const currentRating = tophDbRating.rating;
-          const ratingSevenDaysAgo = oldRatingRow ? oldRatingRow.rating : 0;
-          tophGain  = Math.max(0, currentRating - ratingSevenDaysAgo);
-          tophStart = ratingSevenDaysAgo;
-          tophEnd   = currentRating;
-          tophSolved = tophDbRating.solved;
-        }
-      } catch (err) {
-        console.error(`[WeeklyWrapUp] Toph Local History error for ${user.username}:`, err.message);
-      }
-    }
-    if (user.cf_handle) {
-      const cfDbRating = ratings.find(r => r.platform === 'cf');
+      const dbRating = ratings.find(r => r.platform === 'cf');
       const snap = getWeeklySnapshot(user.discord_id, 'cf');
-      
-      if (cfSolved !== null) {
-        userTotalSolved += cfSolved;
-      } else if (cfDbRating && snap) {
-        cfSolved = Math.max(0, cfDbRating.solved - snap.solved);
-        userTotalSolved += cfSolved;
-      } else {
-        cfSolved = 0;
-      }
-      
-      if (cfGain !== null) {
-        userTotalRatingGain += cfGain;
-      } else if (cfDbRating && snap) {
-        cfGain = Math.max(0, cfDbRating.rating - snap.rating);
-        userTotalRatingGain += cfGain;
+      if (dbRating && snap) {
+        cfSolved = Math.max(0, dbRating.solved - snap.solved);
+        cfGain = Math.max(0, dbRating.rating - snap.rating);
         cfStart = snap.rating;
-        cfEnd = cfDbRating.rating;
-      } else if (cfDbRating) {
-        cfGain = 0;
-        cfStart = cfDbRating.rating;
-        cfEnd = cfDbRating.rating;
-      } else {
-        cfGain = 0;
+        cfEnd = dbRating.rating;
+      } else if (dbRating) {
+        cfStart = dbRating.rating;
+        cfEnd = dbRating.rating;
       }
+      userTotalSolved += cfSolved;
+      userTotalRatingGain += cfGain;
     }
-    
+
     if (user.ac_handle) {
-      const acDbRating = ratings.find(r => r.platform === 'ac');
+      const dbRating = ratings.find(r => r.platform === 'ac');
       const snap = getWeeklySnapshot(user.discord_id, 'ac');
-      
-      if (acSolved !== null) {
-        userTotalSolved += acSolved;
-      } else if (acDbRating && snap) {
-        acSolved = Math.max(0, acDbRating.solved - snap.solved);
-        userTotalSolved += acSolved;
-      } else {
-        acSolved = 0;
-      }
-      
-      if (acGain !== null) {
-        userTotalRatingGain += acGain;
-      } else if (acDbRating && snap) {
-        acGain = Math.max(0, acDbRating.rating - snap.rating);
-        userTotalRatingGain += acGain;
+      if (dbRating && snap) {
+        acSolved = Math.max(0, dbRating.solved - snap.solved);
+        acGain = Math.max(0, dbRating.rating - snap.rating);
         acStart = snap.rating;
-        acEnd = acDbRating.rating;
-      } else if (acDbRating) {
-        acGain = 0;
-        acStart = acDbRating.rating;
-        acEnd = acDbRating.rating;
-      } else {
-        acGain = 0;
+        acEnd = dbRating.rating;
+      } else if (dbRating) {
+        acStart = dbRating.rating;
+        acEnd = dbRating.rating;
       }
+      userTotalSolved += acSolved;
+      userTotalRatingGain += acGain;
+    }
+
+    if (user.toph_handle) {
+      const dbRating = ratings.find(r => r.platform === 'toph');
+      const snap = getWeeklySnapshot(user.discord_id, 'toph');
+      if (dbRating && snap) {
+        tophSolved = Math.max(0, dbRating.solved - snap.solved);
+        tophGain = Math.max(0, dbRating.rating - snap.rating);
+        tophStart = snap.rating;
+        tophEnd = dbRating.rating;
+      } else if (dbRating) {
+        tophStart = dbRating.rating;
+        tophEnd = dbRating.rating;
+      }
+      userTotalSolved += tophSolved;
+      userTotalRatingGain += tophGain;
     }
     
     // Save/update snapshot for the next week
@@ -244,11 +110,6 @@ async function runWeeklyWrapup(client) {
       toph_gain:  tophGain || 0, toph_start: tophStart, toph_end: tophEnd, toph_linked: !!user.toph_handle
     });
 
-    if (user.cf_handle) {
-      await new Promise(r => setTimeout(r, 2500)); // Rate limit safety
-    } else if (user.ac_handle) {
-      await new Promise(r => setTimeout(r, 500));
-    }
   }
 
   // Sort lists (solved descending, rating gain descending)
