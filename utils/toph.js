@@ -332,11 +332,15 @@ async function fetchTophSubmissions(user) {
         url = `https://toph.co/u/${user.toph_handle}`;
       }
 
-      const uniqueId = `toph_${user.discord_id}_${slug}_${timestamp}`;
+      // Deduplicate by problem slug so the same problem isn't announced twice
+      const uniqueId = slug.startsWith('private_') 
+        ? `toph_prob_${user.discord_id}_${slug}_${timestamp}` // no real slug available
+        : `toph_prob_${user.discord_id}_${slug}`;
 
       const existing = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(uniqueId);
       if (!existing) {
-        db.prepare('INSERT INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(uniqueId, timestamp);
+        // NOTE: We don't insert into DB here. submissionFeed.js will do it AFTER announcing it.
+        // But we need to pass the dedupKey back to the caller.
 
         // Extract contest name from activity HTML — catch ANY link pattern:
         // e.g. "in <a href=/c/slug>Name</a>" OR "in <a href=/arena/practice=id>Name</a>"
@@ -360,7 +364,7 @@ async function fetchTophSubmissions(user) {
           contestName = activityContestName;
         }
 
-        newSubs.push({ id: uniqueId, name, url, difficulty, tags, contestName });
+        newSubs.push({ id: uniqueId, name, url, difficulty, tags, contestName, timestamp, dedupKey: uniqueId });
       }
     }
 

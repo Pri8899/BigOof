@@ -157,8 +157,8 @@ async function fetchCFSubmissions(user) {
       highestId = Math.max(highestId, sub.id);
 
       if (sub.verdict === 'OK' && sub.problem) {
-        // ── Per-submission dedup using processed_submissions table ──
-        const dedupKey = `cf_${user.discord_id}_${sub.id}`;
+        // ── Per-problem dedup using processed_submissions table ──
+        const dedupKey = `cf_prob_${user.discord_id}_${sub.problem.contestId}_${sub.problem.index}`;
         const alreadySeen = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(dedupKey);
         if (alreadySeen) continue; // already announced — skip
 
@@ -222,8 +222,8 @@ async function fetchACSubmissions(user) {
     for (const sub of submissions) {
       highestTime = Math.max(highestTime, sub.epoch_second);
       if (sub.result === 'AC') {
-        // Deduplicate by submission ID
-        const dedupKey = `ac_${user.discord_id}_${sub.id}`;
+        // Deduplicate by problem ID rather than submission ID
+        const dedupKey = `ac_prob_${user.discord_id}_${sub.problem_id}`;
         try {
           const alreadySeen = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(dedupKey);
           if (alreadySeen) continue;
@@ -310,6 +310,11 @@ async function runSubmissionFeed(client) {
     for (const sub of tophNew) {
       const embed = buildSubmissionEmbed(user, sub, 'toph', emojis);
       await channel.send({ embeds: [embed] }).catch(() => {});
+      if (sub.dedupKey) {
+        try {
+          db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
+        } catch (_) {}
+      }
     }
 
 
