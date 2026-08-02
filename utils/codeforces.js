@@ -2,10 +2,6 @@
 const axios = require('axios');
 
 const CF_BASE = 'https://codeforces.com/api';
-const CF_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'application/json, text/plain, */*',
-};
 
 /**
  * Fetch user info from Codeforces
@@ -14,7 +10,7 @@ const CF_HEADERS = {
  */
 async function getCFUser(handle) {
   try {
-    const infoRes = await axios.get(`${CF_BASE}/user.info?handles=${handle}`, { timeout: 8000, headers: CF_HEADERS });
+    const infoRes = await axios.get(`${CF_BASE}/user.info?handles=${handle}`, { timeout: 8000 });
     if (infoRes.data.status !== 'OK') return null;
     const user = infoRes.data.result[0];
 
@@ -23,7 +19,7 @@ async function getCFUser(handle) {
     try {
       const subRes = await axios.get(
         `${CF_BASE}/user.status?handle=${handle}&from=1&count=10000`,
-        { timeout: 10000, headers: CF_HEADERS }
+        { timeout: 10000 }
       );
       if (subRes.data.status === 'OK') {
         const seen = new Set();
@@ -39,7 +35,7 @@ async function getCFUser(handle) {
 
     let lastContest = null;
     try {
-      const ratingRes = await axios.get(`${CF_BASE}/user.rating?handle=${handle}`, { timeout: 6000, headers: CF_HEADERS });
+      const ratingRes = await axios.get(`${CF_BASE}/user.rating?handle=${handle}`, { timeout: 6000 });
       if (ratingRes.data.status === 'OK' && ratingRes.data.result.length > 0) {
         const last = ratingRes.data.result[ratingRes.data.result.length - 1];
         lastContest = {
