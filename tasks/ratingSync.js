@@ -2,6 +2,10 @@
 const cron = require('node-cron');
 const { EmbedBuilder } = require('discord.js');
 const axios = require('axios');
+const CF_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+};
 const {
   getAllUsers, upsertRating, getAllRatings,
   getRatings, getConfig, setConfig,
@@ -455,7 +459,7 @@ function calculateMaxStreakForActivity(activityMap) {
  */
 async function calculateCFStreak(handle) {
   try {
-    const res = await axios.get(`${CF_BASE}/user.status?handle=${handle}&from=1&count=2000`, { timeout: 12000 });
+    const res = await axios.get(`${CF_BASE}/user.status?handle=${handle}&from=1&count=2000`, { timeout: 12000, headers: CF_HEADERS });
     if (res.data.status !== 'OK') return { current: 0, max: 0 };
 
     const subs = res.data.result.filter(sub => sub.creationTimeSeconds);

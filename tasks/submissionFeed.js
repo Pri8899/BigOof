@@ -129,10 +129,21 @@ async function getOrFetchContestName(contestId) {
 }
 
 async function fetchCFSubmissions(user) {
-  if (!user.cf_handle) return [];
+  if (!user.cf_handle) return { newAc: [], highestId: null };
   try {
-    const res = await axios.get(`${CF_BASE}/user.status?handle=${user.cf_handle}&from=1&count=50`, { timeout: 8000 });
-    if (res.data.status !== 'OK') return [];
+    const res = await axiosGetWithRetry(
+      `${CF_BASE}/user.status?handle=${user.cf_handle}&from=1&count=50`,
+      {
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+        }
+      },
+      4, // 4 retries
+      2000 // 2s initial backoff
+    );
+    if (res.data.status !== 'OK') return { newAc: [], highestId: null };
 
     let lastId = getLastSubmission(user.discord_id, 'cf');
     let highestId = lastId || 0;

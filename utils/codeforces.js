@@ -2,6 +2,10 @@
 const axios = require('axios');
 
 const CF_BASE = 'https://codeforces.com/api';
+const CF_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+};
 
 /**
  * Fetch user info from Codeforces
@@ -10,7 +14,7 @@ const CF_BASE = 'https://codeforces.com/api';
  */
 async function getCFUser(handle) {
   try {
-    const infoRes = await axios.get(`${CF_BASE}/user.info?handles=${handle}`, { timeout: 8000 });
+    const infoRes = await axios.get(`${CF_BASE}/user.info?handles=${handle}`, { timeout: 8000, headers: CF_HEADERS });
     if (infoRes.data.status !== 'OK') return null;
     const user = infoRes.data.result[0];
 
@@ -19,7 +23,7 @@ async function getCFUser(handle) {
     try {
       const subRes = await axios.get(
         `${CF_BASE}/user.status?handle=${handle}&from=1&count=10000`,
-        { timeout: 10000 }
+        { timeout: 10000, headers: CF_HEADERS }
       );
       if (subRes.data.status === 'OK') {
         const seen = new Set();
@@ -35,7 +39,7 @@ async function getCFUser(handle) {
 
     let lastContest = null;
     try {
-      const ratingRes = await axios.get(`${CF_BASE}/user.rating?handle=${handle}`, { timeout: 6000 });
+      const ratingRes = await axios.get(`${CF_BASE}/user.rating?handle=${handle}`, { timeout: 6000, headers: CF_HEADERS });
       if (ratingRes.data.status === 'OK' && ratingRes.data.result.length > 0) {
         const last = ratingRes.data.result[ratingRes.data.result.length - 1];
         lastContest = {
@@ -65,7 +69,7 @@ async function getCFUser(handle) {
  */
 async function getCFContests() {
   try {
-    const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 8000 });
+    const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 8000, headers: CF_HEADERS });
     if (res.data.status !== 'OK') return [];
     const now = Math.floor(Date.now() / 1000);
     return res.data.result
@@ -89,7 +93,7 @@ async function getCFContests() {
  */
 async function validateCFHandle(handle) {
   try {
-    const res = await axios.get(`${CF_BASE}/user.info?handles=${handle}`, { timeout: 6000 });
+    const res = await axios.get(`${CF_BASE}/user.info?handles=${handle}`, { timeout: 6000, headers: CF_HEADERS });
     return res.data.status === 'OK';
   } catch {
     return false;
@@ -107,8 +111,8 @@ async function initializeProblemCache() {
   console.log('[CF] Warming up Codeforces problem set and contest caches...');
   try {
     const [probRes, contestRes] = await Promise.all([
-      axios.get(`${CF_BASE}/problemset.problems`, { timeout: 20000 }),
-      axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 15000 }).catch(() => null)
+      axios.get(`${CF_BASE}/problemset.problems`, { timeout: 20000, headers: CF_HEADERS }),
+      axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 15000, headers: CF_HEADERS }).catch(() => null)
     ]);
     
     if (probRes && probRes.data && probRes.data.status === 'OK' && probRes.data.result && Array.isArray(probRes.data.result.problems)) {
@@ -226,7 +230,7 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
     // Fetch problemset cache if needed
     if (!cachedProblems || (now - lastCacheFetchTime > CACHE_DURATION)) {
       console.log('[CF] Cache expired or empty. Fetching full problemset from Codeforces API...');
-      const res = await axios.get(`${CF_BASE}/problemset.problems`, { timeout: 20000 });
+      const res = await axios.get(`${CF_BASE}/problemset.problems`, { timeout: 20000, headers: CF_HEADERS });
       if (res.data && res.data.status === 'OK' && res.data.result && Array.isArray(res.data.result.problems)) {
         cachedProblems = res.data.result.problems;
         lastCacheFetchTime = now;
@@ -236,7 +240,7 @@ async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, coun
 
     // Fetch contest list cache if needed
     if (!cachedContests || (now - lastContestCacheFetchTime > CACHE_DURATION)) {
-      const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 20000 }).catch(() => null);
+      const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 20000, headers: CF_HEADERS }).catch(() => null);
       if (res && res.data && res.data.status === 'OK' && Array.isArray(res.data.result)) {
         const contestMap = {};
         for (const c of res.data.result) {
@@ -351,7 +355,7 @@ async function getCFDivisionBreakdown(handle) {
     // Ensure the contest cache is populated — fetch it if missing
     if (!cachedContests) {
       try {
-        const contestRes = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 15000 });
+        const contestRes = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 15000, headers: CF_HEADERS });
         if (contestRes.data.status === 'OK') {
           const contestMap = {};
           for (const c of contestRes.data.result) {
