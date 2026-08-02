@@ -258,9 +258,9 @@ async function fetchACSubmissions(user) {
 
 
 async function runSubmissionFeed(client) {
-  const channelId = getConfig('feed_channel_id') || process.env.FEED_CHANNEL_ID || process.env.GENERAL_CHANNEL_ID;
+  const channelId = getConfig('feed_channel_id') || getConfig('dashboard_channel_id') || getConfig('rating_channel_id') || process.env.FEED_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID || process.env.RATING_CHANNEL_ID || process.env.GENERAL_CHANNEL_ID;
   if (!channelId) {
-    console.warn('[SubmissionFeed] No live feed channel configured. Please set one using /set-feed-channel or define FEED_CHANNEL_ID / GENERAL_CHANNEL_ID in .env.');
+    console.warn('[SubmissionFeed] No feed/dashboard/rating channel configured. Please set one using /set-feed-channel or /set-dashboard-channel.');
     return;
   }
 
