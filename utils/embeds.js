@@ -344,9 +344,9 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
 
   const PLATFORM_HEADER = {
     Custom:     `🏆 ───────── CUSTOM ─────────`,
-    Codeforces: `${emojis.cf || '🔵'} ─────── CODEFORCES ───────${cfStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`,
-    AtCoder:    `${emojis.ac || '🔴'} ──────── ATCODER ─────────${acStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`,
-    Toph:       `${emojis.toph || '🟣'} ──────────── TOPH ────────${tophStatus ? '' : ' ⚠️ OFFLINE (CACHED)'}`
+    Codeforces: `${emojis.cf || '🔵'} ─────── CODEFORCES ───────`,
+    AtCoder:    `${emojis.ac || '🔴'} ──────── ATCODER ─────────`,
+    Toph:       `${emojis.toph || '🟣'} ──────────── TOPH ────────`
   };
 
   const filtered = platform === 'all'
