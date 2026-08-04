@@ -67,43 +67,52 @@ client.once('ready', async () => {
   const { db, getConfig } = require('./database/db');
 
 
-  // One-time direct announcement for missed 2249-A solve (bypasses CF API entirely)
+  // One-time direct announcement for August 4 Daily Suggestions (bypasses CF API entirely)
   try {
-    const announceKey = 'announced_cf_2249A_ImposterBhO0_v3';
-    const alreadyDone = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(announceKey);
+    const suggestPatchKey = 'patched_daily_suggest_aug4_v1';
+    const alreadyDone = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(suggestPatchKey);
     if (!alreadyDone) {
-      const channelId = getConfig('feed_channel_id') || getConfig('dashboard_channel_id') || getConfig('rating_channel_id');
+      const channelId = getConfig('suggest_channel_id');
       if (channelId) {
         setTimeout(async () => {
           try {
             const channel = await client.channels.fetch(channelId).catch(() => null);
-            if (!channel) { console.error('[Force Announce] Channel not found:', channelId); return; }
+            if (!channel) { console.error('[Force Suggest] Channel not found:', channelId); return; }
+            
+            // Delete the bad empty entry and insert the hardcoded problems
+            db.prepare("DELETE FROM daily_problems WHERE date_str = ?").run('08/04/2026');
+            db.prepare(`
+              INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id, p4_id, p5_id)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `).run('08/04/2026', '1955A', '1978B', '1915D', '1899E', '1872F');
+
             const { EmbedBuilder } = require('discord.js');
-            const embed = new EmbedBuilder()
-              .setColor(0x1F8DD6)
-              .setAuthor({ name: 'Codeforces (Div. 1) — Live Accepted!' })
-              .setTitle('🎉 parth0_paul just got Accepted!')
-              .setDescription('<@1367493270703444078> solved **[A. Rank Subsequence](https://codeforces.com/contest/2249/problem/A)**!')
-              .setThumbnail('https://codeforces.org/s/0/images/codeforces-telegram-square.png')
+            const cfEmbed = new EmbedBuilder()
+              .setColor(0x2B2D31)
+              .setAuthor({ name: 'Codeforces Daily Challenges', iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png' })
+              .setTitle(`🗓️ Daily Problem Suggestions — Tuesday, August 4`)
+              .setDescription(`Sharpen your skills with today's progressive challenges! 🚀\nThe **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`)
               .addFields(
-                { name: '📊 Difficulty', value: '⚪ Beginner  `0`', inline: true },
-                { name: '🏷️ Tags', value: 'greedy, math, sorting', inline: true },
-                { name: '🏆 Contest', value: 'Codeforces Round 1112 (Div. 1)', inline: false }
+                { name: `🌱 Level 1 (Rating 800)`, value: `**[Yogurt Sale](https://codeforces.com/problemset/problem/1955/A)**\n\`math, greedy\``, inline: false },
+                { name: `⚔️ Level 2 (Rating 900)`, value: `**[New Bakery](https://codeforces.com/problemset/problem/1978/B)**\n\`math, greedy\``, inline: false },
+                { name: `🔥 Level 3 (Rating 1100)`, value: `**[Unnatural Language Processing](https://codeforces.com/problemset/problem/1915/D)**\n\`strings, greedy\``, inline: false },
+                { name: `⚡ Level 4 (Rating 1400)`, value: `**[Queue Sort](https://codeforces.com/problemset/problem/1899/E)**\n\`greedy, sorting\``, inline: false },
+                { name: `👑 Level 5 (Rating 1800)`, value: `**[Selling a Menagerie](https://codeforces.com/problemset/problem/1872/F)**\n\`graphs, greedy\``, inline: false }
               )
-              .setTimestamp()
-              .setFooter({ text: 'Keep grinding! 💪' });
-            await channel.send({ embeds: [embed] });
-            db.prepare("INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)").run('cf_prob_1367493270703444078_2249_A', Math.floor(Date.now() / 1000));
-            db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(announceKey, 'true');
-            console.log('[Force Announce] Successfully posted 2249-A announcement.');
+              .setFooter({ text: 'Bot checks for First Blood automatically every 5 minutes!' })
+              .setTimestamp();
+              
+            await channel.send({ content: '@everyone', embeds: [cfEmbed] });
+            db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(suggestPatchKey, 'true');
+            console.log('[Force Suggest] Successfully posted Aug 4 suggestions.');
           } catch (err) {
-            console.error('[Force Announce] Failed:', err.message);
+            console.error('[Force Suggest] Failed:', err.message);
           }
         }, 5000);
       }
     }
   } catch (err) {
-    console.error('[Force Announce Error]', err.message);
+    console.error('[Force Suggest Error]', err.message);
   }
 
   // Set bot activity
