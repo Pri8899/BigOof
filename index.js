@@ -69,7 +69,7 @@ client.once('ready', async () => {
 
   // One-time direct announcement for missed 2249-A solve (bypasses CF API entirely)
   try {
-    const announceKey = 'announced_cf_2249A_ImposterBhO0_v1';
+    const announceKey = 'announced_cf_2249A_ImposterBhO0_v2';
     const alreadyDone = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(announceKey);
     if (!alreadyDone) {
       const channelId = getConfig('feed_channel_id') || getConfig('dashboard_channel_id') || getConfig('rating_channel_id');
