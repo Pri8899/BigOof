@@ -66,29 +66,6 @@ client.once('ready', async () => {
 
   const { db, getConfig } = require('./database/db');
 
-  // Private DM diagnostics to owner on startup
-  try {
-    const owner = await client.users.fetch('1367493270703444078').catch(() => null);
-    if (owner) {
-      const debugLastSubs = db.prepare('SELECT * FROM last_submissions').all();
-      const debugUsers = db.prepare('SELECT * FROM users').all();
-      const channelId = getConfig('feed_channel_id') || process.env.FEED_CHANNEL_ID || process.env.GENERAL_CHANNEL_ID;
-      const channelResolved = await client.channels.fetch(channelId).catch(() => null);
-      
-      let msg = `🤖 **Bot Startup Diagnostic (v1.0.3)**\n`;
-      msg += `**Time:** ${new Date().toISOString()}\n`;
-      msg += `**Feed Channel ID:** \`${channelId}\` (Resolved: \`${channelResolved ? '#' + channelResolved.name : 'null'}\`)\n`;
-      const debugUsersFiltered = debugUsers.map(({ lc_handle, ...rest }) => rest);
-      msg += `**Database Users:**\n\`\`\`json\n${JSON.stringify(debugUsersFiltered, null, 2)}\n\`\`\`\n`;
-      msg += `**Last Submissions:**\n\`\`\`json\n${JSON.stringify(debugLastSubs, null, 2)}\n\`\`\``;
-      await owner.send(msg).catch(() => {});
-    }
-  } catch (err) {
-    console.error('[Startup DM] Failed:', err.message);
-  }
-
-
-
 
   // One-time direct announcement for missed 2249-A solve (bypasses CF API entirely)
   try {
@@ -122,25 +99,11 @@ client.once('ready', async () => {
           } catch (err) {
             console.error('[Force Announce] Failed:', err.message);
           }
-        }, 5000); // 5s after bot is ready
+        }, 5000);
       }
     }
   } catch (err) {
     console.error('[Force Announce Error]', err.message);
-  }
-
-  // Live diagnostic logging to Railway console
-  try {
-    const { getAllUsers } = require('./database/db');
-    const users = getAllUsers();
-    console.log(`\n=================== LIVE DIAGNOSTICS ===================`);
-    console.log(`Registered users in DB: ${users.length}`);
-    users.forEach(u => {
-      console.log(`- User: ${u.username} (Discord: ${u.discord_id}) | CF: ${u.cf_handle || 'None'} | AC: ${u.ac_handle || 'None'}`);
-    });
-    console.log(`========================================================\n`);
-  } catch (e) {
-    console.error('[Diagnostic Error] Failed to run diagnostics:', e.message);
   }
 
   // Set bot activity

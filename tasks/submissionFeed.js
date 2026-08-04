@@ -287,7 +287,6 @@ async function runSubmissionFeed(client) {
     const { newAc: cfNew, highestId } = await fetchCFSubmissions(user);
     const { newAc: acNew, highestTime } = await fetchACSubmissions(user);
     const tophNew = await fetchTophSubmissions(user);
-    console.log(`[SubmissionFeed] User ${user.cf_handle || user.username}: CF=${cfNew.length} new, AC=${acNew.length} new, Toph=${tophNew.length} new | highestId=${highestId}`);
 
     for (const sub of cfNew) {
       const embed = buildSubmissionEmbed(user, sub, 'cf', emojis);
