@@ -69,7 +69,7 @@ client.once('ready', async () => {
 
   // One-time direct announcement for missed 2249-A solve (bypasses CF API entirely)
   try {
-    const announceKey = 'announced_cf_2249A_ImposterBhO0_v2';
+    const announceKey = 'announced_cf_2249A_ImposterBhO0_v3';
     const alreadyDone = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(announceKey);
     if (!alreadyDone) {
       const channelId = getConfig('feed_channel_id') || getConfig('dashboard_channel_id') || getConfig('rating_channel_id');
@@ -81,12 +81,12 @@ client.once('ready', async () => {
             const { EmbedBuilder } = require('discord.js');
             const embed = new EmbedBuilder()
               .setColor(0x1F8DD6)
-              .setAuthor({ name: 'Codeforces — Live Accepted!' })
-              .setTitle('🎉 _Parth0_ just got Accepted!')
+              .setAuthor({ name: 'Codeforces (Div. 1) — Live Accepted!' })
+              .setTitle('🎉 parth0_paul just got Accepted!')
               .setDescription('<@1367493270703444078> solved **[A. Rank Subsequence](https://codeforces.com/contest/2249/problem/A)**!')
               .setThumbnail('https://codeforces.org/s/0/images/codeforces-telegram-square.png')
               .addFields(
-                { name: '📊 Difficulty', value: '🟢 Unrated', inline: true },
+                { name: '📊 Difficulty', value: '⚪ Beginner  `0`', inline: true },
                 { name: '🏷️ Tags', value: 'greedy, math, sorting', inline: true },
                 { name: '🏆 Contest', value: 'Codeforces Round 1112 (Div. 1)', inline: false }
               )
