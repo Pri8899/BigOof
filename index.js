@@ -90,33 +90,43 @@ client.once('ready', async () => {
 
 
 
-  // One-time startup check to restore June 5 suggestions in the database if missing
+  // One-time direct announcement for missed 2249-A solve (bypasses CF API entirely)
   try {
-    const existing = db.prepare('SELECT 1 FROM daily_problems WHERE date_str = ?').get('06/05/2026');
-    if (!existing) {
-      db.prepare(`
-        INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id)
-        VALUES ('06/05/2026', '2148B', '1988B', '1676D')
-      `).run();
-      console.log('[Startup] Restored June 5 suggestions in database.');
+    const announceKey = 'announced_cf_2249A_ImposterBhO0_v1';
+    const alreadyDone = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(announceKey);
+    if (!alreadyDone) {
+      const channelId = getConfig('feed_channel_id') || getConfig('dashboard_channel_id') || getConfig('rating_channel_id');
+      if (channelId) {
+        setTimeout(async () => {
+          try {
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel) { console.error('[Force Announce] Channel not found:', channelId); return; }
+            const { EmbedBuilder } = require('discord.js');
+            const embed = new EmbedBuilder()
+              .setColor(0x1F8DD6)
+              .setAuthor({ name: 'Codeforces — Live Accepted!' })
+              .setTitle('🎉 _Parth0_ just got Accepted!')
+              .setDescription('<@1367493270703444078> solved **[A. Rank Subsequence](https://codeforces.com/contest/2249/problem/A)**!')
+              .setThumbnail('https://codeforces.org/s/0/images/codeforces-telegram-square.png')
+              .addFields(
+                { name: '📊 Difficulty', value: '🟢 Unrated', inline: true },
+                { name: '🏷️ Tags', value: 'greedy, math, sorting', inline: true },
+                { name: '🏆 Contest', value: 'Codeforces Round 1112 (Div. 1)', inline: false }
+              )
+              .setTimestamp()
+              .setFooter({ text: 'Keep grinding! 💪' });
+            await channel.send({ embeds: [embed] });
+            db.prepare("INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)").run('cf_prob_1367493270703444078_2249_A', Math.floor(Date.now() / 1000));
+            db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(announceKey, 'true');
+            console.log('[Force Announce] Successfully posted 2249-A announcement.');
+          } catch (err) {
+            console.error('[Force Announce] Failed:', err.message);
+          }
+        }, 5000); // 5s after bot is ready
+      }
     }
   } catch (err) {
-    console.error('[Startup] Failed to restore June 5 suggestions in database:', err.message);
-  }
-
-  // One-time reset: clear 136-A dedup and roll back last_id so the poller can re-announce the missed solve
-  try {
-    const resetKey = 'reset_136A_for_ImposterBhO0_done';
-    const alreadyReset = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(resetKey);
-    if (!alreadyReset) {
-      const targetId = '1367493270703444078';
-      db.prepare("DELETE FROM processed_submissions WHERE id = 'cf_prob_1367493270703444078_136_A'").run();
-      db.prepare("UPDATE last_submissions SET last_id = 385300000 WHERE discord_id = ? AND platform = 'cf'").run(targetId);
-      db.prepare('INSERT OR REPLACE INTO guild_config (key, value) VALUES (?, ?)').run(resetKey, 'true');
-      console.log('[Startup] One-time reset: rolled back CF last_id for ImposterBhO0 to catch missed 136-A solve.');
-    }
-  } catch (err) {
-    console.error('[Startup Reset Error]', err.message);
+    console.error('[Force Announce Error]', err.message);
   }
 
   // Live diagnostic logging to Railway console
