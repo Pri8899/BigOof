@@ -163,6 +163,11 @@ async function postDailySuggestions(client, targetDate = null) {
     setDailyProblems(todayDateStr, p1?.id || null, p2?.id || null, p3?.id || null, p4?.id || null, p5?.id || null);
   }
 
+  if (!p1 && !p2 && !p3 && !p4 && !p5) {
+    console.error('[Suggest] Failed to fetch or generate any problems (CF API may be blocked). Aborting empty embed.');
+    return;
+  }
+
   // ── Codeforces Section ──
   const { getPlatformEmojis } = require('../utils/emojis');
   const emojis = await getPlatformEmojis(channel.guild);
