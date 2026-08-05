@@ -59,13 +59,9 @@ function computeLeaderboard(users, ratings, streaks = []) {
       };
     })
     .sort((a, b) => {
-      const aTotalRating = a.cf_rating + a.ac_rating + a.toph_rating;
-      const bTotalRating = b.cf_rating + b.ac_rating + b.toph_rating;
-      if (aTotalRating !== bTotalRating) return bTotalRating - aTotalRating;
-      const aTotalSolved = a.cf_solved + a.ac_solved + a.toph_solved;
-      const bTotalSolved = b.cf_solved + b.ac_solved + b.toph_solved;
-      if (aTotalSolved !== bTotalSolved) return bTotalSolved - aTotalSolved;
-      return Math.max(b.cf_streak, b.ac_streak, b.toph_streak) - Math.max(a.cf_streak, a.ac_streak, a.toph_streak);
+      if (a.cf_rating !== b.cf_rating) return b.cf_rating - a.cf_rating;
+      if (a.cf_solved !== b.cf_solved) return b.cf_solved - a.cf_solved;
+      return b.cf_streak - a.cf_streak;
     });
 
   return rows;
