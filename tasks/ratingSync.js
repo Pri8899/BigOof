@@ -377,6 +377,16 @@ function startRatingSync(client) {
     setTimeout(poll, 5 * 60 * 1000); // next check in 5 min
   };
 
+  // Refresh dashboard on startup after 5s so the leaderboard instantly reflects any code/sorting updates
+  setTimeout(async () => {
+    try {
+      console.log('[RatingSync] Startup dashboard refresh...');
+      await updateDashboard(client);
+    } catch (err) {
+      console.error('[RatingSync] Startup dashboard refresh error:', err.message);
+    }
+  }, 5000);
+
   // Start first poll 15s after boot
   setTimeout(poll, 15000);
 
