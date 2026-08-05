@@ -67,52 +67,30 @@ client.once('ready', async () => {
   const { db, getConfig } = require('./database/db');
 
 
-  // One-time direct announcement for August 4 Daily Suggestions (bypasses CF API entirely)
+  // Startup check to ensure daily_problems table contains active problems for August 4 and August 5
   try {
-    const suggestPatchKey = 'patched_daily_suggest_aug4_v1';
+    const suggestPatchKey = 'patched_daily_suggest_aug5_v2';
     const alreadyDone = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(suggestPatchKey);
     if (!alreadyDone) {
-      const channelId = getConfig('suggest_channel_id');
-      if (channelId) {
-        setTimeout(async () => {
-          try {
-            const channel = await client.channels.fetch(channelId).catch(() => null);
-            if (!channel) { console.error('[Force Suggest] Channel not found:', channelId); return; }
-            
-            // Delete the bad empty entry and insert the hardcoded problems
-            db.prepare("DELETE FROM daily_problems WHERE date_str = ?").run('08/04/2026');
-            db.prepare(`
-              INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id, p4_id, p5_id)
-              VALUES (?, ?, ?, ?, ?, ?)
-            `).run('08/04/2026', '1955A', '1978B', '1915D', '1899E', '1872F');
+      db.prepare(`
+        INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id, p4_id, p5_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(date_str) DO UPDATE SET
+          p1_id=excluded.p1_id, p2_id=excluded.p2_id, p3_id=excluded.p3_id, p4_id=excluded.p4_id, p5_id=excluded.p5_id
+      `).run('08/04/2026', '1955A', '1978B', '1915D', '1899E', '1872F');
 
-            const { EmbedBuilder } = require('discord.js');
-            const cfEmbed = new EmbedBuilder()
-              .setColor(0x2B2D31)
-              .setAuthor({ name: 'Codeforces Daily Challenges', iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png' })
-              .setTitle(`🗓️ Daily Problem Suggestions — Tuesday, August 4`)
-              .setDescription(`Sharpen your skills with today's progressive challenges! 🚀\nThe **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`)
-              .addFields(
-                { name: `🌱 Level 1 (Rating 800)`, value: `**[Yogurt Sale](https://codeforces.com/problemset/problem/1955/A)**\n\`math, greedy\``, inline: false },
-                { name: `⚔️ Level 2 (Rating 900)`, value: `**[New Bakery](https://codeforces.com/problemset/problem/1978/B)**\n\`math, greedy\``, inline: false },
-                { name: `🔥 Level 3 (Rating 1100)`, value: `**[Unnatural Language Processing](https://codeforces.com/problemset/problem/1915/D)**\n\`strings, greedy\``, inline: false },
-                { name: `⚡ Level 4 (Rating 1400)`, value: `**[Queue Sort](https://codeforces.com/problemset/problem/1899/E)**\n\`greedy, sorting\``, inline: false },
-                { name: `👑 Level 5 (Rating 1800)`, value: `**[Selling a Menagerie](https://codeforces.com/problemset/problem/1872/F)**\n\`graphs, greedy\``, inline: false }
-              )
-              .setFooter({ text: 'Bot checks for First Blood automatically every 5 minutes!' })
-              .setTimestamp();
-              
-            await channel.send({ content: '@everyone', embeds: [cfEmbed] });
-            db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(suggestPatchKey, 'true');
-            console.log('[Force Suggest] Successfully posted Aug 4 suggestions.');
-          } catch (err) {
-            console.error('[Force Suggest] Failed:', err.message);
-          }
-        }, 5000);
-      }
+      db.prepare(`
+        INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id, p4_id, p5_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(date_str) DO UPDATE SET
+          p1_id=excluded.p1_id, p2_id=excluded.p2_id, p3_id=excluded.p3_id, p4_id=excluded.p4_id, p5_id=excluded.p5_id
+      `).run('08/05/2026', '1955A', '1978B', '1915D', '1899E', '1872F');
+
+      db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(suggestPatchKey, 'true');
+      console.log('[Startup] Successfully initialized daily_problems entries for 08/04 and 08/05.');
     }
   } catch (err) {
-    console.error('[Force Suggest Error]', err.message);
+    console.error('[Startup Daily Problems Error]', err.message);
   }
 
   // Set bot activity

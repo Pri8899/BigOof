@@ -164,8 +164,14 @@ async function postDailySuggestions(client, targetDate = null) {
   }
 
   if (!p1 && !p2 && !p3 && !p4 && !p5) {
-    console.error('[Suggest] Failed to fetch or generate any problems (CF API may be blocked). Aborting empty embed.');
-    return;
+    console.warn('[Suggest] Dynamic CF API fetch failed (API may be blocked). Using offline fallback problems.');
+    p1 = { id: '1955A', name: 'Yogurt Sale', rating: 800, tags: ['math', 'greedy'], url: 'https://codeforces.com/problemset/problem/1955/A' };
+    p2 = { id: '1978B', name: 'New Bakery', rating: 900, tags: ['math', 'greedy'], url: 'https://codeforces.com/problemset/problem/1978/B' };
+    p3 = { id: '1915D', name: 'Unnatural Language Processing', rating: 1100, tags: ['strings', 'greedy'], url: 'https://codeforces.com/problemset/problem/1915/D' };
+    p4 = { id: '1899E', name: 'Queue Sort', rating: 1400, tags: ['greedy', 'sorting'], url: 'https://codeforces.com/problemset/problem/1899/E' };
+    p5 = { id: '1872F', name: 'Selling a Menagerie', rating: 1800, tags: ['graphs', 'greedy'], url: 'https://codeforces.com/problemset/problem/1872/F' };
+
+    setDailyProblems(todayDateStr, p1.id, p2.id, p3.id, p4.id, p5.id);
   }
 
   // ── Codeforces Section ──
