@@ -321,14 +321,9 @@ async function updateDashboard(client) {
     }
 
     if (msg) {
-      try {
-        await msg.edit({ embeds: [embed] });
-        console.log('[Dashboard] Updated existing dashboard message in-place.');
-        return;
-      } catch (err) {
-        console.warn('[Dashboard] Failed to edit existing dashboard message, recreating:', err.message);
-        await msg.delete().catch(() => {});
-      }
+      // Delete the old message — new one will be posted below
+      await msg.delete().catch(() => {});
+      console.log('[Dashboard] Deleted old dashboard message.');
     }
 
     // Post fresh — retry until it succeeds so the channel is never left empty
