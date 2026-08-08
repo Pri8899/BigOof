@@ -66,31 +66,17 @@ client.once('ready', async () => {
 
   const { db, getConfig } = require('./database/db');
 
-
-  // Startup check to ensure daily_problems table contains active problems for August 4 and August 5
+  // One-time cleanup: delete stale daily_problems that contained already-solved hardcoded problems
   try {
-    const suggestPatchKey = 'patched_daily_suggest_aug5_v2';
-    const alreadyDone = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(suggestPatchKey);
-    if (!alreadyDone) {
-      db.prepare(`
-        INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id, p4_id, p5_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(date_str) DO UPDATE SET
-          p1_id=excluded.p1_id, p2_id=excluded.p2_id, p3_id=excluded.p3_id, p4_id=excluded.p4_id, p5_id=excluded.p5_id
-      `).run('08/04/2026', '1955A', '1978B', '1915D', '1899E', '1872F');
-
-      db.prepare(`
-        INSERT INTO daily_problems (date_str, p1_id, p2_id, p3_id, p4_id, p5_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(date_str) DO UPDATE SET
-          p1_id=excluded.p1_id, p2_id=excluded.p2_id, p3_id=excluded.p3_id, p4_id=excluded.p4_id, p5_id=excluded.p5_id
-      `).run('08/05/2026', '1955A', '1978B', '1915D', '1899E', '1872F');
-
-      db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(suggestPatchKey, 'true');
-      console.log('[Startup] Successfully initialized daily_problems entries for 08/04 and 08/05.');
+    const cleanupKey = 'cleaned_stale_daily_problems_v1';
+    const done = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(cleanupKey);
+    if (!done) {
+      db.prepare("DELETE FROM daily_problems WHERE date_str IN ('08/04/2026','08/05/2026','08/06/2026','08/07/2026','08/08/2026')").run();
+      db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(cleanupKey, 'true');
+      console.log('[Startup] Cleaned stale daily_problems entries. Fresh problems will be generated tonight.');
     }
   } catch (err) {
-    console.error('[Startup Daily Problems Error]', err.message);
+    console.error('[Startup Cleanup Error]', err.message);
   }
 
   // Set bot activity
