@@ -97,12 +97,16 @@ client.once('ready', async () => {
   // Asynchronously warm up the CF problem cache on startup
   initializeProblemCache().catch(err => console.error('[Startup] Failed to warm up CF problem cache:', err.message));
 
+  const { startAutoBackup }    = require('./tasks/autoBackup');
+
   startContestFetcher(client);
   startRatingSync(client);
   startDailyChallenge(client);
   startSubmissionFeed(client);
   startWeeklyWrapup(client);
   startVSPoller(client);
+  startAutoBackup(client);
+
 });
 
 // ─── Error Handling ───────────────────────────────────────────
