@@ -68,12 +68,15 @@ client.once('ready', async () => {
 
   // One-time cleanup: delete stale daily_problems that contained already-solved hardcoded problems
   try {
-    const cleanupKey = 'cleaned_stale_daily_problems_v1';
+    const cleanupKey = 'cleaned_stale_daily_problems_v2';
     const done = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(cleanupKey);
     if (!done) {
+      // Delete all stale entries from the past few days that used hardcoded solved problems
       db.prepare("DELETE FROM daily_problems WHERE date_str IN ('08/04/2026','08/05/2026','08/06/2026','08/07/2026','08/08/2026')").run();
+      // Reset the "already posted today" flag so the startup catch-up fires again with fresh problems
+      db.prepare("DELETE FROM guild_config WHERE key = 'last_suggest_post_date'").run();
       db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(cleanupKey, 'true');
-      console.log('[Startup] Cleaned stale daily_problems entries. Fresh problems will be generated tonight.');
+      console.log('[Startup] Cleaned stale daily_problems + reset suggest date. Fresh problems will post now.');
     }
   } catch (err) {
     console.error('[Startup Cleanup Error]', err.message);
