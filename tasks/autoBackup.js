@@ -41,15 +41,15 @@ async function runBackup(client) {
 }
 
 function startAutoBackup(client) {
-  // Run every 6 hours
-  cron.schedule('0 */6 * * *', () => {
+  // Run every 1 hour
+  cron.schedule('0 * * * *', () => {
     runBackup(client);
   });
 
   // Also run once on startup after 30 seconds (so DB is fully ready)
   setTimeout(() => runBackup(client), 30000);
 
-  console.log('[Backup] Auto-backup task started (every 6 hours).');
+  console.log('[Backup] Auto-backup task started (every 1 hour).');
 }
 
 module.exports = { startAutoBackup, runBackup };
