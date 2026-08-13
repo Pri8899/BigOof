@@ -7,7 +7,8 @@ const {
   getRatings, getConfig, setConfig,
   insertRatingHistory, upsertStreak, getAllStreaks
 } = require('../database/db');
-const { getCFUser }              = require('../utils/codeforces');
+const { getCFUser, getRatingTitle } = require('../utils/codeforces');
+const { getValidId } = require('../utils/envHelper');
 const { getACUser }              = require('../utils/atcoder');
 const { getTophUser, calculateTophStreak } = require('../utils/toph');
 const { buildDashboardEmbed } = require('../utils/embeds');
@@ -73,7 +74,7 @@ async function updateDiscordRole(client, discordId, rating) {
 
 // ─── Rating Change Alert ─────────────────────────────────────
 async function postRatingChange(client, discordId, username, platform, oldRating, newRating, rankTitle, lastContest) {
-  const channelId = getConfig('rating_channel_id') || process.env.RATING_CHANNEL_ID || '1505815592777810020';
+  const channelId = getConfig('rating_channel_id') || getValidId(process.env.RATING_CHANNEL_ID, '1505815592777810020');
   if (!channelId || oldRating === newRating) return;
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
@@ -275,7 +276,7 @@ async function syncAllRatings(client) {
 // ─── Update Dashboard ────────────────────────────────────────
 async function updateDashboard(client) {
   try {
-    const channelId = getConfig('dashboard_channel_id') || process.env.DASHBOARD_CHANNEL_ID || '1505815433255587870';
+    const channelId = getConfig('dashboard_channel_id') || getValidId(process.env.DASHBOARD_CHANNEL_ID, '1505815433255587870');
     if (!channelId) return;
 
     const channel = await client.channels.fetch(channelId).catch(err => {

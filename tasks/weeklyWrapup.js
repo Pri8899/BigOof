@@ -4,10 +4,12 @@ const axios = require('axios');
 const { getAllUsers, getRatings, getWeeklySnapshot, setWeeklySnapshot, getConfig, setConfig, db } = require('../database/db');
 const { buildWeeklyWrapupEmbed } = require('../utils/embeds');
 
+const { getValidId } = require('../utils/envHelper');
 
 async function runWeeklyWrapup(client, updateSnapshots = false) {
   // Try to use the rating channel as requested, fallback to dashboard
-  const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID || '1505815592777810020';
+  const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || getValidId(process.env.RATING_CHANNEL_ID, null) || getValidId(process.env.DASHBOARD_CHANNEL_ID, null) || '1505815592777810020';
+
   if (!channelId) {
     console.log('[WeeklyWrapUp] No channel configured to post wrap up.');
     return false;

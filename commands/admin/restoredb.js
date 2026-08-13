@@ -7,6 +7,8 @@ const { getConfig } = require('../../database/db');
 
 const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../../cpbot.db');
 
+const { getValidId } = require('../../utils/envHelper');
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('restoredb')
@@ -36,7 +38,8 @@ module.exports = {
 
     // ── Source: latest backup from channel ─────────────────────
     if (source === 'latest') {
-      const channelId = getConfig('backup_channel_id') || process.env.BACKUP_CHANNEL_ID;
+      const channelId = getConfig('backup_channel_id') || getValidId(process.env.BACKUP_CHANNEL_ID, null);
+
       if (!channelId) {
         return interaction.editReply('❌ No backup channel found in DB or env vars.\n\nFix: Add `BACKUP_CHANNEL_ID = <your backup channel id>` to Railway Variables, then redeploy and try again.');
       }

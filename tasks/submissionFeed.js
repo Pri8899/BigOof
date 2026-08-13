@@ -256,9 +256,11 @@ async function fetchACSubmissions(user) {
   }
 }
 
+const { getValidId } = require('../utils/envHelper');
 
 async function runSubmissionFeed(client) {
-  const channelId = getConfig('feed_channel_id') || getConfig('dashboard_channel_id') || getConfig('rating_channel_id') || process.env.FEED_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID || process.env.RATING_CHANNEL_ID || process.env.GENERAL_CHANNEL_ID;
+  const channelId = getConfig('feed_channel_id') || getConfig('dashboard_channel_id') || getConfig('rating_channel_id') || getValidId(process.env.FEED_CHANNEL_ID, null) || getValidId(process.env.DASHBOARD_CHANNEL_ID, null) || getValidId(process.env.RATING_CHANNEL_ID, null) || getValidId(process.env.GENERAL_CHANNEL_ID, '1505614835650658355');
+
   console.log(`[SubmissionFeed] Resolved channelId: ${channelId || 'NONE'}`);
   if (!channelId) {
     console.warn('[SubmissionFeed] No feed/dashboard/rating channel configured. Please set one using /set-feed-channel or /set-dashboard-channel.');

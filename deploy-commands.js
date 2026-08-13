@@ -28,8 +28,12 @@ console.log('\n📡 Collecting slash commands...');
 collectCommands(path.join(__dirname, 'commands'));
 console.log(`\nTotal: ${commands.length} command(s)\n`);
 
-const CLIENT_ID = process.env.CLIENT_ID || '1505812368284717087';
-const GUILD_ID  = process.env.GUILD_ID  || '1505604240612266176';
+const { getValidId } = require('./utils/envHelper');
+
+const CLIENT_ID = getValidId(process.env.CLIENT_ID, '1505812368284717087');
+const GUILD_ID  = getValidId(process.env.GUILD_ID, '1505604240612266176');
+
+
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 

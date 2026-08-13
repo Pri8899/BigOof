@@ -99,10 +99,13 @@ function startContestFetcher(client) {
 /**
  * Post / edit a pinned grouped contest overview in #contest-radar
  */
+const { getValidId } = require('../utils/envHelper');
+
 async function postContestSummary(client) {
   try {
     console.log('[ContestFetcher] postContestSummary started.');
-    const channelId = getConfig('contest_channel_id') || process.env.CONTEST_CHANNEL_ID || '1505615735479865497';
+    const channelId = getConfig('contest_channel_id') || getValidId(process.env.CONTEST_CHANNEL_ID, '1505615735479865497');
+
     console.log('[ContestFetcher] Channel ID:', channelId);
     if (!channelId) return;
 
