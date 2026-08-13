@@ -38,7 +38,7 @@ async function getMergedSolvedSet() {
 
 // ─── Post Daily Problem Recommendations ──────────────────────
 async function postDailySuggestions(client, targetDate = null) {
-  const channelId = getConfig('suggest_channel_id') || process.env.SUGGEST_CHANNEL_ID;
+  const channelId = getConfig('suggest_channel_id') || process.env.SUGGEST_CHANNEL_ID || '1505815730531340340';
   if (!channelId) {
     console.log('[Suggest] No suggestions channel set. Use /set-suggest-channel');
     return;

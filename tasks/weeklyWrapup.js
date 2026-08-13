@@ -7,7 +7,7 @@ const { buildWeeklyWrapupEmbed } = require('../utils/embeds');
 
 async function runWeeklyWrapup(client, updateSnapshots = false) {
   // Try to use the rating channel as requested, fallback to dashboard
-  const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID;
+  const channelId = getConfig('rating_channel_id') || getConfig('dashboard_channel_id') || process.env.RATING_CHANNEL_ID || process.env.DASHBOARD_CHANNEL_ID || '1505815592777810020';
   if (!channelId) {
     console.log('[WeeklyWrapUp] No channel configured to post wrap up.');
     return false;

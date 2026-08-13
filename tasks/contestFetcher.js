@@ -102,7 +102,7 @@ function startContestFetcher(client) {
 async function postContestSummary(client) {
   try {
     console.log('[ContestFetcher] postContestSummary started.');
-    const channelId = getConfig('contest_channel_id') || process.env.CONTEST_CHANNEL_ID;
+    const channelId = getConfig('contest_channel_id') || process.env.CONTEST_CHANNEL_ID || '1505615735479865497';
     console.log('[ContestFetcher] Channel ID:', channelId);
     if (!channelId) return;
 
