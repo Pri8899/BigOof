@@ -8,7 +8,8 @@ const {
   insertRatingHistory, upsertStreak, getAllStreaks
 } = require('../database/db');
 const { getCFUser, getRatingTitle } = require('../utils/codeforces');
-const { getValidId } = require('../utils/envHelper');
+const { getValidId, getTargetChannel } = require('../utils/envHelper');
+
 const { getACUser }              = require('../utils/atcoder');
 const { getTophUser, calculateTophStreak } = require('../utils/toph');
 const { buildDashboardEmbed } = require('../utils/embeds');
@@ -74,11 +75,10 @@ async function updateDiscordRole(client, discordId, rating) {
 
 // ─── Rating Change Alert ─────────────────────────────────────
 async function postRatingChange(client, discordId, username, platform, oldRating, newRating, rankTitle, lastContest) {
-  const channelId = getConfig('rating_channel_id') || getValidId(process.env.RATING_CHANNEL_ID, '1505815592777810020');
-  if (!channelId || oldRating === newRating) return;
-
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (oldRating === newRating) return;
+  const channel = await getTargetChannel(client, 'rating_channel_id', 'RATING_CHANNEL_ID', ['rating-update', 'rating', 'dashboard'], '1505815592777810020');
   if (!channel) return;
+
 
   const diff  = newRating - oldRating;
   const isUp  = diff > 0;
@@ -276,13 +276,9 @@ async function syncAllRatings(client) {
 // ─── Update Dashboard ────────────────────────────────────────
 async function updateDashboard(client) {
   try {
-    const channelId = getConfig('dashboard_channel_id') || getValidId(process.env.DASHBOARD_CHANNEL_ID, '1505815433255587870');
-    if (!channelId) return;
+    const channel = await getTargetChannel(client, 'dashboard_channel_id', 'DASHBOARD_CHANNEL_ID', ['dashboard', 'leaderboard'], '1505815433255587870');
+    if (!channel) return;
 
-    const channel = await client.channels.fetch(channelId).catch(err => {
-      console.error('[Dashboard] Channel fetch error:', err.message);
-      return null;
-    });
     if (!channel) return;
 
     const users   = getAllUsers();

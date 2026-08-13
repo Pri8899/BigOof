@@ -5,7 +5,8 @@ const axios = require('axios');
 const { EmbedBuilder } = require('discord.js');
 const { getConfig, setDailyProblems, getDailyProblems, setFirstBlood, getAllUsers, setSweepAnnounced, getRatings } = require('../database/db');
 const { getCFProblems }       = require('../utils/codeforces');
-const { getValidId }          = require('../utils/envHelper');
+const { getValidId, getTargetChannel } = require('../utils/envHelper');
+
 
 // CF tiers as requested
 // Removed CF_TIERS global array to calculate tiers dynamically based on user ratings
@@ -39,13 +40,7 @@ async function getMergedSolvedSet() {
 
 // ─── Post Daily Problem Recommendations ──────────────────────
 async function postDailySuggestions(client, targetDate = null) {
-  const channelId = getConfig('suggest_channel_id') || getValidId(process.env.SUGGEST_CHANNEL_ID, '1505815730531340340');
-  if (!channelId) {
-    console.log('[Suggest] No suggestions channel set. Use /set-suggest-channel');
-    return;
-  }
-
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+  const channel = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID', ['suggestions', 'suggest'], '1505815730531340340');
   if (!channel) return;
 
   let activeDate = targetDate;
@@ -239,9 +234,9 @@ async function checkFirstBloods(client) {
 
     const { startTimeUtc, endTimeUtc } = getActiveCycleWindow(activeDate);
 
-    const generalChannelId = getValidId(process.env.GENERAL_CHANNEL_ID, '1505614835650658355');
-    const channel = await client.channels.fetch(generalChannelId).catch(() => null);
+    const channel = await getTargetChannel(client, 'general_channel_id', 'GENERAL_CHANNEL_ID', ['general', 'main'], '1505614835650658355');
     if (!channel) return;
+
 
     const users = getAllUsers().filter(u => u.cf_handle);
     const problemsToCheck = [

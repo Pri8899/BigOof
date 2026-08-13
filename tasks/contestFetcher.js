@@ -99,22 +99,15 @@ function startContestFetcher(client) {
 /**
  * Post / edit a pinned grouped contest overview in #contest-radar
  */
-const { getValidId } = require('../utils/envHelper');
+const { getValidId, getTargetChannel } = require('../utils/envHelper');
 
 async function postContestSummary(client) {
   try {
     console.log('[ContestFetcher] postContestSummary started.');
-    const channelId = getConfig('contest_channel_id') || getValidId(process.env.CONTEST_CHANNEL_ID, '1505615735479865497');
-
-    console.log('[ContestFetcher] Channel ID:', channelId);
-    if (!channelId) return;
-
-    const channel = await client.channels.fetch(channelId).catch(err => {
-      console.error('[ContestFetcher] Channel fetch error:', err.message);
-      return null;
-    });
-    console.log('[ContestFetcher] Channel found:', !!channel);
+    const channel = await getTargetChannel(client, 'contest_channel_id', 'CONTEST_CHANNEL_ID', ['contest-radar', 'contest', 'radar'], '1505615735479865497');
     if (!channel) return;
+
+    console.log('[ContestFetcher] Channel found:', !!channel);
 
     const contests = getUpcomingContests(30 * 24 * 3600); // next 30 days
     console.log(`[ContestFetcher] Found ${contests.length} upcoming/running contests.`);
