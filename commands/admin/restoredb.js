@@ -88,38 +88,32 @@ module.exports = {
       await interaction.editReply(`⏳ Downloading \`${fileName}\`... Restoring...`);
     }
 
-    // ── Download & replace DB ───────────────────────────────────
+    // ── Download & replace DB in-memory ─────────────────────────
     try {
       // Download the file
       const response = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 30000 });
       const data = Buffer.from(response.data);
 
-      // Backup the current DB just in case
-      if (fs.existsSync(DB_PATH)) {
-        fs.copyFileSync(DB_PATH, DB_PATH + '.pre-restore');
+      const { reloadDatabase } = require('../../database/db');
+      reloadDatabase(data);
+
+      // Trigger immediate dashboard & rating sync refresh in background
+      try {
+        const { updateDashboard } = require('../../tasks/ratingSync');
+        await updateDashboard(interaction.client);
+      } catch (err) {
+        console.warn('[restoredb] Dashboard refresh notice:', err.message);
       }
 
-      // Close DB, remove WAL files, write new DB
-      try {
-        const { db } = require('../../database/db');
-        db.close();
-      } catch (e) { /* ignore */ }
-
-      if (fs.existsSync(DB_PATH + '-wal')) fs.unlinkSync(DB_PATH + '-wal');
-      if (fs.existsSync(DB_PATH + '-shm')) fs.unlinkSync(DB_PATH + '-shm');
-
-      fs.writeFileSync(DB_PATH, data);
-
       await interaction.editReply(
-        `✅ Database restored from \`${fileName}\`!\n` +
-        `The bot will now restart to load the restored data. Wait ~10 seconds...`
+        `✅ Database successfully restored from \`${fileName}\`!\n` +
+        `All data, users, and leaderboard rankings have been updated live. **Bot is 100% online!**`
       );
-
-      setTimeout(() => process.exit(0), 2000);
 
     } catch (err) {
       console.error('[restoredb] Error:', err.message);
       await interaction.editReply(`❌ Failed to restore database: ${err.message}`);
     }
+
   }
 };

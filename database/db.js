@@ -15,23 +15,48 @@ if (process.env.RAILWAY_ENVIRONMENT) {
 }
 
 const DB_PATH = process.env.DATABASE_PATH || defaultDbPath;
-let db;
-try {
-  db = new Database(DB_PATH);
-  // Enable WAL mode for better performance
-  db.pragma('journal_mode = WAL');
-} catch (err) {
-  if (err.message.includes('malformed')) {
-    console.warn('[Database] Database is malformed! Deleting corrupt files and creating a fresh one...');
-    if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
-    if (fs.existsSync(DB_PATH + '-wal')) fs.unlinkSync(DB_PATH + '-wal');
-    if (fs.existsSync(DB_PATH + '-shm')) fs.unlinkSync(DB_PATH + '-shm');
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-  } else {
-    throw err;
+let dbInstance;
+
+function initDb() {
+  try {
+    dbInstance = new Database(DB_PATH);
+    dbInstance.pragma('journal_mode = WAL');
+  } catch (err) {
+    if (err.message.includes('malformed')) {
+      console.warn('[Database] Database is malformed! Deleting corrupt files and creating a fresh one...');
+      if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
+      if (fs.existsSync(DB_PATH + '-wal')) fs.unlinkSync(DB_PATH + '-wal');
+      if (fs.existsSync(DB_PATH + '-shm')) fs.unlinkSync(DB_PATH + '-shm');
+      dbInstance = new Database(DB_PATH);
+      dbInstance.pragma('journal_mode = WAL');
+    } else {
+      throw err;
+    }
   }
 }
+
+initDb();
+
+const db = new Proxy({}, {
+  get(target, prop) {
+    const val = dbInstance[prop];
+    return typeof val === 'function' ? val.bind(dbInstance) : val;
+  }
+});
+
+function reloadDatabase(dataBuffer) {
+  try {
+    dbInstance.close();
+  } catch (e) {}
+
+  if (fs.existsSync(DB_PATH + '-wal')) fs.unlinkSync(DB_PATH + '-wal');
+  if (fs.existsSync(DB_PATH + '-shm')) fs.unlinkSync(DB_PATH + '-shm');
+
+  fs.writeFileSync(DB_PATH, dataBuffer);
+  initDb();
+  console.log('[Database] ✅ Successfully reloaded database in memory without restart.');
+}
+
 
 // ─── Create Tables ───────────────────────────────────────────
 db.exec(`
@@ -606,7 +631,7 @@ function removeVSMatch(id) {
 }
 
 module.exports = {
-  db,
+  db, reloadDatabase,
   getUser, upsertUser, linkPlatform, unlinkPlatform, getAllUsers,
   upsertRating, getRatings, getAllRatings,
   contestExists, upsertContest, getUpcomingContests, markContestNotified,
