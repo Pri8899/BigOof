@@ -36,9 +36,9 @@ module.exports = {
 
     // ── Source: latest backup from channel ─────────────────────
     if (source === 'latest') {
-      const channelId = getConfig('backup_channel_id');
+      const channelId = getConfig('backup_channel_id') || process.env.BACKUP_CHANNEL_ID;
       if (!channelId) {
-        return interaction.editReply('❌ No backup channel set. Use `/set-backup-channel` first, then `/backupdb` to create a backup.');
+        return interaction.editReply('❌ No backup channel found in DB or env vars.\n\nFix: Add `BACKUP_CHANNEL_ID = <your backup channel id>` to Railway Variables, then redeploy and try again.');
       }
 
       const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
