@@ -29,7 +29,9 @@ async function getCFUser(handle) {
         const seen = new Set();
         for (const sub of subRes.data.result) {
           if (sub.verdict === 'OK' && sub.problem) {
-            const key = `${sub.problem.contestId}-${sub.problem.index}`;
+            const key = sub.problem.name
+              ? `${sub.problem.name.trim().toLowerCase()}_${sub.problem.rating || 0}`
+              : `${sub.problem.contestId}-${sub.problem.index}`;
             seen.add(key);
           }
         }
