@@ -75,15 +75,26 @@ client.once('ready', async () => {
       db.prepare("DELETE FROM daily_problems WHERE date_str IN ('08/04/2026','08/05/2026','08/06/2026','08/07/2026','08/08/2026')").run();
       // Reset the "already posted today" flag so the startup catch-up fires again with fresh problems
       db.prepare("DELETE FROM guild_config WHERE key = 'last_suggest_post_date'").run();
-      db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(cleanupKey, 'true');
     }
   } catch (err) {
     console.error('[Startup Cleanup Error]', err.message);
   }
 
-
+  // Fix stale 208 solve count in SQLite database on startup and refresh dashboard
+  try {
+    const fixKey = 'fix_cf_solve_count_207_v1';
+    const done = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(fixKey);
+    if (!done) {
+      db.prepare("UPDATE ratings SET solved = 207 WHERE platform = 'cf' AND discord_id IN (SELECT discord_id FROM users WHERE cf_handle = 'ImposterBhO0')").run();
+      db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(fixKey, 'true');
+      console.log('[Startup] Corrected ImposterBhO0 CF solved count to 207 in DB.');
+    }
+  } catch (err) {
+    console.error('[Startup Fix Error]', err.message);
+  }
 
   // Set bot activity
+
   client.user.setActivity('CP Contests 🏆', { type: 3 }); // 3 = Watching
 
   // Start background tasks

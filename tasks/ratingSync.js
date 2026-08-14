@@ -149,8 +149,8 @@ async function syncAllRatings(client) {
           const oldRating = existing['cf']?.rating ?? 0;
           const oldSolved = existing['cf']?.solved ?? 0;
           
-          // Safety: Prevent API glitches / partial responses from dropping rating or solved count
-          if (!stats.solved || stats.solved < oldSolved) stats.solved = oldSolved;
+          // Safety: Prevent API glitches from clearing rating or solved count
+          if (stats.solved === undefined || stats.solved === null) stats.solved = oldSolved;
           if (stats.rating === 0 && oldRating > 0) stats.rating = oldRating;
 
           upsertRating(user.discord_id, 'cf', stats);
