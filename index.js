@@ -81,38 +81,7 @@ client.once('ready', async () => {
     console.error('[Startup Cleanup Error]', err.message);
   }
 
-  // Temporary one-time startup patch to post submission alert for ImposterBhO0 (Rank Subsequence)
-  try {
-    const patchKey = 'temp_patch_sub_386992883_v1';
-    const done = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(patchKey);
-    if (!done) {
-      const { getTargetChannel } = require('./utils/envHelper');
-      const channel = await getTargetChannel(client, 'general_channel_id', 'GENERAL_CHANNEL_ID', ['general', 'main'], '1505614835650658355');
-      if (channel) {
-        const { buildSubmissionEmbed } = require('./utils/embeds');
-        const { getPlatformEmojis }    = require('./utils/emojis');
-        const emojis = await getPlatformEmojis(channel.guild);
-        
-        const user = db.prepare("SELECT * FROM users WHERE cf_handle = 'ImposterBhO0'").get() || { discord_id: '1505604240612266176', cf_handle: 'ImposterBhO0' };
-        const problem = {
-          name: 'Rank Subsequence',
-          index: 'A',
-          url: 'https://codeforces.com/contest/2249/problem/A',
-          rating: 0,
-          tags: ['greedy', 'implementation'],
-          contestId: 2249,
-          contestName: 'Codeforces Round 1112 (Div. 1)'
-        };
 
-        const embed = buildSubmissionEmbed(user, problem, 'cf', emojis);
-        await channel.send({ embeds: [embed] });
-        console.log('[Startup Patch] Sent temporary submission announcement for ImposterBhO0 in #general.');
-      }
-      db.prepare('INSERT INTO guild_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(patchKey, 'true');
-    }
-  } catch (err) {
-    console.error('[Startup Patch Error]', err.message);
-  }
 
   // Set bot activity
   client.user.setActivity('CP Contests 🏆', { type: 3 }); // 3 = Watching
