@@ -142,11 +142,10 @@ async function fetchCFSubmissions(user) {
     const newAc = [];
 
     const nowSec = Math.floor(Date.now() / 1000);
-    const minTime = nowSec - 10800; // 3 hours
+    const minTime = nowSec - 86400; // 24 hours lookback window to catch solves done while unlinked
 
     for (const sub of submissions) {
-      const isNew = lastId !== null ? (sub.id > lastId) : (sub.creationTimeSeconds >= minTime);
-      if (!isNew) continue;
+      if (sub.creationTimeSeconds < minTime) continue;
 
       if (sub.verdict === 'TESTING' || !sub.verdict) {
         // Still being judged — stop here and re-check next poll
@@ -161,6 +160,7 @@ async function fetchCFSubmissions(user) {
         const dedupKey = `cf_prob_${user.discord_id}_${sub.problem.contestId}_${sub.problem.index}`;
         const alreadySeen = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(dedupKey);
         if (alreadySeen) continue; // already announced — skip
+
 
         // We will mark it as processed AFTER announcing it
 
