@@ -32,6 +32,10 @@ const KENKOOOO_HEADERS = {
 };
 
 const CF_BASE = 'https://codeforces.com/api';
+const CF_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*'
+};
 
 let contestListCache = null;
 let lastContestListFetchTime = 0;
@@ -78,7 +82,7 @@ async function getOrFetchContestName(contestId) {
   if (!contestListCache || (now - lastContestListFetchTime > 3600000)) {
     try {
       console.log('[SubmissionFeed] Fetching Codeforces contest list for cache...');
-      const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 8000 });
+      const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 12000, headers: CF_HEADERS });
       if (res.data.status === 'OK') {
         contestListCache = res.data.result;
         lastContestListFetchTime = now;
@@ -131,7 +135,7 @@ async function getOrFetchContestName(contestId) {
 async function fetchCFSubmissions(user) {
   if (!user.cf_handle) return { newAc: [], highestId: null };
   try {
-    const res = await axios.get(`${CF_BASE}/user.status?handle=${user.cf_handle}&from=1&count=50`, { timeout: 8000 });
+    const res = await axios.get(`${CF_BASE}/user.status?handle=${user.cf_handle}&from=1&count=50`, { timeout: 12000, headers: CF_HEADERS });
     if (res.data.status !== 'OK') return { newAc: [], highestId: null };
 
     let lastId = getLastSubmission(user.discord_id, 'cf');
