@@ -130,14 +130,14 @@ function buildProfileEmbed(member, user, ratings, emojis = { cf: '🔵', ac: '�
 
   if (user?.toph_handle) {
     fields.push({
-      name: `🟣 Toph`,
+      name: `${emojis.toph || '🟣'} Toph`,
       value: toph
         ? `Handle: \`${user.toph_handle}\`\nRating: **${toph.rating}**\nRank: ${toph.rank_title}\nSolved: **${toph.solved}**`
         : `Handle: \`${user.toph_handle}\`\n_Stats loading..._`,
       inline: true
     });
   } else {
-    fields.push({ name: `🟣 Toph`, value: '_Not linked_\nUse `/link` to add', inline: true });
+    fields.push({ name: `${emojis.toph || '🟣'} Toph`, value: '_Not linked_\nUse `/link` to add', inline: true });
   }
 
   embed.addFields(fields);

@@ -14,7 +14,8 @@ module.exports = {
         .addChoices(
           { name: 'All Platforms',  value: 'all' },
           { name: '🔵 Codeforces', value: 'codeforces' },
-          { name: '🔴 AtCoder',    value: 'atcoder' }
+          { name: '🔴 AtCoder',    value: 'atcoder' },
+          { name: '🟣 Toph',       value: 'toph' }
         )),
 
   async execute(interaction) {
