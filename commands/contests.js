@@ -12,10 +12,10 @@ module.exports = {
         .setDescription('Filter by platform (default: all)')
         .setRequired(false)
         .addChoices(
-          { name: 'All Platforms',  value: 'all' },
-          { name: '🔵 Codeforces', value: 'codeforces' },
-          { name: '🔴 AtCoder',    value: 'atcoder' },
-          { name: '🟣 Toph',       value: 'toph' }
+          { name: '🌐 All Platforms', value: 'all' },
+          { name: '🏆 Codeforces',    value: 'codeforces' },
+          { name: '🎯 AtCoder',       value: 'atcoder' },
+          { name: '⚡ Toph',          value: 'toph' }
         )),
 
   async execute(interaction) {

@@ -15,9 +15,9 @@ module.exports = {
         .setDescription('Platform to link')
         .setRequired(true)
         .addChoices(
-          { name: '🔵 Codeforces', value: 'cf' },
-          { name: '🔴 AtCoder',    value: 'ac' },
-          { name: '🟣 Toph',       value: 'toph' },
+          { name: '🏆 Codeforces', value: 'cf' },
+          { name: '🎯 AtCoder',    value: 'ac' },
+          { name: '⚡ Toph',       value: 'toph' },
           { name: '🐙 GitHub',     value: 'github' }
         ))
     .addStringOption(opt =>

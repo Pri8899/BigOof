@@ -15,9 +15,9 @@ module.exports = {
         .setDescription('Which platform to graph')
         .setRequired(true)
         .addChoices(
-          { name: '🔵 Codeforces', value: 'cf' },
-          { name: '🔴 AtCoder',    value: 'ac' },
-          { name: '🟣 Toph',       value: 'toph' }
+          { name: '🏆 Codeforces', value: 'cf' },
+          { name: '🎯 AtCoder',    value: 'ac' },
+          { name: '⚡ Toph',       value: 'toph' }
         ))
     .addUserOption(opt =>
       opt.setName('member')
