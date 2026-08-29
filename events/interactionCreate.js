@@ -16,6 +16,39 @@ module.exports = {
     }
 
     if (interaction.isButton()) {
+      if (interaction.customId === 'github_sync_btn') {
+        try {
+          await interaction.deferReply({ flags: 64 });
+          const { runGitHubFeed } = require('../tasks/githubFeed');
+          const { getUser } = require('../database/db');
+          const dbUser = getUser(interaction.user.id);
+
+          if (!dbUser || !dbUser.github_handle) {
+            return interaction.editReply({
+              content: '❌ You have not linked your GitHub account yet. Use `/github link <username>` first!'
+            });
+          }
+
+          const result = await runGitHubFeed(client, interaction.user.id);
+          if (!result.success && result.reason) {
+            return interaction.editReply({ content: `❌ Sync failed: ${result.reason}` });
+          }
+
+          if (result.count > 0) {
+            return interaction.editReply({
+              content: `🚀 **Caught up!** Posted **${result.count}** unannounced activities for **${dbUser.github_handle}** to **#github**!`
+            });
+          } else {
+            return interaction.editReply({
+              content: `🟢 **Up-to-date!** All recent commits and activities for **${dbUser.github_handle}** are already posted in **#github**.`
+            });
+          }
+        } catch (err) {
+          console.error('[GitHub Button Error]', err);
+          return interaction.editReply({ content: `❌ Sync error: ${err.message}` }).catch(() => {});
+        }
+      }
+
       if (interaction.customId.startsWith('vs-')) {
         const { handleVSButton } = require('../utils/vsHandlers');
         try {

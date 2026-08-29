@@ -7,9 +7,11 @@ const { getTargetChannel } = require('../utils/envHelper');
 
 let isPolling = false;
 
-async function runGitHubFeed(client) {
-  if (isPolling) return;
+async function runGitHubFeed(client, specificDiscordId = null) {
+  if (isPolling && !specificDiscordId) return { success: false, count: 0, reason: 'Already polling' };
   isPolling = true;
+
+  let postedCount = 0;
 
   try {
     const channel = await getTargetChannel(
@@ -20,14 +22,15 @@ async function runGitHubFeed(client) {
     );
 
     if (!channel) {
-      isPolling = false;
-      return;
+      return { success: false, count: 0, reason: 'GitHub channel not found. Use `/set-github-channel` to set it.' };
     }
 
-    const users = getAllUsers().filter(u => u.github_handle);
+    let users = getAllUsers().filter(u => u.github_handle);
+    if (specificDiscordId) {
+      users = users.filter(u => u.discord_id === specificDiscordId);
+    }
     if (users.length === 0) {
-      isPolling = false;
-      return;
+      return { success: true, count: 0, reason: 'No linked GitHub accounts found.' };
     }
 
     for (const user of users) {
@@ -65,6 +68,7 @@ async function runGitHubFeed(client) {
 
           try {
             await channel.send({ embeds: [embed] });
+            postedCount++;
             console.log(`[GitHubFeed] 🚀 Posted ${event.type} for ${user.github_handle} (${event.repo?.name || 'GitHub'})`);
 
             // Mark as processed in database
@@ -75,17 +79,20 @@ async function runGitHubFeed(client) {
           }
 
           // Polite pause between multiple event sends
-          await new Promise(r => setTimeout(r, 1500));
+          await new Promise(r => setTimeout(r, 1200));
         }
 
         // Polite delay between users to be gentle on GitHub API
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1500));
       } catch (userErr) {
         console.error(`[GitHubFeed] Error processing ${user.github_handle}:`, userErr.message);
       }
     }
+
+    return { success: true, count: postedCount };
   } catch (err) {
     console.error('[GitHubFeed] Global error:', err.message);
+    return { success: false, count: postedCount, reason: err.message };
   } finally {
     isPolling = false;
   }
