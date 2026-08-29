@@ -1,8 +1,8 @@
-// tasks/githubFeed.js — Live feed for GitHub commits and pushed CP solutions
+// tasks/githubFeed.js — Live feed for GitHub commits, PRs, new repos, and activity
 const cron = require('node-cron');
 const { getAllUsers, db } = require('../database/db');
-const { getUserRecentPushEvents, getCommitDetails } = require('../utils/github');
-const { buildGitHubCommitEmbed } = require('../utils/embeds');
+const { getUserRecentEvents, getCommitDetails } = require('../utils/github');
+const { buildGitHubActivityEmbed } = require('../utils/embeds');
 const { getTargetChannel } = require('../utils/envHelper');
 
 let isPolling = false;
@@ -20,7 +20,6 @@ async function runGitHubFeed(client) {
     );
 
     if (!channel) {
-      // Channel not found or configured yet
       isPolling = false;
       return;
     }
@@ -33,41 +32,49 @@ async function runGitHubFeed(client) {
 
     for (const user of users) {
       try {
-        const pushEvents = await getUserRecentPushEvents(user.github_handle);
-        if (!pushEvents || pushEvents.length === 0) continue;
+        const events = await getUserRecentEvents(user.github_handle);
+        if (!events || events.length === 0) continue;
 
-        // Process only recent push events (within the last 24 hours)
+        // Process only recent events (within the last 24 hours)
         const nowSec = Math.floor(Date.now() / 1000);
         const minTime = nowSec - 86400; // 24 hours
 
-        for (const event of pushEvents) {
+        // Process oldest to newest
+        const sortedEvents = [...events].reverse();
+
+        for (const event of sortedEvents) {
           const eventTime = Math.floor(new Date(event.created_at).getTime() / 1000);
           if (eventTime < minTime) continue;
 
-          const headSha = event.payload.head;
-          if (!headSha) continue;
+          // Unique dedup key for each event
+          const dedupKey = event.type === 'PushEvent' && event.payload?.head
+            ? event.payload.head
+            : `gh_event_${event.id}`;
 
-          // Check if this commit was already announced
-          const alreadyProcessed = db.prepare('SELECT 1 FROM processed_github_commits WHERE sha = ?').get(headSha);
+          // Check if this event was already announced
+          const alreadyProcessed = db.prepare('SELECT 1 FROM processed_github_commits WHERE sha = ?').get(dedupKey);
           if (alreadyProcessed) continue;
 
-          // Fetch detailed commit info
-          const commitDetails = await getCommitDetails(event.repo.name, headSha);
+          // Fetch commit details if it's a push event
+          let extraDetails = null;
+          if (event.type === 'PushEvent' && event.payload?.head && event.repo?.name) {
+            extraDetails = await getCommitDetails(event.repo.name, event.payload.head);
+          }
 
-          const embed = buildGitHubCommitEmbed(user, event, commitDetails);
+          const embed = buildGitHubActivityEmbed(user, event, extraDetails);
 
           try {
             await channel.send({ embeds: [embed] });
-            console.log(`[GitHubFeed] 🚀 Posted commit ${headSha.substring(0, 7)} for ${user.github_handle} (${event.repo.name})`);
+            console.log(`[GitHubFeed] 🚀 Posted ${event.type} for ${user.github_handle} (${event.repo?.name || 'GitHub'})`);
 
             // Mark as processed in database
             db.prepare('INSERT OR IGNORE INTO processed_github_commits (sha, repo, author) VALUES (?, ?, ?)')
-              .run(headSha, event.repo.name, user.github_handle);
+              .run(dedupKey, event.repo?.name || 'GitHub', user.github_handle);
           } catch (sendErr) {
             console.error(`[GitHubFeed] Error sending embed to #${channel.name}:`, sendErr.message);
           }
 
-          // Polite pause between multiple commit sends
+          // Polite pause between multiple event sends
           await new Promise(r => setTimeout(r, 1500));
         }
 

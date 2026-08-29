@@ -55,23 +55,27 @@ async function getGitHubUser(username) {
 }
 
 /**
- * Fetch recent public PushEvents for a user
+ * Fetch recent public GitHub events for a user (pushes, PRs, new repos, branches, releases)
  * @param {string} username
  * @returns {Promise<Array>}
  */
-async function getUserRecentPushEvents(username) {
+async function getUserRecentEvents(username) {
   try {
     const res = await axios.get(`${GITHUB_API}/users/${encodeURIComponent(username)}/events/public`, {
       headers: GITHUB_HEADERS,
       timeout: 10000
     });
     if (res.status !== 200 || !Array.isArray(res.data)) return [];
-    return res.data.filter(event => event.type === 'PushEvent' && event.payload && event.payload.head);
+    const supportedTypes = ['PushEvent', 'CreateEvent', 'PullRequestEvent', 'IssuesEvent', 'ReleaseEvent', 'ForkEvent'];
+    return res.data.filter(event => supportedTypes.includes(event.type));
   } catch (err) {
     console.error(`[GitHub] Error fetching events for ${username}:`, err.message);
     return [];
   }
 }
+
+// Backward compatibility alias
+const getUserRecentPushEvents = getUserRecentEvents;
 
 /**
  * Fetch detailed commit information
@@ -155,6 +159,7 @@ function detectLanguage(filename) {
 module.exports = {
   validateGitHubUser,
   getGitHubUser,
+  getUserRecentEvents,
   getUserRecentPushEvents,
   getCommitDetails,
   detectLanguage

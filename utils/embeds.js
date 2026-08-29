@@ -688,6 +688,106 @@ function buildGitHubProfileEmbed(ghUser) {
   return embed;
 }
 
+/**
+ * Build sleek, minimal GitHub Activity Embed for any event (pushes, new repos, PRs, issues, releases, branches)
+ */
+function buildGitHubActivityEmbed(user, event, extraDetails) {
+  if (event.type === 'PushEvent') {
+    return buildGitHubCommitEmbed(user, event, extraDetails);
+  }
+
+  const repoName = event.repo.name;
+  const repoUrl = `https://github.com/${repoName}`;
+  const actorName = event.actor.login;
+  const avatarUrl = event.actor.avatar_url;
+  const payload = event.payload || {};
+
+  let title = '';
+  let url = repoUrl;
+  let desc = '';
+  let color = 0x24292E;
+
+  if (event.type === 'CreateEvent') {
+    const refType = payload.ref_type;
+    const ref = payload.ref;
+    if (refType === 'repository') {
+      title = `📦 Created repository ${repoName}`;
+      url = repoUrl;
+      desc = payload.description ? `> *${payload.description}*\n\n` : '';
+      desc += `[View Repository on GitHub ↗️](${repoUrl})`;
+      color = 0x2EA44F;
+    } else if (refType === 'branch') {
+      title = `🌿 Created branch \`${ref}\` in ${repoName}`;
+      url = `${repoUrl}/tree/${ref}`;
+      desc = `[View Branch on GitHub ↗️](${url})`;
+    } else if (refType === 'tag') {
+      title = `🏷️ Created tag \`${ref}\` in ${repoName}`;
+      url = `${repoUrl}/releases/tag/${ref}`;
+      desc = `[View Tag on GitHub ↗️](${url})`;
+    }
+  } else if (event.type === 'PullRequestEvent') {
+    const pr = payload.pull_request || {};
+    const action = payload.action;
+    const isMerged = pr.merged;
+    const prNumber = pr.number || payload.number || '';
+    const prTitle = pr.title || 'Pull Request';
+    url = pr.html_url || repoUrl;
+
+    if (action === 'opened') {
+      title = `🔀 Opened PR #${prNumber}: ${prTitle}`;
+      desc = `🌿 \`${pr.head?.ref || 'branch'}\` ➔ \`${pr.base?.ref || 'main'}\`  •  \`+${pr.additions || 0}\` \`-${pr.deletions || 0}\`\n\n[View Pull Request ↗️](${url})`;
+      color = 0x2EA44F;
+    } else if (action === 'closed' && isMerged) {
+      title = `🟣 Merged PR #${prNumber}: ${prTitle}`;
+      desc = `Merged into \`${pr.base?.ref || 'main'}\`\n\n[View Pull Request ↗️](${url})`;
+      color = 0x8957E5;
+    } else {
+      title = `🔀 ${action === 'closed' ? 'Closed' : 'Updated'} PR #${prNumber}: ${prTitle}`;
+      desc = `[View Pull Request ↗️](${url})`;
+    }
+  } else if (event.type === 'IssuesEvent') {
+    const issue = payload.issue || {};
+    const action = payload.action;
+    url = issue.html_url || repoUrl;
+    title = `❗ ${action === 'opened' ? 'Opened' : 'Closed'} Issue #${issue.number || ''}: ${issue.title || ''}`;
+    desc = `[View Issue on GitHub ↗️](${url})`;
+    color = action === 'opened' ? 0x2EA44F : 0x8957E5;
+  } else if (event.type === 'ReleaseEvent') {
+    const rel = payload.release || {};
+    url = rel.html_url || repoUrl;
+    title = `🚀 Published Release ${rel.name || rel.tag_name || ''} in ${repoName}`;
+    desc = rel.body ? `> ${rel.body.slice(0, 150)}\n\n` : '';
+    desc += `[View Release ↗️](${url})`;
+    color = 0x238636;
+  } else if (event.type === 'ForkEvent') {
+    const forkee = payload.forkee || {};
+    url = forkee.html_url || repoUrl;
+    title = `🍴 Forked ${repoName} to ${forkee.full_name || forkee.name || 'fork'}`;
+    desc = `[View Fork on GitHub ↗️](${url})`;
+  } else {
+    title = `Activity in ${repoName}`;
+    desc = `[View on GitHub ↗️](${repoUrl})`;
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setAuthor({
+      name: `${actorName} on GitHub`,
+      iconURL: avatarUrl,
+      url: `https://github.com/${actorName}`
+    })
+    .setTitle(title.length > 250 ? title.slice(0, 247) + '...' : title)
+    .setURL(url)
+    .setDescription(desc)
+    .setFooter({
+      text: 'GitHub',
+      iconURL: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
+    })
+    .setTimestamp(new Date(event.created_at || Date.now()));
+
+  return embed;
+}
+
 module.exports = {
   buildContestEmbed,
   buildProfileEmbed,
@@ -698,6 +798,7 @@ module.exports = {
   buildSubmissionEmbed,
   buildWeeklyWrapupEmbed,
   buildGitHubCommitEmbed,
-  buildGitHubProfileEmbed
+  buildGitHubProfileEmbed,
+  buildGitHubActivityEmbed
 };
 
