@@ -17,8 +17,7 @@ module.exports = {
         .addChoices(
           { name: '🏆 Codeforces', value: 'cf' },
           { name: '🎯 AtCoder',    value: 'ac' },
-          { name: '⚡ Toph',       value: 'toph' },
-          { name: '🐙 GitHub',     value: 'github' }
+          { name: '⚡ Toph',       value: 'toph' }
         ))
     .addStringOption(opt =>
       opt.setName('handle')
@@ -35,19 +34,15 @@ module.exports = {
 
     upsertUser(userId, username);
 
-    const platformNames = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph', github: 'GitHub' };
+    const platformNames = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
     const { getPlatformEmojis } = require('../utils/emojis');
     const emojis = await getPlatformEmojis(interaction.guild);
-    const platformEmoji = platform === 'cf' ? emojis.cf : platform === 'ac' ? emojis.ac : platform === 'github' ? '🐙' : '🟣';
+    const platformEmoji = platform === 'cf' ? emojis.cf : platform === 'ac' ? emojis.ac : '🟣';
 
     let valid = false;
     if (platform === 'cf')     valid = await validateCFHandle(handle);
     if (platform === 'ac')     valid = await validateACHandle(handle);
     if (platform === 'toph')   valid = await validateTophHandle(handle);
-    if (platform === 'github') {
-      const { validateGitHubUser } = require('../utils/github');
-      valid = await validateGitHubUser(handle);
-    }
 
     if (!valid) {
       return interaction.editReply({
@@ -59,16 +54,6 @@ module.exports = {
     }
 
     linkPlatform(userId, platform, handle);
-
-    if (platform === 'github') {
-      return interaction.editReply({
-        embeds: [successEmbed(
-          'GitHub Linked! 🐙',
-          `Your GitHub account **[${handle}](https://github.com/${handle})** has been linked!\n` +
-          `Your commits and problem solutions will be posted automatically to **#github**.`
-        )]
-      });
-    }
 
     interaction.editReply({
       embeds: [successEmbed(
