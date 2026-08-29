@@ -20,12 +20,10 @@ module.exports = {
   async execute(interaction) {
     const platform = interaction.options.getString('platform');
     const userId   = interaction.user.id;
-    const names    = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
-    const emojis   = { cf: '🔵', ac: '🔴', toph: '🟣' };
-
+    const names = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
     const { getPlatformEmojis } = require('../utils/emojis');
     const guildEmojis = await getPlatformEmojis(interaction.guild);
-    const platformEmoji = platform === 'cf' ? guildEmojis.cf : platform === 'ac' ? guildEmojis.ac : '🟣';
+    const platformEmoji = guildEmojis[platform] || (platform === 'cf' ? '🏆' : platform === 'ac' ? '🎯' : '⚡');
 
     const user = getUser(userId);
     if (!user || !user[`${platform}_handle`]) {

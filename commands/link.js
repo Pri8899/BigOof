@@ -37,7 +37,7 @@ module.exports = {
     const platformNames = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
     const { getPlatformEmojis } = require('../utils/emojis');
     const emojis = await getPlatformEmojis(interaction.guild);
-    const platformEmoji = platform === 'cf' ? emojis.cf : platform === 'ac' ? emojis.ac : '🟣';
+    const platformEmoji = emojis[platform] || (platform === 'cf' ? '🏆' : platform === 'ac' ? '🎯' : '⚡');
 
     let valid = false;
     if (platform === 'cf')     valid = await validateCFHandle(handle);
