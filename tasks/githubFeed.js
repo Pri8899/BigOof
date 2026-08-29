@@ -38,9 +38,9 @@ async function runGitHubFeed(client, specificDiscordId = null) {
         const events = await getUserRecentEvents(user.github_handle);
         if (!events || events.length === 0) continue;
 
-        // Process only recent events (within the last 24 hours)
+        // Process recent events (within the last 7 days)
         const nowSec = Math.floor(Date.now() / 1000);
-        const minTime = nowSec - 86400; // 24 hours
+        const minTime = nowSec - (7 * 86400); // 7 days lookback window
 
         // Process oldest to newest
         const sortedEvents = [...events].reverse();
