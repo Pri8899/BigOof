@@ -37,46 +37,44 @@ async function getTophContests() {
     const html = res.data;
     const now = Math.floor(Date.now() / 1000);
     const contests = [];
+    const seenIds = new Set();
 
-    // Extract all data-timestamp values for upcoming contests
-    // Toph embeds them as: data-timestamp=XXXXXXXXXX data-timestamp-future=true
-    const upcomingRegex = /data-timestamp=(\d+)\s+data-timestamp-type=human\s+data-timestamp-future=true/g;
+    // Strategy 1: Featured ccard banners
+    const cardRegex = /<a[^>]*href=["']?\/c\/([^"'\s>]+)["']?[\s\S]*?<div class=ccard__bannertitle>([\s\S]*?)<\/div>[\s\S]*?<div class=ccard__bannermeta>([\s\S]*?)<\/div>[\s\S]*?data-timestamp=(\d+)/g;
     let m;
-
-    // We need to find contest cards that have upcoming timestamps
-    // Strategy: find each ccard block and extract name, url, duration, timestamp
-    const cardRegex = /<a href="?\/c\/([^">\s]+)"?[\s\S]*?<div class=ccard__bannertitle>([\s\S]*?)<\/div>[\s\S]*?<div class=ccard__bannermeta>([\s\S]*?)<\/div>[\s\S]*?data-timestamp=(\d+)\s+data-timestamp-type=human\s+data-timestamp-future=true/g;
-
     while ((m = cardRegex.exec(html)) !== null) {
       const contestSlug = m[1].trim();
       const name = m[2].replace(/<[^>]+>/g, '').trim();
-      const meta = m[3].replace(/<[^>]+>/g, '').trim(); // e.g. "Code Golf · Official · 40 minutes"
+      const meta = m[3].replace(/<[^>]+>/g, '').trim();
       const startTime = parseInt(m[4], 10);
 
       if (!startTime || isNaN(startTime) || startTime <= now) continue;
 
-      // Parse duration from meta string (e.g. "40 minutes", "5 hours", "2 hours 30 minutes")
       let durationSec = 7200; // default 2h
       const minMatch = meta.match(/(\d+)\s*minute/i);
       const hrMatch = meta.match(/(\d+)\s*hour/i);
       if (hrMatch || minMatch) {
         durationSec = 0;
-        if (hrMatch) durationSec += parseInt(hrMatch[1]) * 3600;
-        if (minMatch) durationSec += parseInt(minMatch[1]) * 60;
+        if (hrMatch) durationSec += parseInt(hrMatch[1], 10) * 3600;
+        if (minMatch) durationSec += parseInt(minMatch[1], 10) * 60;
       }
 
-      contests.push({
-        id: `toph_${contestSlug}`,
-        platform: 'Toph',
-        name,
-        startTime,
-        durationSec,
-        url: `https://toph.co/c/${contestSlug}`
-      });
+      const id = `toph_${contestSlug}`;
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        contests.push({
+          id,
+          platform: 'Toph',
+          name,
+          startTime,
+          durationSec,
+          url: `https://toph.co/c/${contestSlug}`
+        });
+      }
     }
 
-    // Also try to catch contests listed in cdeck (smaller list items) with upcoming timestamps
-    const deckRegex = /<a class="?cdeck__name"? href="?\/c\/([^">\s]+)"?>([\s\S]*?)<\/a>[\s\S]*?data-timestamp=(\d+)\s+data-timestamp-type=human\s+data-timestamp-future=true/g;
+    // Strategy 2: cdeck item cards (standard list)
+    const deckRegex = /<a[^>]*href=["']?\/c\/([^"'\s>]+)["']?[^>]*>([\s\S]*?)<\/a>[\s\S]*?data-timestamp=(\d+)/g;
     while ((m = deckRegex.exec(html)) !== null) {
       const contestSlug = m[1].trim();
       const name = m[2].replace(/<[^>]+>/g, '').trim();
@@ -84,8 +82,9 @@ async function getTophContests() {
       const id = `toph_${contestSlug}`;
 
       if (!startTime || isNaN(startTime) || startTime <= now) continue;
-      if (contests.find(c => c.id === id)) continue; // skip duplicate
+      if (seenIds.has(id)) continue;
 
+      seenIds.add(id);
       contests.push({
         id,
         platform: 'Toph',
