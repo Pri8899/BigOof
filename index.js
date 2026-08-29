@@ -110,6 +110,7 @@ client.once('ready', async () => {
   initializeProblemCache().catch(err => console.error('[Startup] Failed to warm up CF problem cache:', err.message));
 
   const { startAutoBackup }    = require('./tasks/autoBackup');
+  const { startGitHubFeed }    = require('./tasks/githubFeed');
 
   startContestFetcher(client);
   startRatingSync(client);
@@ -118,6 +119,7 @@ client.once('ready', async () => {
   startWeeklyWrapup(client);
   startVSPoller(client);
   startAutoBackup(client);
+  startGitHubFeed(client);
 
 });
 

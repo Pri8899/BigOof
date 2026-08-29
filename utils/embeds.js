@@ -599,7 +599,100 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵'
   return embed;
 }
 
+/**
+ * Build professional GitHub Commit / Push Feed Embed
+ */
+function buildGitHubCommitEmbed(user, pushEvent, commitDetails) {
+  const repoName = pushEvent.repo.name;
+  const repoUrl = `https://github.com/${repoName}`;
+  const actorName = pushEvent.actor.login;
+  const avatarUrl = pushEvent.actor.avatar_url;
+  
+  const fullMsg = (commitDetails?.message || 'Pushed new code').trim();
+  const msgLines = fullMsg.split('\n');
+  const commitTitle = msgLines[0];
+  const commitBody = msgLines.slice(1).join('\n').trim();
 
+  const shortSha = commitDetails?.shortSha || (pushEvent.payload.head ? pushEvent.payload.head.substring(0, 7) : 'head');
+  const commitUrl = commitDetails?.commitUrl || (pushEvent.payload.head ? `${repoUrl}/commit/${pushEvent.payload.head}` : repoUrl);
+  const branch = (pushEvent.payload.ref || 'refs/heads/main').replace('refs/heads/', '');
+
+  const stats = commitDetails?.stats || { additions: 0, deletions: 0 };
+  const statsLine = `\`+${stats.additions}\` \`-${stats.deletions}\` lines`;
+
+  const files = commitDetails?.files || [];
+  let filesText = '';
+  if (files.length > 0) {
+    const { detectLanguage } = require('./github');
+    const fileLines = files.slice(0, 5).map(f => {
+      const lang = detectLanguage(f.filename);
+      const shortName = f.filename.length > 50 ? '...' + f.filename.slice(-47) : f.filename;
+      return `${lang.emoji} \`${shortName}\``;
+    });
+    if (files.length > 5) fileLines.push(`*...and ${files.length - 5} more file(s)*`);
+    filesText = fileLines.join('\n');
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(0x2EA44F) // GitHub Green
+    .setAuthor({
+      name: `${actorName} pushed new code to GitHub`,
+      iconURL: avatarUrl,
+      url: `https://github.com/${actorName}`
+    })
+    .setTitle(`📦 ${repoName}`)
+    .setURL(commitUrl)
+    .setDescription(
+      `### 💬 ${commitTitle}\n` +
+      (commitBody ? `> ${commitBody.slice(0, 200)}\n\n` : '\n') +
+      (filesText ? `**📁 Files Changed:** (${statsLine})\n${filesText}\n\n` : '') +
+      `[🔍 View Commit on GitHub ↗️](${commitUrl})`
+    )
+    .addFields(
+      { name: '🌿 Branch', value: `\`${branch}\``, inline: true },
+      { name: '🔖 Commit', value: `[\`${shortSha}\`](${commitUrl})`, inline: true },
+      { name: '👤 Author', value: `[${actorName}](https://github.com/${actorName})`, inline: true }
+    )
+    .setFooter({
+      text: 'GitHub Live Feed',
+      iconURL: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
+    })
+    .setTimestamp(new Date(pushEvent.created_at || Date.now()));
+
+  return embed;
+}
+
+/**
+ * Build GitHub User Profile Embed
+ */
+function buildGitHubProfileEmbed(ghUser) {
+  const embed = new EmbedBuilder()
+    .setColor(0x24292E) // GitHub Dark
+    .setAuthor({
+      name: `${ghUser.name} (@${ghUser.login})`,
+      iconURL: ghUser.avatarUrl,
+      url: ghUser.profileUrl
+    })
+    .setTitle(`🐙 GitHub Developer Profile`)
+    .setURL(ghUser.profileUrl)
+    .setThumbnail(ghUser.avatarUrl)
+    .setDescription(
+      (ghUser.bio ? `> *${ghUser.bio}*\n\n` : '') +
+      `[🔗 View Full GitHub Profile](${ghUser.profileUrl})`
+    )
+    .addFields(
+      { name: '📦 Public Repos', value: `\`${ghUser.publicRepos}\``, inline: true },
+      { name: '👥 Followers',    value: `\`${ghUser.followers}\``,   inline: true },
+      { name: '⭐ Following',    value: `\`${ghUser.following}\``,   inline: true }
+    )
+    .setFooter({
+      text: 'GitHub Integration',
+      iconURL: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
+    })
+    .setTimestamp(new Date(ghUser.createdAt || Date.now()));
+
+  return embed;
+}
 
 module.exports = {
   buildContestEmbed,
@@ -609,5 +702,8 @@ module.exports = {
   successEmbed,
   errorEmbed,
   buildSubmissionEmbed,
-  buildWeeklyWrapupEmbed
+  buildWeeklyWrapupEmbed,
+  buildGitHubCommitEmbed,
+  buildGitHubProfileEmbed
 };
+

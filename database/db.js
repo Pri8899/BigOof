@@ -257,6 +257,28 @@ try {
   // Column already exists
 }
 
+// Run migration to add github_handle column to users if it doesn't exist
+try {
+  db.exec("ALTER TABLE users ADD COLUMN github_handle TEXT;");
+} catch (e) {
+  // Column already exists
+}
+
+// Create processed_github_commits table if not exists
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS processed_github_commits (
+      sha TEXT PRIMARY KEY,
+      repo TEXT NOT NULL,
+      author TEXT,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+  `);
+} catch (e) {
+  // Table already exists
+}
+
+
 // One-time database correction for parth0_paul's handles (revert back to ImposterBhO0)
 try {
   const row = db.prepare("SELECT cf_handle, ac_handle FROM users WHERE discord_id = '1367493270703444078'").get();
