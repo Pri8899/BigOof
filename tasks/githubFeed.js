@@ -38,9 +38,9 @@ async function runGitHubFeed(client, specificDiscordId = null) {
         const events = await getUserRecentEvents(user.github_handle);
         if (!events || events.length === 0) continue;
 
-        // Process recent events (within the last 7 days)
+        // Process all recent events (up to 90 days — full GitHub public event stream)
         const nowSec = Math.floor(Date.now() / 1000);
-        const minTime = nowSec - (7 * 86400); // 7 days lookback window
+        const minTime = nowSec - (90 * 86400); // 90 days lookback window
 
         // Process oldest to newest
         const sortedEvents = [...events].reverse();
@@ -78,12 +78,12 @@ async function runGitHubFeed(client, specificDiscordId = null) {
             console.error(`[GitHubFeed] Error sending embed to #${channel.name}:`, sendErr.message);
           }
 
-          // Polite pause between multiple event sends
-          await new Promise(r => setTimeout(r, 1200));
+          // Small pause between multiple event sends
+          await new Promise(r => setTimeout(r, 600));
         }
 
         // Polite delay between users to be gentle on GitHub API
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 1000));
       } catch (userErr) {
         console.error(`[GitHubFeed] Error processing ${user.github_handle}:`, userErr.message);
       }
