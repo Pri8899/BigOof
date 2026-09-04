@@ -347,6 +347,24 @@ function unlinkPlatform(discordId, platform) {
   db.prepare(`DELETE FROM rating_history WHERE discord_id = ? AND platform = ?`).run(discordId, platform);
 }
 
+function purgeUser(discordId) {
+  const user = getUser(discordId);
+  if (!user) return false;
+
+  db.prepare(`DELETE FROM users WHERE discord_id = ?`).run(discordId);
+  db.prepare(`DELETE FROM ratings WHERE discord_id = ?`).run(discordId);
+  db.prepare(`DELETE FROM last_submissions WHERE discord_id = ?`).run(discordId);
+  db.prepare(`DELETE FROM streaks WHERE discord_id = ?`).run(discordId);
+  db.prepare(`DELETE FROM weekly_snapshots WHERE discord_id = ?`).run(discordId);
+  db.prepare(`DELETE FROM rating_history WHERE discord_id = ?`).run(discordId);
+  db.prepare(`DELETE FROM vs_participants WHERE discord_id = ?`).run(discordId);
+  db.prepare(`DELETE FROM vc_participants WHERE discord_id = ?`).run(discordId);
+  db.prepare(`DELETE FROM vs_matches WHERE creator_id = ? AND status = 'lobby'`).run(discordId);
+  db.prepare(`DELETE FROM virtual_contests WHERE started_by = ? AND ended = 0`).run(discordId);
+
+  return true;
+}
+
 function getAllUsers() {
   return db.prepare('SELECT * FROM users').all();
 }
@@ -654,7 +672,7 @@ function removeVSMatch(id) {
 
 module.exports = {
   db, reloadDatabase,
-  getUser, upsertUser, linkPlatform, unlinkPlatform, getAllUsers,
+  getUser, upsertUser, linkPlatform, unlinkPlatform, purgeUser, getAllUsers,
   upsertRating, getRatings, getAllRatings,
   contestExists, upsertContest, getUpcomingContests, markContestNotified,
   getConfig, setConfig,
