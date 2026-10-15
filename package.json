@@ -1,7 +1,7 @@
 {
-  "name": "dc-bot",
+  "name": "big-oof",
   "version": "1.0.0",
-  "description": "A feature-rich open-source Discord bot for competitive programming communities (Codeforces, AtCoder, Toph, GitHub)",
+  "description": "BigOof — The autonomous competitive programming Discord bot for coding clubs and ICPC teams. Because every O(n^2) solution ends in a Big Oof.",
   "main": "index.js",
   "scripts": {
     "start": "node deploy-commands.js && node index.js",
@@ -20,17 +20,18 @@
     "atcoder",
     "toph",
     "github",
-    "discordjs"
+    "discordjs",
+    "icpc"
   ],
   "author": "Pri8899",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Pri8899/DC-Bot.git"
+    "url": "https://github.com/Pri8899/BigOof.git"
   },
   "bugs": {
-    "url": "https://github.com/Pri8899/DC-Bot/issues"
+    "url": "https://github.com/Pri8899/BigOof/issues"
   },
-  "homepage": "https://github.com/Pri8899/DC-Bot#readme",
+  "homepage": "https://github.com/Pri8899/BigOof#readme",
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {

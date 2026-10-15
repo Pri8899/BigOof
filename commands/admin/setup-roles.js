@@ -41,7 +41,7 @@ module.exports = {
         cpRole = await guild.roles.create({
           name: 'CP',
           color: 0x5865F2,
-          reason: 'Created by CP Bot (Base Member Role)',
+          reason: 'Created by BigOof (Base Member Role)',
           mentionable: true
         });
         createdCount++;
@@ -61,7 +61,7 @@ module.exports = {
           await guild.roles.create({
             name: rDef.name,
             color: rDef.color,
-            reason: 'Created by CP Bot (Rank Tier)'
+            reason: 'Created by BigOof (Rank Tier)'
           });
           createdCount++;
         } catch (_) {}
@@ -76,7 +76,7 @@ module.exports = {
           await guild.roles.create({
             name: sDef.name,
             color: sDef.color,
-            reason: 'Created by CP Bot (Streak Milestone)'
+            reason: 'Created by BigOof (Streak Milestone)'
           });
           createdCount++;
         } catch (_) {}

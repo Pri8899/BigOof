@@ -57,7 +57,7 @@ async function getACProblemTitle(problemId, contestId) {
     const url = `https://atcoder.jp/contests/${contestId}/tasks/${problemId}`;
     const res = await axios.get(url, {
       timeout: 6000,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CP-Bot/1.0)' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BigOof-Bot/1.0)' },
       maxContentLength: 100000 // cap at 100KB — we only need the <title>
     });
     // Extract from <title>: "A - Two Sum — AtCoder Beginner Contest 123"

@@ -5,9 +5,10 @@ const CATEGORIES = {
   general: {
     label: 'Overview',
     emoji: '🧭',
-    title: '🏆 CP-Bot — Command & Feature Directory',
+    title: '🏆 BigOof — Command & Feature Directory',
     description: [
-      'Welcome to **CP-Bot**, the autonomous competitive programming companion for Discord.',
+      'Welcome to **BigOof**, the autonomous competitive programming companion for Discord.',
+      '*Because every O(n²) solution ends in a Big Oof 💀*',
       '',
       '**Quick Start:**',
       '1. Link your platform accounts with `/link`',
@@ -86,7 +87,7 @@ const CATEGORIES = {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('help')
-    .setDescription('Explore all CP-Bot commands and features'),
+    .setDescription('Explore all BigOof commands and features'),
 
   async execute(interaction) {
     const buildCategoryEmbed = (catKey) => {
@@ -95,7 +96,7 @@ module.exports = {
         .setColor(0x5865F2)
         .setTitle(cat.title)
         .setThumbnail(interaction.client.user.displayAvatarURL({ dynamic: true }))
-        .setFooter({ text: 'CP-Bot · Open Source Competitive Programming Companion', iconURL: interaction.client.user.displayAvatarURL({ dynamic: true }) })
+        .setFooter({ text: 'BigOof · The Competitive Programming Discord Companion', iconURL: interaction.client.user.displayAvatarURL({ dynamic: true }) })
         .setTimestamp();
 
       if (cat.description) {

@@ -1,11 +1,11 @@
 services:
-  cp-bot:
+  bigoof:
     build: .
-    container_name: cp-bot
+    container_name: bigoof-bot
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - DATABASE_PATH=/data/cpbot.db
+      - DATABASE_PATH=/data/bigoof.db
     volumes:
       - ./data:/data
