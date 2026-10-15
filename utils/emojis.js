@@ -59,11 +59,9 @@ async function getPlatformEmojis(guild) {
     // ── Toph (circular, transparent bg) ─────────────────────────────
     let tophEmoji = guild.emojis.cache.find(e => e.name === 'toph');
     if (!tophEmoji) {
-      const circle   = path.join(__dirname, '..', 'assets', 'toph_circle.png');
-      const fallback = path.join(__dirname, '..', 'assets', 'toph.png');
-      const p = fs.existsSync(circle) ? circle : fs.existsSync(fallback) ? fallback : null;
-      if (p) {
-        console.log(`[Emojis] Uploading Toph circle logo...`);
+      const p = path.join(__dirname, '..', 'assets', 'toph.png');
+      if (fs.existsSync(p)) {
+        console.log(`[Emojis] Uploading Toph logo...`);
         tophEmoji = await guild.emojis.create({ attachment: fs.readFileSync(p), name: 'toph' }).catch(err => {
           console.warn(`[Emojis] toph emoji failed:`, err.message); return null;
         });
