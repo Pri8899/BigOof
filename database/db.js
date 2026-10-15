@@ -671,6 +671,33 @@ function removeVSMatch(id) {
   db.prepare('DELETE FROM vs_participants WHERE match_id = ?').run(id);
 }
 
+function getHeadToHeadVersus(discordId1, discordId2) {
+  try {
+    const rows = db.prepare(`
+      SELECT p1.score AS score1, p2.score AS score2
+      FROM vs_participants p1
+      JOIN vs_participants p2 ON p1.match_id = p2.match_id
+      JOIN vs_matches m ON m.id = p1.match_id
+      WHERE p1.discord_id = ? AND p2.discord_id = ? AND m.status = 'concluded'
+    `).all(discordId1, discordId2);
+
+    let wins1 = 0;
+    let wins2 = 0;
+    let ties = 0;
+
+    for (const r of rows) {
+      if (r.score1 > r.score2) wins1++;
+      else if (r.score2 > r.score1) wins2++;
+      else ties++;
+    }
+
+    return { total: rows.length, wins1, wins2, ties };
+  } catch (err) {
+    console.error('[DB] getHeadToHeadVersus error:', err.message);
+    return { total: 0, wins1: 0, wins2: 0, ties: 0 };
+  }
+}
+
 module.exports = {
   db, reloadDatabase,
   getUser, upsertUser, linkPlatform, unlinkPlatform, purgeUser, getAllUsers,
@@ -685,5 +712,6 @@ module.exports = {
   getWeeklySnapshot, setWeeklySnapshot, getAllWeeklySnapshots,
   getCachedContestName, cacheContestName,
   createVSMatch, getVSMatch, updateVSMatchStatus, updateVSMatchProblems,
-  joinVSMatch, getVSParticipants, updateVSParticipantScore, getActiveVSMatches, removeVSMatch
+  joinVSMatch, getVSParticipants, updateVSParticipantScore, getActiveVSMatches, removeVSMatch,
+  getHeadToHeadVersus
 };

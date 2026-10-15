@@ -155,20 +155,31 @@ module.exports = {
     const emojis = await getPlatformEmojis(interaction.guild);
 
     const embed = new EmbedBuilder()
-      .setColor(0x9B59B6)
-      .setTitle(`${emojis.cf} CP Problem Suggestions`)
-      .setDescription(filterDescription + '\n\u200b');
+      .setColor(0x7C4DFF)
+      .setAuthor({
+        name: 'Codeforces Practice Recommender',
+        iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
+      })
+      .setTitle(`💡 Curated Problem Set (${problems.length} Problem${problems.length > 1 ? 's' : ''})`)
+      .setDescription(
+        `╭─ 🎯 **Rating Window**: **${minR}–${maxR}**\n` +
+        (tag ? `├─ 🏷️ **Tag Filter**: \`${tag}\`\n` : '') +
+        (division ? `├─ 🏆 **Division**: **${division.toUpperCase().replace('DIV', 'Div. ')}**\n` : '') +
+        `╰─ 👤 **Tailored For**: <@${interaction.user.id}> (${cfRating > 0 ? `Rating **${cfRating}**` : 'Unrated'})\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+      );
 
     problems.forEach((p, i) => {
+      const tagStr = p.tags && p.tags.length > 0 ? p.tags.slice(0, 4).join(' • ') : 'Implementation';
       embed.addFields({
-        name:  `${i + 1}. ${p.name}  ·  ⭐ ${p.rating}`,
-        value: `🔗 [Solve on Codeforces](${p.url})\n🏷️ ${p.tags.join(', ') || 'N/A'}`,
+        name: `${i + 1}. ${p.name} · ⭐ ${p.rating}`,
+        value: `🔗 [Solve on Codeforces ↗️](${p.url})\n\`🏷️ ${tagStr}\``,
         inline: false
       });
     });
 
     embed
-      .setFooter({ text: `Link your CF account with /link to get personalised ratings • /suggest` })
+      .setFooter({ text: 'BigOof Recommender · Solve to advance your skill tier', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
       .setTimestamp();
 
     return interaction.editReply({ embeds: [embed] });

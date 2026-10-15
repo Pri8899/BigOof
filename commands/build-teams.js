@@ -158,21 +158,35 @@ module.exports = {
 
       // 4. Build embed
       const embed = new EmbedBuilder()
-        .setColor(0x9B59B6)
-        .setTitle('🤖 ICPC Synergistic Team Matchmaker')
-        .setDescription(`Mathematically optimized ${numTeams * 3} candidates to balance overall strength while maximizing specialty tag diversity within teams:`)
+        .setColor(0x7C4DFF)
+        .setAuthor({
+          name: 'ICPC Team Matchmaker & Synergy Engine',
+          iconURL: 'https://cdn-icons-png.flaticon.com/512/3214/3214695.png'
+        })
+        .setTitle(`🏆 Balanced ICPC Rosters (${teams.length} Squad${teams.length > 1 ? 's' : ''})`)
+        .setDescription(
+          `> 🧠 **Simulated Annealing Optimization Complete!**\n` +
+          `> Balanced **${numTeams * 3}** members into **${numTeams}** synergistic 3-person squads to equalize collective rating while maximizing algorithm domain diversity.\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+        )
         .setThumbnail('https://cdn-icons-png.flaticon.com/512/3214/3214695.png')
         .setTimestamp();
 
       teams.forEach((t, i) => {
         const avg = Math.floor(t.totalRating / 3);
-        const memStr = t.members.map(m => `**${m.cf_handle}** (${m.rating}) — 🧠 \`${m.specialty}\``).join('\n');
+        const memStr = t.members.map((m, idx) => {
+          const roleIcon = idx === 0 ? '👑' : idx === 1 ? '⚔️' : '🛡️';
+          return `${roleIcon} <@${m.discord_id}> ([\`${m.cf_handle}\`](https://codeforces.com/profile/${m.cf_handle})) · ⭐ **${m.rating}** · 🧠 \`${m.specialty}\``;
+        }).join('\n');
+
         embed.addFields({
-          name: `🛡️ Team ${i + 1}  (Avg Rating: ${avg})`,
+          name: `🛡️ Squad ${i + 1} · Combined: ${t.totalRating} pts (Avg: ${avg})`,
           value: memStr,
           inline: false
         });
       });
+
+      embed.setFooter({ text: 'BigOof ICPC Synergy Engine · Ready for Team Contest rounds' });
 
       await interaction.editReply({ content: null, embeds: [embed] });
 

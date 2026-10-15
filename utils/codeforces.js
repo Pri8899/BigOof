@@ -417,6 +417,33 @@ async function getCFDivisionBreakdown(handle) {
   }
 }
 
+/**
+ * Fetch set of all solved problem keys for a handle
+ */
+async function getCFSolvedSet(handle) {
+  try {
+    const subRes = await axios.get(
+      `${CF_BASE}/user.status?handle=${handle}&from=1&count=10000`,
+      { timeout: 12000, headers: CF_HEADERS }
+    );
+    const solved = new Set();
+    if (subRes.data && subRes.data.status === 'OK') {
+      for (const sub of subRes.data.result) {
+        if (sub.verdict === 'OK' && sub.problem) {
+          const key = sub.problem.contestId && sub.problem.index
+            ? `${sub.problem.contestId}-${sub.problem.index}`
+            : sub.problem.name;
+          solved.add(key);
+        }
+      }
+    }
+    return solved;
+  } catch (err) {
+    console.error(`[CF] Error getting solved set for ${handle}:`, err.message);
+    return new Set();
+  }
+}
+
 module.exports = {
   getCFUser,
   getCFContests,
@@ -424,6 +451,7 @@ module.exports = {
   getCFProblems,
   checkCFSolved,
   initializeProblemCache,
-  getCFDivisionBreakdown
+  getCFDivisionBreakdown,
+  getCFSolvedSet
 };
 

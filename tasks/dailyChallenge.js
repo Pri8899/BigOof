@@ -164,19 +164,38 @@ async function postDailySuggestions(client, targetDate = null) {
   }
 
   // ── Codeforces Section ──
+  // ── Codeforces Section ──
   const cfEmbed = new EmbedBuilder()
-    .setColor(0x2B2D31)
-    .setAuthor({ name: 'Codeforces Daily Challenges', iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png' })
-    .setTitle(`🗓️ Daily Problem Suggestions — ${today}`)
-    .setDescription(`Sharpen your skills with today's progressive challenges! 🚀\nThe **First Person** to solve any of these gets a **First Blood 🩸** broadcast!\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`)
-    .setFooter({ text: 'Bot checks for First Blood automatically every 5 minutes!' })
+    .setColor(0x7C4DFF)
+    .setAuthor({
+      name: 'Codeforces Daily Arena',
+      iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
+    })
+    .setTitle(`🗓️ Daily Coding Quests — ${today}`)
+    .setDescription(
+      `> 🎯 **Sharpen your algorithms with 5 tiered challenges for today!**\n` +
+      `> 🩸 **First Blood**: Be the very first coder in the server to solve any level!\n` +
+      `> 🏆 **Daily Sweep**: Solve all 5 to claim the daily champion crown!\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    )
+    .setFooter({ text: 'BigOof Daily Arena · Verified automatically every 5m', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
     .setTimestamp();
 
-  if (p1) cfEmbed.addFields({ name: `🌱 Level 1 (Rating ${p1.rating})`, value: `**[${p1.name}](${p1.url})**\n\`${p1.tags.join(', ') || 'N/A'}\``, inline: false });
-  if (p2) cfEmbed.addFields({ name: `⚔️ Level 2 (Rating ${p2.rating})`, value: `**[${p2.name}](${p2.url})**\n\`${p2.tags.join(', ') || 'N/A'}\``, inline: false });
-  if (p3) cfEmbed.addFields({ name: `🔥 Level 3 (Rating ${p3.rating})`, value: `**[${p3.name}](${p3.url})**\n\`${p3.tags.join(', ') || 'N/A'}\``, inline: false });
-  if (p4) cfEmbed.addFields({ name: `⚡ Level 4 (Rating ${p4.rating})`, value: `**[${p4.name}](${p4.url})**\n\`${p4.tags.join(', ') || 'N/A'}\``, inline: false });
-  if (p5) cfEmbed.addFields({ name: `👑 Level 5 (Rating ${p5.rating})`, value: `**[${p5.name}](${p5.url})**\n\`${p5.tags.join(', ') || 'N/A'}\``, inline: false });
+  const formatProbField = (label, icon, p) => {
+    if (!p) return null;
+    const tagStr = p.tags && p.tags.length > 0 ? p.tags.slice(0, 3).join(' • ') : 'Implementation';
+    return {
+      name: `${icon} ${label} · ⭐ ${p.rating || 'Standard'}`,
+      value: `**[${p.name}](${p.url})**\n\`🏷️ ${tagStr}\``,
+      inline: false
+    };
+  };
+
+  if (p1) cfEmbed.addFields(formatProbField('Level 1 (Novice)', '🌱', p1));
+  if (p2) cfEmbed.addFields(formatProbField('Level 2 (Pupil)', '⚔️', p2));
+  if (p3) cfEmbed.addFields(formatProbField('Level 3 (Specialist)', '🔥', p3));
+  if (p4) cfEmbed.addFields(formatProbField('Level 4 (Expert)', '⚡', p4));
+  if (p5) cfEmbed.addFields(formatProbField('Level 5 (Master)', '👑', p5));
 
   // Collect target channels across all guilds
   const targetChannels = [];
@@ -313,14 +332,26 @@ async function checkFirstBloods(client) {
                   const memMb = (sub.memoryConsumedBytes / 1048576).toFixed(2);
                   
                   const embed = new EmbedBuilder()
-                    .setColor(0xE74C3C)
-                    .setAuthor({ name: 'FIRST BLOOD ACHIEVED! 🩸', iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png' })
-                    .setDescription(`**<@${user.discord_id}>** is the absolute first person to solve the **${p.label}** daily challenge!\n\n**Problem:** [${sub.problem.name}](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})`)
+                    .setColor(0xFF1744)
+                    .setAuthor({
+                      name: 'FIRST BLOOD CLAIMED! 🩸',
+                      iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
+                    })
+                    .setTitle(`⚡ ${p.label} Solved First by @${user.cf_handle}!`)
+                    .setURL(`https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`)
+                    .setDescription(
+                      `╭─ ⚔️ **First Solver**: <@${user.discord_id}> ([\`${user.cf_handle}\`](https://codeforces.com/profile/${user.cf_handle}))\n` +
+                      `├─ 🎯 **Challenge Level**: **${p.label}**\n` +
+                      `╰─ 🏆 **Problem**: [${sub.problem.name}](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})\n\n` +
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+                    )
                     .addFields(
-                      { name: '⏱️ Time', value: `${timeSec} s`, inline: true },
-                      { name: '💾 Memory', value: `${memMb} MB`, inline: true }
+                      { name: '⏱️ Runtime', value: `\`${timeSec}s\``, inline: true },
+                      { name: '💾 Memory', value: `\`${memMb} MB\``, inline: true },
+                      { name: '🏅 Verdict', value: '`✅ Accepted (AC)`', inline: true }
                     )
                     .setThumbnail(`https://cdn-icons-png.flaticon.com/512/3112/3112946.png`)
+                    .setFooter({ text: 'BigOof First Blood Tracker · Speed & Accuracy Honor', iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' })
                     .setTimestamp();
 
                   // Broadcast First Blood across user's mutual guilds
@@ -372,18 +403,26 @@ async function checkFirstBloods(client) {
             };
 
             const sweepEmbed = new EmbedBuilder()
-              .setColor(0xF1C40F) // Gold
-              .setAuthor({ name: '🏆 ULTIMATE DAILY SWEEP! 🏆', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
-              .setDescription(`**<@${user.discord_id}> is unstoppable!**\nThey have successfully solved **ALL 5** of the daily practice problems today!`)
+              .setColor(0xFFD700) // Championship Gold
+              .setAuthor({
+                name: '🏆 ULTIMATE DAILY SWEEP ACHIEVED! 🏆',
+                iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
+              })
+              .setTitle(`👑 Grand Slam Solver — @${user.cf_handle}!`)
+              .setDescription(
+                `> 🌟 **Unstoppable Performance!**\n` +
+                `> <@${user.discord_id}> has conquered **all 5 progressive daily challenges** for **${activeDateStr}**!\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+              )
               .addFields(
-                { name: `🌱 Level 1`, value: getProbLink(daily.p1_id, 'Problem'), inline: false },
-                { name: `⚔️ Level 2`, value: getProbLink(daily.p2_id, 'Problem'), inline: false },
-                { name: `🔥 Level 3`, value: getProbLink(daily.p3_id, 'Problem'), inline: false },
-                { name: `⚡ Level 4`, value: getProbLink(daily.p4_id, 'Problem'), inline: false },
-                { name: `👑 Level 5`, value: getProbLink(daily.p5_id, 'Problem'), inline: false }
+                { name: `🌱 Level 1 (Novice)`,     value: `✅ ${getProbLink(daily.p1_id, 'Problem')}`, inline: false },
+                { name: `⚔️ Level 2 (Pupil)`,      value: `✅ ${getProbLink(daily.p2_id, 'Problem')}`, inline: false },
+                { name: `🔥 Level 3 (Specialist)`, value: `✅ ${getProbLink(daily.p3_id, 'Problem')}`, inline: false },
+                { name: `⚡ Level 4 (Expert)`,     value: `✅ ${getProbLink(daily.p4_id, 'Problem')}`, inline: false },
+                { name: `👑 Level 5 (Master)`,     value: `✅ ${getProbLink(daily.p5_id, 'Problem')}`, inline: false }
               )
               .setImage('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3ZhcHhqMmxzbHoxMWh6dmd3NXl1OG1lMnNweWhkZWxobDcwcmJ5ZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26n6WvwCRGC16EqyQ/giphy.gif')
-              .setFooter({ text: 'A legendary achievement!' })
+              .setFooter({ text: 'BigOof Hall of Fame · Pure Algorithmic Mastery', iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' })
               .setTimestamp();
 
             // Broadcast sweep across user's mutual guilds

@@ -60,20 +60,28 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
   }
 
   const embed = new EmbedBuilder()
-    .setColor(ended ? 0x95A5A6 : color)
+    .setColor(ended ? 0xFFD700 : color)
+    .setAuthor({
+      name: 'Codeforces Virtual Contest Simulation',
+      iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
+    })
     .setTitle(ended ? '🏆 Virtual Contest — Final Standings' : '⚡ Virtual Contest in Progress')
     .setTimestamp();
 
   if (!ended) {
     embed.setDescription(
-      `**Duration:** <t:${endsAt}:R> (ends <t:${endsAt}:t>)\n` +
-      `**Mode:** ${isTeam ? `👥 Team Contest (${teamsCount} Team${teamsCount > 1 ? 's' : ''})` : '👤 Individual Contest'}\n` +
-      `Click the button below to join the contest!`
+      `╭─ ⏱️ **Clock**: <t:${endsAt}:R> (ends <t:${endsAt}:t>)\n` +
+      `├─ 👥 **Format**: ${isTeam ? `Team Contest (${teamsCount} Squad${teamsCount > 1 ? 's' : ''})` : 'Individual Round'}\n` +
+      `╰─ 🎯 **Challenges**: **${problems.length} problems**\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `*Click the **Join Contest** button below to participate!*`
     );
   } else {
     embed.setDescription(
-      `**Contest Concluded!**\n` +
-      `**Mode:** ${isTeam ? `👥 Team Contest (${teamsCount} Team${teamsCount > 1 ? 's' : ''})` : '👤 Individual Contest'}`
+      `╭─ 🏁 **Contest Concluded!**\n` +
+      `├─ 👥 **Format**: ${isTeam ? `Team Contest (${teamsCount} Squad${teamsCount > 1 ? 's' : ''})` : 'Individual Round'}\n` +
+      `╰─ 🏆 **Results**: Final scores & standings calculated below!\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
     );
   }
 
@@ -81,9 +89,9 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
   const probLines = problems.map((p, i) => {
     const letter = letters[i] ?? `${i + 1}`;
     const url = `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`;
-    return `**${letter}.** [${p.name}](${url}) — Rating: \`${p.rating ?? '?'}\``;
+    return `\`${letter}.\` [${p.name}](${url}) · ⭐ \`${p.rating ?? '?'}\``;
   });
-  embed.addFields({ name: '📋 Problem Set', value: probLines.join('\n') || 'None', inline: false });
+  embed.addFields({ name: `📋 Problem Set (${problems.length})`, value: probLines.join('\n') || 'None', inline: false });
 
   if (participants.length > 0) {
     if (isTeam) {

@@ -29,29 +29,36 @@ module.exports = {
     // Send welcome DM
     const welcomeEmbed = new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle(`👋 Welcome to ${member.guild.name}!`)
-      .setDescription([
-        `Hey **${member.user.username}**! Welcome to the server.`,
-        '',
-        'You\'ve been assigned the **CP** role! 🎉',
-        '',
-        '**🚀 Get Started:**',
-        '> Link your competitive programming accounts so you appear on the server leaderboard!',
-        '',
-        '```',
-        '/link codeforces <your-handle>',
-        '/link atcoder    <your-handle>',
-        '```',
-        '',
-        '**📋 Other Useful Commands:**',
-        '• `/profile` — View your stats',
-        '• `/contests` — See upcoming contests',
-        '• `/leaderboard` — Server rankings',
-        '',
-        'Good luck and happy coding! 💻'
-      ].join('\n'))
+      .setAuthor({
+        name: `${member.guild.name} · Competitive Programming Hub`,
+        iconURL: member.guild.iconURL({ dynamic: true }) || undefined
+      })
+      .setTitle(`👋 Welcome to ${member.guild.name}, ${member.user.username}!`)
+      .setDescription(
+        `╭─ 🚀 **Welcome to the competitive programming circle!**\n` +
+        `├─ 🏷️ **Role**: You have been granted the **CP** role!\n` +
+        `╰─ 💡 **First Step**: Link your handles to appear on the server leaderboard!\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+      )
+      .addFields(
+        {
+          name: '⚡ Link Your Profiles',
+          value: '```sh\n/link codeforces <your-handle>\n/link atcoder    <your-handle>\n/link github     <your-handle>\n```',
+          inline: false
+        },
+        {
+          name: '🎯 Features to Try',
+          value:
+            '• `/profile` — View your ratings, badges, and streaks\n' +
+            '• `/compare` — Head-to-head clash with server rivals\n' +
+            '• `/contests` — Upcoming contest radar\n' +
+            '• `/vs` — Challenge friends to 1v1 lockout duels\n' +
+            '• `/solved` — Division breakdown of solved problems',
+          inline: false
+        }
+      )
       .setThumbnail(member.guild.iconURL({ dynamic: true }))
-      .setFooter({ text: member.guild.name })
+      .setFooter({ text: `BigOof Companion · Happy Coding in ${member.guild.name}!`, iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
       .setTimestamp();
 
     try {

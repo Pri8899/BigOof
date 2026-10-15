@@ -24,23 +24,57 @@ module.exports = {
     const guildId = interaction.guildId;
     const config = getFullGuildConfig(guildId);
 
-    const embed = new EmbedBuilder()
-      .setColor(0x5865F2)
-      .setTitle(`⚙️ Server Channels — ${interaction.guild.name}`)
-      .setDescription('Here are the channels configured for automated feeds and alerts in this server.\nUse `/set-channel` to update any of them.\n\u200b')
-      .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
-      .setTimestamp();
-
-    for (const def of CHANNEL_DEFS) {
+    let activeCount = 0;
+    const formatChannel = (def) => {
       const channelId = config[def.key];
       const channel = channelId ? interaction.guild.channels.cache.get(channelId) : null;
-      const val = channel ? `${channel} (\`#${channel.name}\`)` : (channelId ? `Channel ID: \`${channelId}\` (deleted or inaccessible)` : '`Not configured`');
-      embed.addFields({
-        name: def.label,
-        value: `${val}\n*${def.desc}*`,
-        inline: false
-      });
-    }
+      if (channel) {
+        activeCount++;
+        return `🟢 ${channel} (\`#${channel.name}\`)\n> *${def.desc}*`;
+      } else if (channelId) {
+        return `🔴 \`#${channelId}\` *(inaccessible or deleted)*\n> *${def.desc}*`;
+      }
+      return `⚪ \`Not configured\`\n> *${def.desc}*`;
+    };
+
+    const coreFeeds = [
+      CHANNEL_DEFS[0], // contest radar
+      CHANNEL_DEFS[1], // dashboard
+      CHANNEL_DEFS[2], // rating updates
+      CHANNEL_DEFS[3], // daily challenges
+      CHANNEL_DEFS[4]  // live submissions
+    ];
+
+    const commAndSys = [
+      CHANNEL_DEFS[5], // github
+      CHANNEL_DEFS[6], // announcements
+      CHANNEL_DEFS[7], // general
+      CHANNEL_DEFS[8]  // backups
+    ];
+
+    const coreFields = coreFeeds.map(def => `**${def.label}**\n${formatChannel(def)}`).join('\n\n');
+    const commFields = commAndSys.map(def => `**${def.label}**\n${formatChannel(def)}`).join('\n\n');
+
+    const embed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setAuthor({
+        name: 'Server Channel Configuration',
+        iconURL: interaction.guild.iconURL({ dynamic: true }) || undefined
+      })
+      .setTitle(`⚙️ Channel Router — ${interaction.guild.name}`)
+      .setDescription(
+        `╭─ 🏛️ **Server**: **${interaction.guild.name}**\n` +
+        `├─ 📡 **Active Feeds**: **${activeCount}** of **${CHANNEL_DEFS.length}** configured\n` +
+        `╰─ 💡 **One-Click**: Run \`/set-channel feature:All Features\` to bind all feeds to one channel!\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+      )
+      .addFields(
+        { name: '⚡ Competitive Feeds & Dashboards', value: coreFields, inline: false },
+        { name: '📢 Community, Integrations & Systems', value: commFields, inline: false }
+      )
+      .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
+      .setFooter({ text: 'BigOof Admin Routing Suite · /set-channel to reconfigure' })
+      .setTimestamp();
 
     return interaction.reply({ embeds: [embed], ephemeral: true });
   }

@@ -27,6 +27,7 @@ const CATEGORIES = {
       { name: '`/link <platform> <handle>`', value: 'Link your Codeforces, AtCoder, Toph, or GitHub account.' },
       { name: '`/unlink <platform>`', value: 'Remove a linked account from your Discord profile.' },
       { name: '`/profile [member]`', value: 'View an elegant profile card with ratings, solves, rank badges, and streaks.' },
+      { name: '`/compare [user1] [user2] [handle1] [handle2]`', value: 'Head-to-head clash comparing ratings, solves, common problem overlap, and duel history.' },
       { name: '`/solved [member]`', value: 'Detailed Codeforces division breakdown (Div 1 through Div 4).' },
       { name: '`/graph <platform> [member]`', value: 'Generate a rating history progression line chart.' },
       { name: '`/skills [member]`', value: 'RPG-style skill tree radar chart measuring proficiency in algorithms and data structures.' }
@@ -49,6 +50,7 @@ const CATEGORIES = {
     emoji: '⚔️',
     title: '⚔️ Duels & Virtual Contests',
     fields: [
+      { name: '`/compare [user1] [user2]`', value: 'Head-to-head clash comparing two rivals, problem overlaps, and 1v1 record.' },
       { name: '`/vs <rating> [duration] [tag]`', value: 'Start a 1v1 or multiplayer Codeforces duel with live submission tracking.' },
       { name: '`/vc start <difficulty> [duration]`', value: 'Start a simulated Virtual Contest round (individual or team mode).' },
       { name: '`/vc status`', value: 'Check remaining time, problem set, and standings of the active virtual contest.' },

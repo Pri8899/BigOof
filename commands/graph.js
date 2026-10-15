@@ -94,16 +94,27 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(embedColor)
-      .setTitle(`${platformEmoji} ${PLATFORM_NAMES[platform]} Rating History — ${target.displayName}`)
+      .setAuthor({
+        name: `${PLATFORM_NAMES[platform]} Career Rating Trajectory`,
+        iconURL: target.user.displayAvatarURL({ dynamic: true })
+      })
+      .setTitle(`${platformEmoji} ${PLATFORM_NAMES[platform]} Progression — ${target.displayName}`)
+      .setDescription(
+        `╭─ 👤 **Member**: <@${target.id}> (\`${target.displayName}\`)\n` +
+        `├─ 🌐 **Platform**: ${platformEmoji} **${PLATFORM_NAMES[platform]}**\n` +
+        `├─ 🏆 **Peak Rating**: **${maxR}**\n` +
+        `╰─ 📈 **All-Time Net**: **${sign}** (\`${ratings[0]}\` ➔ \`${lastR}\`)\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+      )
       .setImage(chartUrl)
       .addFields(
-        { name: '📊 Current',  value: `**${lastR}**`,  inline: true },
-        { name: '🔺 Peak',     value: `**${maxR}**`,   inline: true },
-        { name: '🔻 Lowest',   value: `**${minR}**`,   inline: true },
-        { name: '📉 Net Change', value: `**${sign}**`, inline: true },
-        { name: '📋 Data Points', value: `${history.length}`, inline: true }
+        { name: '📊 Current',  value: `\`${lastR}\``,  inline: true },
+        { name: '🔺 Peak',     value: `\`${maxR}\``,   inline: true },
+        { name: '🔻 Floor',    value: `\`${minR}\``,   inline: true },
+        { name: '📈 Net Shift', value: `\`${sign}\``, inline: true },
+        { name: '📋 Contests Recorded', value: `\`${history.length}\``, inline: true }
       )
-      .setFooter({ text: 'History updates every hour' })
+      .setFooter({ text: 'BigOof Rating Analytics · History synched hourly' })
       .setTimestamp();
 
     return interaction.editReply({ embeds: [embed] });

@@ -62,19 +62,41 @@ module.exports = {
       await new Promise(r => setTimeout(r, 600));
     }
 
+    const hasSolvers = solvers.length > 0;
     const embed = new EmbedBuilder()
-      .setColor(0x1F8DD6)
-      .setTitle(`✅ Who Solved ${contestId}${index}?`)
+      .setColor(hasSolvers ? 0x00E676 : 0x5865F2)
+      .setAuthor({
+        name: 'Codeforces Problem Intelligence',
+        iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
+      })
+      .setTitle(`🔍 Solvers for Problem ${contestId}${index}`)
       .setURL(link)
-      .setThumbnail('https://codeforces.org/s/0/images/codeforces-telegram-square.png')
+      .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
       .setTimestamp();
 
-    if (solvers.length === 0) {
-      embed.setDescription('Nobody in the server has solved this problem yet! Will you be the first? 🚀');
+    if (!hasSolvers) {
+      embed.setDescription(
+        `╭─ 📌 **Problem**: [${contestId}${index} on Codeforces ↗️](${link})\n` +
+        `╰─ ⏳ **Status**: Unclaimed in this server\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `> 💡 **No one has solved this problem yet!**\n` +
+        `> Be the first pioneer to submit an **Accepted** solution and earn bragging rights! 🚀`
+      );
     } else {
-      const lines = solvers.map(s => `• <@${s.discord_id}> (\`${s.cf_handle}\`)`);
-      embed.setDescription(`**${solvers.length}** member(s) have solved this problem:\n\n${lines.join('\n')}`);
+      const solverLines = solvers.map((s, idx) => {
+        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🔹';
+        return `${medal} <@${s.discord_id}> · [\`${s.cf_handle}\`](https://codeforces.com/profile/${s.cf_handle})`;
+      });
+
+      embed.setDescription(
+        `╭─ 📌 **Problem**: [${contestId}${index} on Codeforces ↗️](${link})\n` +
+        `╰─ 🏆 **Solvers**: **${solvers.length}** server member${solvers.length > 1 ? 's' : ''}\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        solverLines.join('\n')
+      );
     }
+
+    embed.setFooter({ text: 'BigOof Solver Directory · /whosolved' });
 
     return interaction.editReply({ embeds: [embed] });
   }

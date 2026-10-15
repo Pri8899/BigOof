@@ -208,20 +208,23 @@ module.exports = {
       const emojis = await getPlatformEmojis(interaction.guild);
       // Construct Embed Card
       const embed = new EmbedBuilder()
-        .setColor(0x5E35B1) // Moody Deep Violet
+        .setColor(0x7C4DFF) // Deep Violet
+        .setAuthor({
+          name: 'Competitive Programming RPG Archetype',
+          iconURL: targetUser.displayAvatarURL({ dynamic: true })
+        })
+        .setTitle(`⚔️ CP Character Sheet — ${targetUser.username}`)
         .setDescription(
-          `# \u2003\u2003⚔️ CP CHARACTER SHEET ⚔️\n` +
-          `### \u2003\u2003\u2003\u2003👤 ${dbUser.cf_handle}\n` +
-          `⚡ ────────────────────────────── ⚡\n` +
-          `> 🏆 **Title**: \`${title}\`\n` +
-          `> 📊 **Overall Level**: \`Lvl ${overallLevelInfo.level}\`  (EXP: \`${overallLevelInfo.currentExp}/${overallLevelInfo.nextLevelExp}\`)\n` +
-          `> ${drawProgressBar(overallLevelInfo.currentExp, overallLevelInfo.nextLevelExp, 12)}\n` +
-          `⚡ ────────────────────────────── ⚡`
+          `╭─ 🏆 **Class Title**: \`${title}\`\n` +
+          `├─ 👤 **Codeforces**: [\`${dbUser.cf_handle}\`](https://codeforces.com/profile/${dbUser.cf_handle})\n` +
+          `├─ 📊 **Mastery**: **Level ${overallLevelInfo.level}** (\`${overallLevelInfo.currentExp}/${overallLevelInfo.nextLevelExp}\` EXP)\n` +
+          `╰─ 📈 **XP Bar**: ${drawProgressBar(overallLevelInfo.currentExp, overallLevelInfo.nextLevelExp, 12)}\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
         )
         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
         .addFields(
           {
-            name: '⚔️ Combat & Core Skills',
+            name: '⚔️ Combat & Core Disciplines',
             value: `🗡️ **Greedy/BF**: Lvl ${classLevels.attack.level}\n${drawProgressBar(classLevels.attack.currentExp, classLevels.attack.nextLevelExp, 8)} (\`${classLevels.attack.currentExp}/${classLevels.attack.nextLevelExp}\`)\n\n` +
                    `🛡️ **Implementation**: Lvl ${classLevels.defense.level}\n${drawProgressBar(classLevels.defense.currentExp, classLevels.defense.nextLevelExp, 8)} (\`${classLevels.defense.currentExp}/${classLevels.defense.nextLevelExp}\`)\n\n` +
                    `🏹 **Binary Search**: Lvl ${classLevels.precision.level}\n${drawProgressBar(classLevels.precision.currentExp, classLevels.precision.nextLevelExp, 8)} (\`${classLevels.precision.currentExp}/${classLevels.precision.nextLevelExp}\`)\n\n` +
@@ -229,20 +232,20 @@ module.exports = {
             inline: true
           },
           {
-            name: '🔮 Arcane & Advanced',
-            value: `🧙‍♂️ **Math & Theory**: Lvl ${classLevels.magic.level}\n${drawProgressBar(classLevels.magic.currentExp, classLevels.magic.nextLevelExp, 8)} (\`${classLevels.magic.currentExp}/${classLevels.magic.nextLevelExp}\`)\n\n` +
-                   `🌀 **Dynamic Prog.**: Lvl ${classLevels.chrono.level}\n${drawProgressBar(classLevels.chrono.currentExp, classLevels.chrono.nextLevelExp, 8)} (\`${classLevels.chrono.currentExp}/${classLevels.chrono.nextLevelExp}\`)\n\n` +
-                   `📦 **Data Structures**: Lvl ${classLevels.inventory.level}\n${drawProgressBar(classLevels.inventory.currentExp, classLevels.inventory.nextLevelExp, 8)} (\`${classLevels.inventory.currentExp}/${classLevels.inventory.nextLevelExp}\`)\n\n` +
-                   `🗺️ **Graphs & Trees**: Lvl ${classLevels.exploration.level}\n${drawProgressBar(classLevels.exploration.currentExp, classLevels.exploration.nextLevelExp, 8)} (\`${classLevels.exploration.currentExp}/${classLevels.exploration.nextLevelExp}\`)`,
+            name: '🔮 Arcane & Advanced Data Structures',
+            value: `🧙‍♂️ **Math & Number Theory**: Lvl ${classLevels.magic.level}\n${drawProgressBar(classLevels.magic.currentExp, classLevels.magic.nextLevelExp, 8)} (\`${classLevels.magic.currentExp}/${classLevels.magic.nextLevelExp}\`)\n\n` +
+                   `🌀 **Dynamic Programming**: Lvl ${classLevels.chrono.level}\n${drawProgressBar(classLevels.chrono.currentExp, classLevels.chrono.nextLevelExp, 8)} (\`${classLevels.chrono.currentExp}/${classLevels.chrono.nextLevelExp}\`)\n\n` +
+                   `📦 **Trees & Structures**: Lvl ${classLevels.inventory.level}\n${drawProgressBar(classLevels.inventory.currentExp, classLevels.inventory.nextLevelExp, 8)} (\`${classLevels.inventory.currentExp}/${classLevels.inventory.nextLevelExp}\`)\n\n` +
+                   `🗺️ **Graphs & Shortest Path**: Lvl ${classLevels.exploration.level}\n${drawProgressBar(classLevels.exploration.currentExp, classLevels.exploration.nextLevelExp, 8)} (\`${classLevels.exploration.currentExp}/${classLevels.exploration.nextLevelExp}\`)`,
             inline: true
           },
           {
-            name: '📊 Platform Achievements',
-            value: `> ${emojis.cf} **Codeforces Solves**: \`${totalSolvesCount}\` problems\n> ⭐ **Average Solved Rating**: \`${averageRating || '—'}\``,
+            name: '📊 Competitive Profile & Metric',
+            value: `> ${emojis.cf} **Total Solved**: \`${totalSolvesCount}\` problems\n> ⭐ **Mean Solved Rating**: \`${averageRating || '—'}\``,
             inline: false
           }
         )
-        .setFooter({ text: `Linked Account: ${targetUser.username} • /skills` })
+        .setFooter({ text: 'BigOof Skill Matrix · Analyzed from Codeforces solves', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });

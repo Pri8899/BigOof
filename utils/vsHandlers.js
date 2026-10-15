@@ -247,26 +247,34 @@ async function handleVSAbort(interaction, matchId, client) {
  */
 function buildLobbyEmbed(match, participants) {
   const pList = participants.map((p, idx) => {
-    return `\`${idx + 1}.\` <@${p.discord_id}> (${p.cf_handle})`;
+    return `> \`${idx + 1}.\` <@${p.discord_id}> · [\`${p.cf_handle}\`](https://codeforces.com/profile/${p.cf_handle})`;
   }).join('\n');
 
   const divLabels = { div1: 'Div. 1', div2: 'Div. 2', div3: 'Div. 3', div4: 'Div. 4' };
-  const divValue = match.division ? `\`${divLabels[match.division] ?? match.division}\`` : '`None`';
+  const divValue = match.division ? `\`${divLabels[match.division] ?? match.division}\`` : '`Standard`';
 
   return new EmbedBuilder()
-    .setColor(0x3498DB)
-    .setTitle('⚔️ Versus Match Lobby')
-    .setDescription(`A versus match is being hosted! Click **Join Match** below to play.\n\n**Match ID**: \`${match.id}\``)
-    .addFields(
-      { name: '👤 Host', value: `<@${match.creator_id}>`, inline: true },
-      { name: '🏅 Rating', value: `\`${match.rating}\``, inline: true },
-      { name: '🏷️ Tag', value: match.tag ? `\`${match.tag}\`` : '`None`', inline: true },
-      { name: '🏆 Division', value: divValue, inline: true },
-      { name: '⏱️ Duration', value: `\`${match.duration_min} minutes\``, inline: true },
-      { name: '🔢 Problems', value: `\`${match.problems_count}\``, inline: true },
-      { name: '👥 Joined Participants', value: pList || '_No one has joined yet._', inline: false }
+    .setColor(0x7C4DFF)
+    .setAuthor({
+      name: 'Codeforces Duel Arena',
+      iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
+    })
+    .setTitle(`⚔️ Lockout Match Lobby · ID \`${match.id}\``)
+    .setDescription(
+      `╭─ 👑 **Host**: <@${match.creator_id}>\n` +
+      `├─ 🏅 **Target Rating**: **${match.rating}**\n` +
+      `├─ 🏆 **Division**: ${divValue}\n` +
+      `├─ ⏱️ **Time Limit**: **${match.duration_min} mins**\n` +
+      `├─ 🔢 **Problems**: **${match.problems_count} challenges**\n` +
+      (match.tag ? `├─ 🏷️ **Tag**: \`${match.tag}\`\n` : '') +
+      `╰─ 🆔 **Match Key**: \`${match.id}\`\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `👥 **Contenders Ready (${participants.length})**:\n` +
+      (pList || '> *Waiting for challengers to click Join below...*') +
+      `\n\n💡 *Host can click **Start Match** once at least 2 contenders have joined!*`
     )
-    .setFooter({ text: 'Requires at least 2 participants to start.' })
+    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
+    .setFooter({ text: 'BigOof Lockout Duel · Real-time Codeforces sync' })
     .setTimestamp();
 }
 

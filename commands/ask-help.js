@@ -33,12 +33,21 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setColor(0xE67E22)
-      .setTitle('🚨 Problem Assistance Requested')
-      .setDescription(`**${user.username}** is seeking help with a coding problem:`)
-      .addFields({ name: '📝 Description', value: problem })
+      .setColor(0xFF9800)
+      .setAuthor({
+        name: 'Community Problem Solving Support',
+        iconURL: user.displayAvatarURL({ dynamic: true })
+      })
+      .setTitle(`🆘 Assistance Requested by ${user.username}`)
+      .setDescription(
+        `╭─ 👤 **Author**: <@${user.id}>\n` +
+        `╰─ 📌 **Problem & Context**:\n` +
+        `> ${problem.replace(/\n/g, '\n> ')}\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `💡 *Got an idea, edge case, or complexity hint? Jump in to discuss!*`
+      )
       .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-      .setFooter({ text: 'Community Help' })
+      .setFooter({ text: 'BigOof Peer Support · /ask-help', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
       .setTimestamp();
 
     await interaction.reply({

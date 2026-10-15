@@ -209,14 +209,25 @@ function buildVSMatchEmbed(match, participants) {
   const divStr = match.division ? ` · **Division**: \`${divLabels[match.division] ?? match.division}\`` : '';
 
   return new EmbedBuilder()
-    .setColor(0x1F8DD6)
-    .setTitle(`⚔️ Versus Match Active!`)
-    .setDescription(`**Match ID**: \`${match.id}\`\n**Problem Rating**: \`${match.rating}\`${match.tag ? ` · **Tag**: \`${match.tag}\`` : ''}${divStr}\n**Time Remaining**: <t:${match.ends_at}:R>`)
+    .setColor(0x7C4DFF)
+    .setAuthor({
+      name: 'Codeforces Lockout Battle',
+      iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
+    })
+    .setTitle(`⚡ Lockout Clash Active · ID \`${match.id}\``)
+    .setDescription(
+      `╭─ 🏅 **Target Rating**: **${match.rating}**\n` +
+      `├─ ⏱️ **Time Left**: <t:${match.ends_at}:R> (ends <t:${match.ends_at}:t>)\n` +
+      (match.tag ? `├─ 🏷️ **Tag Filter**: \`${match.tag}\`\n` : '') +
+      (match.division ? `├─ 🏆 **Division**: \`${divLabels[match.division] ?? match.division}\`\n` : '') +
+      `╰─ 🆔 **Match ID**: \`${match.id}\`\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    )
     .addFields(
-      { name: '📅 Problems', value: problemsListText, inline: false },
+      { name: '📋 Contest Problem Set', value: problemsListText, inline: false },
       { name: '📊 Live Standings', value: standingsText, inline: false }
     )
-    .setFooter({ text: 'Solve problems on Codeforces. Standings update automatically.' })
+    .setFooter({ text: 'BigOof Duel Tracker · Live sync every 15 seconds' })
     .setTimestamp();
 }
 
@@ -282,13 +293,22 @@ async function concludeMatch(client, channel, match, participants, reason) {
   }).join('\n');
 
   const embed = new EmbedBuilder()
-    .setColor(0xD4AF37) // Concluded Gold
-    .setTitle(`🏆 Versus Match Concluded!`)
-    .setDescription(`**Match ID**: \`${match.id}\`\n**Conclude Reason**: \`${reason}\``)
-    .addFields(
-      { name: '📊 Final Standings', value: finalStandingsText, inline: false },
-      { name: '🏆 Conclusion', value: winnersText, inline: false }
+    .setColor(0xFFD700) // Championship Gold
+    .setAuthor({
+      name: 'Codeforces Duel Arena · Match Over',
+      iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
+    })
+    .setTitle(`🏆 Lockout Clash Concluded · ID \`${match.id}\``)
+    .setDescription(
+      `╭─ 🏁 **Resolution**: \`${reason}\`\n` +
+      `├─ 🆔 **Match ID**: \`${match.id}\`\n` +
+      `╰─ 🏆 **Final Verdict**: ${winnersText}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
     )
+    .addFields(
+      { name: '📊 Final Standings', value: finalStandingsText, inline: false }
+    )
+    .setFooter({ text: 'BigOof Duel Arena · GG to all participants!' })
     .setTimestamp();
 
   // Send conclusion message

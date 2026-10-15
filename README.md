@@ -176,7 +176,7 @@ flowchart TD
 
 ## 📚 Command Reference
 
-BigOof features **25 unified slash commands** with zero duplicates:
+BigOof features **26 unified slash commands** with zero duplicates:
 
 ### 👤 Profile & Account Management
 
@@ -185,6 +185,7 @@ BigOof features **25 unified slash commands** with zero duplicates:
 | `/link` | `platform`, `handle` | Links your Codeforces, AtCoder, Toph, or GitHub account. |
 | `/unlink` | `platform` | Unlinks an account from your Discord profile. |
 | `/profile` | `user` *(optional)* | View comprehensive CP profile card with ratings, solves, badges, and streaks. |
+| `/compare` | `user1`, `user2`, `handle1`, `handle2` | Head-to-Head statistical showdown comparing rating, peak, solves, mutual problem overlap, and duel history. |
 | `/solved` | `user` *(optional)* | Visual breakdown of Codeforces solves by difficulty division (Div 1 through Div 4). |
 | `/github` | `user` *(optional)* | Displays GitHub statistics, top repositories, recent commits, and contribution metrics. |
 
@@ -219,7 +220,7 @@ BigOof features **25 unified slash commands** with zero duplicates:
 
 | Command | Options | Description |
 |---|---|---|
-| `/set-channel` | `feature`, `channel` | Configures target channel for `feed`, `dashboard`, `contest`, `rating`, `suggest`, `github`, `backup`, or `general`. |
+| `/set-channel` | `feature`, `channel` | Configures target channel for any feed, or select **"🌐 All Features (One-Click Setup)"** to bind every alert into one single channel. |
 | `/view-channels` | None | Displays all configured bot channels for this server. |
 | `/setup-roles` | None | Automatically creates and configures the base `CP` role, all 10 Codeforces rank roles (with official colors), and streak milestone roles. |
 | `/custom-contest` | `action` (add / edit / delete / list), ... | Manages custom server contests included in radar embeds and pings. |

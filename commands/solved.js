@@ -30,46 +30,59 @@ module.exports = {
     try {
       const ratings = getRatings(target.id);
       let cfSolved = 0;
+      let cfRating = 0;
+      let cfRank = 'Unrated';
       for (const r of ratings) {
-        if (r.platform === 'cf') cfSolved = r.solved;
+        if (r.platform === 'cf') {
+          cfSolved = r.solved || 0;
+          cfRating = r.rating || 0;
+          cfRank = r.rank || 'Unrated';
+        }
       }
 
+      const { getCFRankColor } = require('../utils/embeds');
       const emojis = await getPlatformEmojis(interaction.guild);
 
       const embed = new EmbedBuilder()
-        .setColor(0x1F8DD6)
-        .setTitle(`📊 Solved Problems — ${target.displayName}`)
+        .setColor(getCFRankColor(cfRating))
+        .setAuthor({
+          name: `${target.displayName}'s Codeforces Solve Breakdown`,
+          iconURL: target.user.displayAvatarURL({ dynamic: true }),
+          url: `https://codeforces.com/profile/${user.cf_handle}`
+        })
+        .setTitle(`📊 Codeforces Portfolio — @${user.cf_handle}`)
+        .setURL(`https://codeforces.com/profile/${user.cf_handle}`)
         .setThumbnail(target.user.displayAvatarURL({ dynamic: true }))
-        .addFields({
-          name: `${emojis.cf} Codeforces`,
-          value: `Total solved: **${cfSolved}** problems\n\u200b`,
-          inline: false
-        });
+        .setDescription(
+          `╭─ 👤 **Account**: [\`${user.cf_handle}\`](https://codeforces.com/profile/${user.cf_handle})\n` +
+          `├─ 🏅 **Rating**: **${cfRating > 0 ? cfRating : 'Unrated'}** · *${cfRank}*\n` +
+          `╰─ 🎯 **Total Solved**: **${cfSolved.toLocaleString()}** problems\n` +
+          `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+        );
 
       const breakdown = await getCFDivisionBreakdown(user.cf_handle);
       if (breakdown) {
         const buildBar = (count) => {
-          const length = 10;
+          const length = 12;
           const total = breakdown.total || 1;
-          const filled = Math.min(length, Math.round((count / total) * length));
+          const filled = Math.min(length, Math.max(0, Math.round((count / total) * length)));
           const empty = length - filled;
           const pct = Math.round((count / total) * 100);
-          return `\`${'█'.repeat(filled)}${'░'.repeat(empty)}\` **${count}** solved (${pct}%)`;
+          return `\`[${'█'.repeat(filled)}${'░'.repeat(empty)}]\` **${count}** solves · **${pct}%**`;
         };
 
         embed.addFields(
-          { name: `${emojis.cf} Division Breakdown (\`${user.cf_handle}\`)`, value: '\u200b', inline: false },
-          { name: '🏆 Division 1', value: buildBar(breakdown.div1),   inline: false },
-          { name: '🥇 Division 2', value: buildBar(breakdown.div2),   inline: false },
-          { name: '🥈 Division 3', value: buildBar(breakdown.div3),   inline: false },
-          { name: '🥉 Division 4', value: buildBar(breakdown.div4),   inline: false },
-          { name: '📦 Others',     value: buildBar(breakdown.others), inline: false }
+          { name: '🏆 Division 1 (Hard / Expert+)', value: buildBar(breakdown.div1),   inline: false },
+          { name: '🥇 Division 2 (Intermediate)',   value: buildBar(breakdown.div2),   inline: false },
+          { name: '🥈 Division 3 (Core Practice)',  value: buildBar(breakdown.div3),   inline: false },
+          { name: '🥉 Division 4 (Foundations)',    value: buildBar(breakdown.div4),   inline: false },
+          { name: '📦 Others & Gym Contests',       value: buildBar(breakdown.others), inline: false }
         );
       } else {
-        embed.addFields({ name: 'Breakdown', value: '❌ Failed to load submission details.', inline: false });
+        embed.addFields({ name: '⚠️ Breakdown Unavailable', value: 'Could not fetch submission details from Codeforces API.', inline: false });
       }
 
-      embed.setTimestamp().setFooter({ text: 'Stats update every hour' });
+      embed.setTimestamp().setFooter({ text: 'BigOof Solve Analytics · Cached hourly', iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' });
       return interaction.editReply({ embeds: [embed] });
     } catch (err) {
       console.error('[/solved] Error:', err);

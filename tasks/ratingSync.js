@@ -104,14 +104,12 @@ async function postRatingChange(client, discordId, username, platform, oldRating
     const platName  = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' }[platform] ?? platform;
 
     const desc =
-      `\u200b\n` +
-      `> ${platEmoji} **${platName}**  ·  ${trend} **${sign}** rating\n` +
-      `> \`\`\`\n` +
-      `> ${oldRating}  →  ${newRating}\n` +
-      `> \`\`\`\n` +
-      `> 🏅 New Rank: **${rankTitle}**\n` +
-      (lastContest ? `> 🏆 Contest: **${lastContest}**\n` : '') +
-      `\u200b\n` +
+      `╭─ 👤 **Member**: <@${discordId}> (\`${username}\`)\n` +
+      `├─ 🌐 **Platform**: ${platEmoji} **${platName}**\n` +
+      `├─ 🏅 **Rank Tier**: **${rankTitle}**\n` +
+      (lastContest ? `├─ 🏆 **Contest**: ${lastContest}\n` : '') +
+      `╰─ 📊 **Rating Shift**: **${sign}** (\`${oldRating}\` ➔ \`${newRating}\`)\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
       motiveLine;
 
     const platIcon = platform === 'cf'
@@ -123,11 +121,12 @@ async function postRatingChange(client, discordId, username, platform, oldRating
     const embed = new EmbedBuilder()
       .setColor(color)
       .setAuthor({
-        name: `${username}'s rating ${isUp ? 'increased' : 'decreased'}!`,
+        name: `${username} · ${platName} Rating Shift`,
         iconURL: platIcon
       })
+      .setTitle(`${trend} ${isUp ? 'Rating Surge' : 'Rating Adjustment'}: ${sign} pts`)
       .setDescription(desc)
-      .setFooter({ text: `${platName} Rating Update` })
+      .setFooter({ text: `BigOof Rating Engine · ${platName} Live Sync`, iconURL: platIcon })
       .setTimestamp();
 
     await channel.send({ content: `📣 <@${discordId}>`, embeds: [embed] }).catch(() => {});

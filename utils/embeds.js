@@ -1,94 +1,128 @@
-// utils/embeds.js — Discord embed builders
+// utils/embeds.js — Modernized, high-impact Discord embed builders for BigOof
 const { EmbedBuilder } = require('discord.js');
 
-// Platform colors
+// ── Design System & Color Palette ───────────────────────────────
 const COLORS = {
-  Codeforces: 0x1F8DD6,
-  AtCoder:    0x222222,
-  Toph:       0x7B2FBE,
-  Custom:     0xD4AF37,
-  default:    0x5865F2
+  Codeforces: 0x1F8DD6, // Royal Blue
+  AtCoder:    0x00BCD4, // Cyber Cyan
+  Toph:       0x7B2FBE, // Neon Purple
+  Custom:     0xFFD700, // Championship Gold
+  Success:    0x00E676, // Electric Emerald
+  Error:      0xFF5252, // Coral Red
+  Warning:    0xFFAB00, // Amber
+  FirstBlood: 0xFF1744, // Vivid Crimson
+  Duel:       0x7C4DFF, // Deep Violet
+  default:    0x5865F2  // Discord Blurple
 };
 
-// Platform emojis
 const PLATFORM_EMOJI = {
-  cf: '🔵',
-  ac: '🔴',
-  toph: '🟣',
-  custom: '🏆'
+  cf:     '🔵',
+  ac:     '🔴',
+  toph:   '🟣',
+  custom: '🏆',
+  github: '🐙'
 };
 
-// Platform labels + badge
 const PLATFORM_BADGE = {
-  Codeforces: '🔵 Codeforces',
-  AtCoder:    '🔴 AtCoder',
-  Toph:       '🟣 Toph',
-  Custom:     '🏆 Custom'
+  Codeforces: '🏆 Codeforces',
+  AtCoder:    '🎯 AtCoder',
+  Toph:       '⚡ Toph',
+  Custom:     '🌟 Custom Contest'
 };
 
-/**
- * Build a professional contest notification embed
- * Handles both camelCase (from API) and snake_case (from DB)
- */
-function buildContestEmbed(contest, timeUntilLabel) {
-  // ── Normalize field names (DB = snake_case, API = camelCase) ──
-  const startTime  = contest.startTime   ?? contest.start_time;
-  const durSec     = contest.durationSec ?? contest.duration_sec;
-  const platform   = contest.platform;
-  const name       = contest.name;
-  const url        = contest.url;
+// Official Codeforces rank tier colors
+function getCFRankColor(rating) {
+  if (!rating || rating === 0) return 0x808080;
+  if (rating >= 3000) return 0x880000; // Legendary Grandmaster (Dark Red)
+  if (rating >= 2600) return 0xFF0000; // International Grandmaster (Red)
+  if (rating >= 2400) return 0xFF3333; // Grandmaster (Red)
+  if (rating >= 2300) return 0xFF8C00; // International Master (Orange)
+  if (rating >= 2100) return 0xFFAA00; // Master (Orange)
+  if (rating >= 1900) return 0xAA00AA; // Candidate Master (Violet)
+  if (rating >= 1600) return 0x2979FF; // Expert (Blue)
+  if (rating >= 1400) return 0x03A89E; // Specialist (Cyan)
+  if (rating >= 1200) return 0x00C853; // Pupil (Green)
+  return 0x9E9E9E; // Newbie (Gray)
+}
 
-  // ── Duration string ──
-  const durationH  = Math.floor(durSec / 3600);
-  const durationM  = Math.floor((durSec % 3600) / 60);
-  let durationStr  = '';
-  if (durationH > 0) durationStr += `${durationH} hour${durationH > 1 ? 's' : ''}`;
-  if (durationM > 0) durationStr += ` ${durationM} min`;
-  if (!durationStr)  durationStr = 'N/A';
+// Generate sleek ASCII progress ratio bar
+function renderProgressBar(val1, val2, totalBlocks = 12) {
+  if (!val1 && !val2) return '`[════════════]` (Tied)';
+  const total = (val1 || 0) + (val2 || 0);
+  if (total === 0) return '`[════════════]` (Tied)';
+  const ratio1 = Math.min(totalBlocks, Math.max(0, Math.round(((val1 || 0) / total) * totalBlocks)));
+  const ratio2 = totalBlocks - ratio1;
+  return `\`[${'█'.repeat(ratio1)}${'░'.repeat(ratio2)}]\``;
+}
 
-  // ── Color ──
-  const color = COLORS[platform] ?? COLORS.default;
+// Streak badge helper
+function getStreakBadge(n) {
+  if (!n || n < 1) return '`0d`';
+  if (n >= 30) return `💫 **${n} Days**`;
+  if (n >= 15) return `👑 **${n} Days**`;
+  if (n >= 7)  return `🔥 **${n} Days**`;
+  return `⚡ **${n} Days**`;
+}
 
-  // ── Starts-in label color hint ──
-  const urgency = timeUntilLabel.includes('1 hour') ? '🔴' : '🟡';
+// ── Generic Status Embeds ────────────────────────────────────────
 
+function successEmbed(title, description) {
   return new EmbedBuilder()
-    .setColor(color)
-    .setAuthor({ name: PLATFORM_BADGE[platform] ?? platform })
-    .setTitle(`🏆  ${name}`)
-    .setURL(url)
-    .setDescription(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-    .addFields(
-      {
-        name:   '📅  Start Time',
-        value:  startTime ? `<t:${startTime}:F>` : 'N/A',
-        inline: true
-      },
-      {
-        name:   '⏱️  Duration',
-        value:  durationStr,
-        inline: true
-      },
-      {
-        name:   '⏳  Countdown',
-        value:  startTime
-          ? `**<t:${startTime}:R>**\n> 🔴 Live · updates automatically`
-          : 'N/A',
-        inline: true
-      },
-      {
-        name:   '🔗  Register / Participate',
-        value:  `[**Click here to open the contest →**](${url})`,
-        inline: false
-      }
-    )
+    .setColor(COLORS.Success)
+    .setAuthor({ name: 'BigOof · Action Succeeded', iconURL: 'https://cdn-icons-png.flaticon.com/512/190/190411.png' })
+    .setTitle(`✅ ${title}`)
+    .setDescription(description)
+    .setFooter({ text: 'BigOof · Competitive Programming Companion' })
     .setTimestamp();
 }
 
+function errorEmbed(title, description) {
+  return new EmbedBuilder()
+    .setColor(COLORS.Error)
+    .setAuthor({ name: 'BigOof · Notice', iconURL: 'https://cdn-icons-png.flaticon.com/512/753/753345.png' })
+    .setTitle(`❌ ${title}`)
+    .setDescription(description)
+    .setFooter({ text: 'BigOof · Competitive Programming Companion' })
+    .setTimestamp();
+}
 
-/**
- * Build user profile embed
- */
+// ── 1. Contest Notification Embed ────────────────────────────────
+
+function buildContestEmbed(contest, timeUntilLabel) {
+  const startTime = contest.startTime ?? contest.start_time;
+  const durSec    = contest.durationSec ?? contest.duration_sec;
+  const platform  = contest.platform;
+  const name      = contest.name;
+  const url       = contest.url;
+
+  const durationH = Math.floor((durSec || 0) / 3600);
+  const durationM = Math.floor(((durSec || 0) % 3600) / 60);
+  let durationStr = '';
+  if (durationH > 0) durationStr += `${durationH}h`;
+  if (durationM > 0) durationStr += ` ${durationM}m`;
+  if (!durationStr)  durationStr = 'N/A';
+
+  const color = COLORS[platform] ?? COLORS.default;
+
+  return new EmbedBuilder()
+    .setColor(color)
+    .setAuthor({ name: PLATFORM_BADGE[platform] ?? platform, url: url })
+    .setTitle(`🏆 ${name}`)
+    .setURL(url)
+    .setDescription([
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `> ⏳ **Countdown:** ${startTime ? `<t:${startTime}:R>` : 'Starting Soon!'}`,
+      `> 📅 **Starts At:** ${startTime ? `<t:${startTime}:F>` : 'N/A'}`,
+      `> ⏱️ **Duration:** \`${durationStr}\``,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `🔗 [**Click here to open contest & register →**](${url})`
+    ].join('\n'))
+    .setFooter({ text: `BigOof Contest Radar · ${timeUntilLabel}` })
+    .setTimestamp();
+}
+
+// ── 2. Profile Summary Embed ─────────────────────────────────────
+
 function buildProfileEmbed(member, user, ratings, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
   const ratingMap = {};
   for (const r of ratings) ratingMap[r.platform] = r;
@@ -97,66 +131,94 @@ function buildProfileEmbed(member, user, ratings, emojis = { cf: '🔵', ac: '�
   const ac   = ratingMap['ac'];
   const toph = ratingMap['toph'];
 
+  const totalSolved = (cf?.solved || 0) + (ac?.solved || 0) + (toph?.solved || 0);
+  const embedColor = getCFRankColor(cf?.rating || 0);
+
   const embed = new EmbedBuilder()
-    .setColor(COLORS.default)
-    .setTitle(`📊 CP Profile — ${member.displayName}`)
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }));
+    .setColor(embedColor)
+    .setAuthor({
+      name: `${member.displayName}'s Competitive Programming Portfolio`,
+      iconURL: member.user.displayAvatarURL({ dynamic: true })
+    })
+    .setTitle(`📊 Performance Summary`)
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setDescription([
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `🧩 **Total Problems Solved:** **\`${totalSolved.toLocaleString()}\`** across all platforms`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ].join('\n'));
 
-  const fields = [];
-
+  // Codeforces card
   if (user?.cf_handle) {
-    fields.push({
-      name: `${emojis.cf || '🔵'} Codeforces`,
+    embed.addFields({
+      name: `${emojis.cf || '🔵'} Codeforces: [${user.cf_handle}](https://codeforces.com/profile/${user.cf_handle})`,
       value: cf
-        ? `Handle: \`${user.cf_handle}\`\nRating: **${cf.rating}** _(Max: ${cf.max_rating})_\nRank: ${cf.rank_title}\nSolved: **${cf.solved}**`
-        : `Handle: \`${user.cf_handle}\`\n_Stats loading..._`,
-      inline: true
+        ? [
+            `> 🏆 **Rating:** **${cf.rating}** · *(Max: ${cf.max_rating})*`,
+            `> 🎖️ **Rank Tier:** ${cf.rank_title}`,
+            `> 🧩 **Solved:** **\`${cf.solved}\`** problems`
+          ].join('\n')
+        : `> Handle: \`${user.cf_handle}\`\n> _Stats syncing..._`,
+      inline: false
     });
   } else {
-    fields.push({ name: `${emojis.cf || '🔵'} Codeforces`, value: '_Not linked_\nUse `/link` to add', inline: true });
+    embed.addFields({
+      name: `${emojis.cf || '🔵'} Codeforces`,
+      value: `> _Not linked yet_ · Use \`/link platform:Codeforces\` to connect`,
+      inline: false
+    });
   }
 
+  // AtCoder card
   if (user?.ac_handle) {
-    fields.push({
-      name: `${emojis.ac || '🔴'} AtCoder`,
+    embed.addFields({
+      name: `${emojis.ac || '🔴'} AtCoder: [${user.ac_handle}](https://atcoder.jp/users/${user.ac_handle})`,
       value: ac
-        ? `Handle: \`${user.ac_handle}\`\nRating: **${ac.rating}** _(Max: ${ac.max_rating})_\nRank: ${ac.rank_title}\nSolved: **${ac.solved}**`
-        : `Handle: \`${user.ac_handle}\`\n_Stats loading..._`,
+        ? [
+            `> 🎯 **Rating:** **${ac.rating}** · *(Max: ${ac.max_rating})*`,
+            `> 🎖️ **Rank:** ${ac.rank_title}`,
+            `> 🧩 **Solved:** **\`${ac.solved}\`** problems`
+          ].join('\n')
+        : `> Handle: \`${user.ac_handle}\`\n> _Stats syncing..._`,
       inline: true
     });
-  } else {
-    fields.push({ name: `${emojis.ac || '🔴'} AtCoder`, value: '_Not linked_\nUse `/link` to add', inline: true });
   }
 
+  // Toph card
   if (user?.toph_handle) {
-    fields.push({
-      name: `${emojis.toph || '🟣'} Toph`,
+    embed.addFields({
+      name: `${emojis.toph || '🟣'} Toph: [${user.toph_handle}](https://toph.co/u/${user.toph_handle})`,
       value: toph
-        ? `Handle: \`${user.toph_handle}\`\nRating: **${toph.rating}**\nRank: ${toph.rank_title}\nSolved: **${toph.solved}**`
-        : `Handle: \`${user.toph_handle}\`\n_Stats loading..._`,
+        ? [
+            `> ⚡ **Rating:** **${toph.rating}**`,
+            `> 🎖️ **Rank:** ${toph.rank_title}`,
+            `> 🧩 **Solved:** **\`${toph.solved}\`** problems`
+          ].join('\n')
+        : `> Handle: \`${user.toph_handle}\`\n> _Stats syncing..._`,
       inline: true
     });
-  } else {
-    fields.push({ name: `${emojis.toph || '🟣'} Toph`, value: '_Not linked_\nUse `/link` to add', inline: true });
   }
 
-  embed.addFields(fields);
-  embed.setFooter({ text: 'Stats update every hour' });
+  // GitHub integration preview if linked
+  if (user?.github_handle) {
+    embed.addFields({
+      name: `🐙 GitHub: [${user.github_handle}](https://github.com/${user.github_handle})`,
+      value: `> Public commits & PRs automatically tracked in real-time.`,
+      inline: false
+    });
+  }
+
+  embed.setFooter({ text: 'BigOof · Automated stats sync every hour' });
   embed.setTimestamp();
 
   return embed;
 }
 
+// ── 3. Leaderboard & Pinned Dashboard ────────────────────────────
 
-/**
- * Build the leaderboard / dashboard embed
- * @param {Array} rows  - from computeLeaderboard
- * @param {Array} streaks - from getAllStreaks()
- */
 function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
   const medals = ['🥇', '🥈', '🥉'];
 
-  // Streak lookup per user per platform
   const streakMap = {};
   for (const s of streaks) {
     if (!streakMap[s.discord_id]) streakMap[s.discord_id] = {};
@@ -171,182 +233,81 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
     return `⚡ ${n}d`;
   }
 
-  // Rank color labels for CF
   function cfRankLabel(rating) {
     if (!rating || rating === 0) return 'Unrated';
-    if (rating >= 3000) return '**Legendary GM**';
-    if (rating >= 2600) return '**Intl. GM**';
-    if (rating >= 2400) return '**Grandmaster**';
-    if (rating >= 2300) return '**Intl. Master**';
-    if (rating >= 2100) return '**Master**';
-    if (rating >= 1900) return '**Cand. Master**';
-    if (rating >= 1600) return '**Expert**';
-    if (rating >= 1400) return '**Specialist**';
-    if (rating >= 1200) return '**Pupil**';
-    return '**Newbie**';
+    if (rating >= 3000) return 'Legendary GM';
+    if (rating >= 2600) return 'Intl. GM';
+    if (rating >= 2400) return 'Grandmaster';
+    if (rating >= 2300) return 'Intl. Master';
+    if (rating >= 2100) return 'Master';
+    if (rating >= 1900) return 'Cand. Master';
+    if (rating >= 1600) return 'Expert';
+    if (rating >= 1400) return 'Specialist';
+    if (rating >= 1200) return 'Pupil';
+    return 'Newbie';
   }
 
-  // AC rank labels
-  function acRankLabel(rating) {
-    if (!rating || rating === 0) return 'Unrated';
-    if (rating >= 2800) return '**Red**';
-    if (rating >= 2400) return '**Orange**';
-    if (rating >= 2000) return '**Yellow**';
-    if (rating >= 1600) return '**Blue**';
-    if (rating >= 1200) return '**Cyan**';
-    if (rating >= 800)  return '**Green**';
-    if (rating >= 400)  return '**Brown**';
-    return '**Gray**';
+  function rcgDot(rating) {
+    if (!rating || rating === 0) return '⚪';
+    if (rating >= 3000) return '🔴';
+    if (rating >= 2400) return '🟠';
+    if (rating >= 2100) return '🟡';
+    if (rating >= 1900) return '🟣';
+    if (rating >= 1600) return '🔵';
+    if (rating >= 1400) return '🟦';
+    if (rating >= 1200) return '🟢';
+    return '⚪';
   }
 
-  // Blank line separator for readability
-  const SEP = '\u200b';
-  // indent spacer
-  const IND = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0';
-
-  let description = '';
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle(`🏆 Server Competitive Programming Leaderboard`)
+    .setDescription([
+      `Live community standings ranked by Codeforces ratings, solves, and active daily streaks.`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ].join('\n'));
 
   if (rows.length === 0) {
-    description = '_No members have linked their accounts yet.\nUse `/link` to get started!_';
+    embed.addFields({
+      name: 'No Active Members',
+      value: '_No members have linked their accounts yet._\nUse `/link platform:Codeforces handle:your_handle` to get on the board!'
+    });
   } else {
-    const sections = rows.map((row, i) => {
-      const medal = medals[i] ?? `\`#${i + 1}\``;
+    const listLines = rows.slice(0, 15).map((row, i) => {
+      const medal = medals[i] ?? `\`#${(i + 1).toString().padStart(2, '0')}\``;
+      const dot = rcgDot(row.cf_rating || 0);
+      const name = (row.cf_handle || row.username || 'Coder').replace(/([_*~|`\\])/g, '\\$1');
+      const rank = cfRankLabel(row.cf_rating || 0);
+      const rating = row.cf_rating > 0 ? `**${row.cf_rating}**` : '—';
+      const solves = row.cf_solved ? `\`${row.cf_solved} solves\`` : '`0 solves`';
 
-      // Display name: prefer CF handle (has rank system), else Toph, else AC, else username
-      const displayName = (row.cf_handle || row.toph_handle || row.ac_handle || row.username || 'Unknown')
-        .replace(/([_*~|`\\])/g, '\\$1');
+      const cfStreak = streakMap[row.discord_id]?.cf ?? row.cf_streak ?? 0;
+      const streak = streakBadge(cfStreak);
 
-      const cfStreak   = streakMap[row.discord_id]?.cf   ?? row.cf_streak   ?? 0;
-      const acStreak   = streakMap[row.discord_id]?.ac   ?? row.ac_streak   ?? 0;
-      const tophStreak = streakMap[row.discord_id]?.toph ?? row.toph_streak ?? 0;
-
-      // RCG: colour dot before username based on CF rating
-      function rcgDot(rating) {
-        if (!rating || rating === 0) return '⚪'; // gray
-        if (rating >= 3000) return '🔴'; // legendary GM
-        if (rating >= 2400) return '🟠'; // grandmaster
-        if (rating >= 2100) return '🟡'; // master
-        if (rating >= 1900) return '🟣'; // cand master
-        if (rating >= 1600) return '🔵'; // expert
-        if (rating >= 1400) return '🟦'; // specialist
-        if (rating >= 1200) return '🟢'; // pupil
-        return '⚪'; // newbie
-      }
-      const colorDot = rcgDot(row.cf_rating || 0);
-
-      let lines = [];
-      lines.push(`${medal} **${displayName}**`);
-
-      if (row.cf_linked) {
-        const streak = streakBadge(cfStreak);
-        const rank   = cfRankLabel(row.cf_rating);
-        const rating = row.cf_rating > 0 ? `**${row.cf_rating}**` : `—`;
-        lines.push(`> ${emojis.cf || '🔵'}${streak ? ` ${streak}` : ''} ─ CF ${rank}`);
-        lines.push(`> ${IND}· Rating: ${rating}`);
-        lines.push(`> ${IND}· Solved: **${row.cf_solved}**`);
-      }
-
-      if (row.ac_linked) {
-        const streak = streakBadge(acStreak);
-        const rank   = acRankLabel(row.ac_rating);
-        const rating = row.ac_rating > 0 ? `**${row.ac_rating}**` : `—`;
-        lines.push(`> ${emojis.ac || '🔴'}${streak ? ` ${streak}` : ''} ─ AC ${rank}`);
-        lines.push(`> ${IND}· Rating: ${rating}`);
-        lines.push(`> ${IND}· Solved: **${row.ac_solved}**`);
-      }
-
-      if (row.toph_linked) {
-        const streak = streakBadge(tophStreak);
-        const rankRaw = row.toph_rank && row.toph_rank !== 'Unrated' ? `**${row.toph_rank}**` : 'Unrated';
-        const rating = row.toph_rating > 0 ? `**${row.toph_rating}**` : `—`;
-        lines.push(`> ${emojis.toph || '🟣'}${streak ? ` ${streak}` : ''} ─ Toph ${rankRaw}`);
-        lines.push(`> ${IND}· Rating: ${rating}`);
-        lines.push(`> ${IND}· Solved: **${row.toph_solved}**`);
-      }
-
-      return lines.join('\n');
+      return `${medal} ${dot} **${name}** · ${rating} (${rank}) · ${solves} ${streak}`;
     });
 
-    description = sections.join('\n\n');
+    embed.addFields({
+      name: `🏅 Top ${Math.min(rows.length, 15)} Coders`,
+      value: listLines.join('\n')
+    });
   }
 
-  // Only show platforms that at least one user has linked
-  const platformParts = [];
-  if (rows.some(r => r.cf_linked))   platformParts.push(`${emojis.cf || '🔵'} Codeforces`);
-  if (rows.some(r => r.ac_linked))   platformParts.push(`${emojis.ac || '🔴'} AtCoder`);
-  if (rows.some(r => r.toph_linked)) platformParts.push(`${emojis.toph || '🟣'} Toph`);
+  embed.setFooter({ text: 'BigOof Live Dashboard · Auto-updates daily at 9:00 AM' });
+  embed.setTimestamp();
 
-  return new EmbedBuilder()
-    .setColor(0x2ECC71)
-    .setDescription(
-      `# 　　　Leaderboard\n` +
-      `\u200b\n` +
-      description
-    )
-    .addFields(
-      { name: '📊 Platforms',     value: platformParts.join('  ·  ') || 'None linked', inline: false },
-      { name: '🔢 Total Members', value: `**${rows.length}** ranked`,                  inline: true  },
-      { name: '🔥 Streak Guide',  value: '⚡ 1d+  🔥 7d+  👑 15d+  💫 30d+',           inline: true  }
-    )
-    .setFooter({ text: `Last updated` })
-    .setTimestamp();
+  return embed;
 }
 
+// ── 4. Full Contest Schedule Radar ───────────────────────────────
 
-
-
-
-/**
- * Build a success embed
- */
-function successEmbed(title, description) {
-  return new EmbedBuilder()
-    .setColor(0x2ECC71)
-    .setTitle(`✅ ${title}`)
-    .setDescription(description)
-    .setTimestamp();
-}
-
-/**
- * Build an error embed
- */
-function errorEmbed(title, description) {
-  return new EmbedBuilder()
-    .setColor(0xE74C3C)
-    .setTitle(`❌ ${title}`)
-    .setDescription(description)
-    .setTimestamp();
-}
-
-/**
- * Build upcoming contests list embed — grouped by platform
- * Order: Codeforces → AtCoder
- */
 function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
-  const hasCustom = contests.some(c => c.platform === 'Custom');
-  const PLATFORM_ORDER = [];
-  if (hasCustom || platform.toLowerCase().startsWith('custom')) {
-    PLATFORM_ORDER.push('Custom');
-  }
-  if (platform === 'all' || platform.toLowerCase().startsWith('codeforces')) {
-    PLATFORM_ORDER.push('Codeforces');
-  }
-  if (platform === 'all' || platform.toLowerCase().startsWith('atcoder')) {
-    PLATFORM_ORDER.push('AtCoder');
-  }
-  if (platform === 'all' || platform.toLowerCase().startsWith('toph')) {
-    PLATFORM_ORDER.push('Toph');
-  }
-  
-  const cfStatus   = apiStatus.cf   ?? true;
-  const acStatus   = apiStatus.ac   ?? true;
-  const tophStatus = apiStatus.toph ?? true;
-
+  const PLATFORM_ORDER = ['Codeforces', 'AtCoder', 'Toph', 'Custom'];
   const PLATFORM_HEADER = {
-    Custom:     `🏆 ───────── CUSTOM ─────────`,
-    Codeforces: `${emojis.cf || '🔵'} ─────── CODEFORCES ───────`,
-    AtCoder:    `${emojis.ac || '🔴'} ──────── ATCODER ─────────`,
-    Toph:       `${emojis.toph || '🟣'} ──────────── TOPH ────────`
+    Codeforces: `${emojis.cf || '🔵'} **Codeforces Rounds**`,
+    AtCoder:    `${emojis.ac || '🔴'} **AtCoder Contests**`,
+    Toph:       `${emojis.toph || '🟣'} **Toph Events**`,
+    Custom:     `🌟 **Community Custom Contests**`
   };
 
   const filtered = platform === 'all'
@@ -354,440 +315,306 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
     : contests.filter(c => c.platform.toLowerCase().startsWith(platform.toLowerCase()));
 
   const embed = new EmbedBuilder()
-    .setColor(COLORS.default);
-
-  const titleText = platform === 'all'
-    ? '🗓️  Upcoming Contests — Full Overview'
-    : `🗓️  Upcoming Contests — ${platform.charAt(0).toUpperCase() + platform.slice(1)}`;
-  
-  const header = `#    ${titleText}`;
+    .setColor(0x1F8DD6)
+    .setTitle(`📅 Upcoming Competitive Programming Contests`)
+    .setDescription([
+      `Autonomous contest radar with real-time countdowns and 24h / 1h reminder alerts.`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ].join('\n'));
 
   if (filtered.length === 0) {
-    embed.setDescription(`${header}\n\n_No upcoming contests found across any platform._`);
+    embed.addFields({
+      name: 'No Contests Scheduled',
+      value: '_No upcoming contests found matching your filter._'
+    });
     return embed;
   }
 
-  // Group by platform
   const grouped = {};
   for (const p of PLATFORM_ORDER) grouped[p] = [];
   for (const c of filtered) {
     if (grouped[c.platform]) grouped[c.platform].push(c);
   }
 
-  let displayedCount = 0;
-  const sections = [];
+  let totalCount = 0;
   for (const p of PLATFORM_ORDER) {
     const list = grouped[p];
-    const header = PLATFORM_HEADER[p] ?? `⚡ ${p.toUpperCase()}`;
-    if (list.length === 0) {
-      if (p !== 'Custom') {
-        sections.push(`${header}\n*No upcoming contests*`);
-      }
-    } else {
-      const sliced = list.slice(0, 10);
-      displayedCount += sliced.length;
-      const lines = sliced.map((c, i) => {
-        const start    = c.startTime ?? c.start_time;
-        const durSec   = c.durationSec ?? c.duration_sec;
-        
-        let dateLabel = 'N/A';
-        let countdownLabel = '';
-        if (start) {
-          if (c.time_na === 1) {
-            dateLabel = `<t:${start}:D> (Time: N/A)`;
-          } else {
-            dateLabel = `<t:${start}:F>`;
-          }
-          countdownLabel = `  •  <t:${start}:R>`;
-        }
-        
-        let durLabel = 'N/A';
-        if (durSec) {
-          const dh       = Math.floor(durSec / 3600);
-          const dm       = Math.floor((durSec % 3600) / 60);
-          durLabel = dm > 0 ? `${dh}h ${dm}m` : `${dh}h`;
-        }
-        
-        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n      🗓️ ${dateLabel}\n      ⏱️ ${durLabel}${countdownLabel}`;
+    if (list.length > 0) {
+      const topList = list.slice(0, 5);
+      totalCount += topList.length;
+
+      const lines = topList.map((c, i) => {
+        const start = c.startTime ?? c.start_time;
+        const durSec = c.durationSec ?? c.duration_sec;
+        const dh = Math.floor((durSec || 0) / 3600);
+        const dm = Math.floor(((durSec || 0) % 3600) / 60);
+        const durStr = dm > 0 ? `${dh}h ${dm}m` : `${dh}h`;
+
+        const timeStr = start ? `<t:${start}:R> (<t:${start}:d>)` : 'N/A';
+        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n> ⏱️ \`${durStr}\` · ⏳ ${timeStr}`;
       });
-      sections.push(`${header}\n${lines.join('\n\n')}`);
+
+      embed.addFields({
+        name: PLATFORM_HEADER[p] || p,
+        value: lines.join('\n')
+      });
     }
   }
 
-  const TZ = process.env.TIMEZONE || 'UTC';
-  const localTime = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
-  let hr = localTime.getHours();
-  if (localTime.getMinutes() > 50) hr += 1;
-  hr = hr % 24;
-  const ampm = hr >= 12 ? 'pm' : 'am';
-  const displayHr = hr % 12 === 0 ? 12 : hr % 12;
-  const timeStr = `${displayHr}:00 ${ampm} (${TZ})`;
+  const statusIcons = [
+    apiStatus.cf !== false ? '🟢 CF' : '🔴 CF',
+    apiStatus.ac !== false ? '🟢 AC' : '🔴 AC',
+    apiStatus.toph !== false ? '🟢 Toph' : '🔴 Toph'
+  ].join(' · ');
 
-  embed
-    .setDescription(`${header}\n\n` + sections.join('\n\n'))
-    .setFooter({ text: `${displayedCount} total upcoming contests  •  Refreshes every 12 hours  •  ${timeStr}` });
+  embed.setFooter({ text: `BigOof Contest Radar · ${totalCount} contests listed · API: ${statusIcons}` });
+  embed.setTimestamp();
 
   return embed;
 }
 
+// ── 5. Live Submission Celebrations ──────────────────────────────
 
-/**
- * Build submission embed for Live Feed
- */
 function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
+  const isCF = platform === 'cf';
+  const isAC = platform === 'ac';
 
-  const isCF   = platform === 'cf';
-  const isAC   = platform === 'ac';
-  const isToph = platform === 'toph';
-
-  // ── Determine category / contest type ──────────────────────────
-  let category = null;
-  if (isCF && problem.contestName) {
-    if (/ICPC/i.test(problem.contestName))                       category = '🏆 ICPC';
-    else if (problem.contestName.includes('Educational'))        category = '📚 Educational';
-    else if (problem.contestName.includes('Global Round'))       category = '🌏 Global Round';
-    else {
-      const m = problem.contestName.match(/Div\.?\s*\d+(​\s*\+\s*Div\.?\s*\d+)*/i);
-      if (m) category = m[0];
-      else   category = problem.contestName; // gym / non-standard → show full name
-    }
-  } else if (isAC && problem.contestId) {
-    const l = problem.contestId.toLowerCase();
-    if      (l.startsWith('abc')) category = 'ABC';
-    else if (l.startsWith('arc')) category = 'ARC';
-    else if (l.startsWith('agc')) category = 'AGC';
-    else if (l.startsWith('ahc')) category = 'AHC';
-    else if (problem.contestName)  category = problem.contestName; // non-standard AC contest
-  } else if (isToph && problem.contestName && problem.contestName !== 'Practice') {
-    // Show the full exact contest name in the header
-    category = problem.contestName;
-  }
-
-  // ── Colors & labels ────────────────────────────────────────────
-  // Unify CF, AC, and Toph into the same color theme (Codeforces Blue), only ICPC gets golden.
-  let embedColor  = COLORS.Codeforces;
-  if (category === '🏆 ICPC') embedColor = 0xD4AF37;
-
-  // Do not include custom emojis here, Discord author field doesn't render them!
-  const platformLabel = isCF ? `Codeforces` : isAC ? `AtCoder` : `Toph`;
-
-  const thumbnailUrl = isCF
-    ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
-    : isAC
-      ? 'https://img.atcoder.jp/assets/logo.png'
-      : 'https://toph.co/images/appleicon.png';
-
-  // ── Category label in title
-  const catLabel = category ? ` (${category})` : '';
-
-  // ── Difficulty badge
   const diffVal = problem.rating || problem.difficulty;
-  let diffStr = '⚪ Unrated';
-  if (diffVal !== null && diffVal !== undefined && diffVal !== 0) {
+  let diffBadge = '⚪ Unrated';
+  if (diffVal) {
     const d = Number(diffVal);
     const tier = d >= 2400 ? '🔴 Very Hard' : d >= 1900 ? '🟠 Hard' : d >= 1400 ? '🟡 Medium' : d >= 800 ? '🟢 Easy' : '⚪ Beginner';
-    diffStr = `${tier}  \`${d}\``;
-  } else if (isCF || isAC) {
-    diffStr = '⚪ Beginner  `0`';
+    diffBadge = `${tier} (\`${d}\`)`;
   }
 
-  const tagsStr = problem.tags?.length ? problem.tags.slice(0, 5).join(', ') : 'None';
-  const contestStr = problem.contestName || (problem.contestId ? `Contest ${problem.contestId}` : 'Practice');
+  const tags = (problem.tags && problem.tags.length)
+    ? problem.tags.slice(0, 4).map(t => `\`#${t}\``).join(' ')
+    : '`#ad-hoc`';
 
-  const extra = [
-    { name: '📊 Difficulty', value: diffStr, inline: true },
-    { name: '🏷️ Tags', value: tagsStr, inline: true },
-    { name: '🏆 Contest', value: contestStr, inline: false }
-  ];
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.Success) // Bright Emerald
+    .setAuthor({
+      name: `Accepted Solution! — ${isCF ? 'Codeforces' : isAC ? 'AtCoder' : 'Toph'}`,
+      iconURL: 'https://cdn-icons-png.flaticon.com/512/190/190411.png'
+    })
+    .setTitle(`🎉 ${user.username} just conquered a problem!`)
+    .setDescription([
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `**Problem:** [**${problem.index ? `${problem.index}. ` : ''}${problem.name}**](${problem.url})`,
+      `> 📊 **Difficulty:** ${diffBadge}`,
+      `> 🏷️ **Tags:** ${tags}`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ].join('\n'))
+    .setThumbnail(isCF ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' : 'https://img.atcoder.jp/assets/logo.png')
+    .setFooter({ text: 'BigOof Live Feed · Keep that streak alive! 🔥' })
+    .setTimestamp();
+
+  return embed;
+}
+
+// ── 6. Weekly Wrap-Up Embed ──────────────────────────────────────
+
+function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
+  const topClimber = allRatingGains[0];
+  const topGrinder = allSolved[0];
+
+  const embed = new EmbedBuilder()
+    .setColor(0xFFD700) // Pure Gold
+    .setAuthor({
+      name: 'BigOof Weekly Hall of Fame 🏆',
+      iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
+    })
+    .setTitle(`📰 Weekly Community Wrap-Up`)
+    .setDescription([
+      `Celebrating our community's hardest grinders and top rating climbers this week!`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ].join('\n'));
+
+  if (topClimber && topClimber.gain > 0) {
+    embed.addFields({
+      name: `🚀 Rating MVP of the Week`,
+      value: `> 👑 **${topClimber.username}** gained **\`+${topClimber.gain} rating\`** this week!\n> *(${topClimber.start} ➔ ${topClimber.end})*`
+    });
+  }
+
+  if (topGrinder && topGrinder.solved_this_week > 0) {
+    embed.addFields({
+      name: `🔨 Problem Grinder MVP of the Week`,
+      value: `> 🌟 **${topGrinder.username}** conquered **\`${topGrinder.solved_this_week}\`** Accepted problems this week!`
+    });
+  }
+
+  embed.setFooter({ text: 'BigOof Weekly Digest · Posted every Sunday at 9:00 PM' });
+  embed.setTimestamp();
+
+  return embed;
+}
+
+// ── 7. Head-to-Head Comparison Embed ─────────────────────────────
+
+function buildCompareEmbed(opts) {
+  const {
+    name1, name2,
+    avatar1, avatar2,
+    cfHandle1, cfHandle2,
+    cfData1, cfData2,
+    solvedSet1Size, solvedSet2Size,
+    commonCount, unique1, unique2,
+    h2h, streak1, streak2, emojis
+  } = opts;
+
+  const r1 = cfData1.rating || 0;
+  const r2 = cfData2.rating || 0;
+  const maxR1 = cfData1.max_rating || 0;
+  const maxR2 = cfData2.max_rating || 0;
+
+  const crown1 = r1 > r2 ? ' 👑' : '';
+  const crown2 = r2 > r1 ? ' 👑' : '';
+  const solveCrown1 = solvedSet1Size > solvedSet2Size ? ' 👑' : '';
+  const solveCrown2 = solvedSet2Size > solvedSet1Size ? ' 👑' : '';
+
+  const ratingBar = renderProgressBar(r1, r2, 12);
+  const solvesBar = renderProgressBar(solvedSet1Size, solvedSet2Size, 12);
+
+  const embedColor = r1 >= r2 ? getCFRankColor(r1) : getCFRankColor(r2);
 
   const embed = new EmbedBuilder()
     .setColor(embedColor)
-    .setAuthor({ name: `${platformLabel}${catLabel} — Live Accepted!` })
-    .setTitle(`🎉 ${user.username} just got Accepted!`)
-    .setDescription(`<@${user.discord_id}> solved **[${problem.index ? `${problem.index}. ${problem.name}` : problem.name}](${problem.url})**!`)
-    .setThumbnail(thumbnailUrl)
-    .addFields(...extra)
-    .setTimestamp()
-    .setFooter({ text: 'Keep grinding! 💪' });
+    .setAuthor({
+      name: 'BigOof · Head-to-Head Competitive Clash ⚔️',
+      iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png'
+    })
+    .setTitle(`⚔️ ${name1} VS ${name2}`)
+    .setDescription([
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `**${name1}** (\`${cfHandle1}\`)  **VS**  **${name2}** (\`${cfHandle2}\`)`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ].join('\n'))
+    .setThumbnail(avatar1 || avatar2)
+    .addFields(
+      {
+        name: '🏆 Codeforces Rating & Rank',
+        value: [
+          `> **${name1}**: **\`${r1}\`** (${cfData1.rank_title})${crown1}`,
+          `> **${name2}**: **\`${r2}\`** (${cfData2.rank_title})${crown2}`,
+          `> ${ratingBar} *${r1 !== r2 ? `${r1 > r2 ? name1 : name2} leads by ${Math.abs(r1 - r2)}` : 'Dead even!'}*`
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '📈 Peak Rating (All-Time)',
+        value: [
+          `> **${name1}**: **\`${maxR1}\`**`,
+          `> **${name2}**: **\`${maxR2}\`**`
+        ].join('\n'),
+        inline: true
+      },
+      {
+        name: '🔥 Active Daily Streak',
+        value: [
+          `> **${name1}**: ${getStreakBadge(streak1)}`,
+          `> **${name2}**: ${getStreakBadge(streak2)}`
+        ].join('\n'),
+        inline: true
+      },
+      {
+        name: '🧩 Total Problems Solved',
+        value: [
+          `> **${name1}**: **\`${solvedSet1Size}\`** solves${solveCrown1}`,
+          `> **${name2}**: **\`${solvedSet2Size}\`** solves${solveCrown2}`,
+          `> ${solvesBar}`
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '🤝 Problem Overlap & Uniqueness',
+        value: [
+          `> 👥 **Both Solved:** **\`${commonCount}\`** common problems`,
+          `> 🌟 **Unique to ${name1}:** **\`${unique1}\`** problems`,
+          `> 🌟 **Unique to ${name2}:** **\`${unique2}\`** problems`
+        ].join('\n'),
+        inline: false
+      }
+    );
+
+  if (h2h && h2h.total > 0) {
+    embed.addFields({
+      name: '⚔️ Server Duels History (/vs)',
+      value: `> **${name1}** \`${h2h.wins1}W - ${h2h.wins2}W\` **${name2}** *(${h2h.total} duel${h2h.total > 1 ? 's' : ''} played)*`,
+      inline: false
+    });
+  }
+
+  embed.setFooter({ text: 'BigOof · May the best algorithm win!' });
+  embed.setTimestamp();
 
   return embed;
 }
 
+// ── 8. GitHub Profile & Event Embeds ─────────────────────────────
 
-
-
-
-/**
- * Build Weekly Wrap-Up Embed
- */
-function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
-  const now  = new Date();
-  const TZ = process.env.TIMEZONE || 'UTC';
-  const week = `${now.toLocaleString('en-US', { month: 'short', timeZone: TZ })} ${now.getFullYear()}`;
-
-  const embed = new EmbedBuilder()
-    .setColor(0xF1C40F)
-    .setDescription(
-      `# 　　　🏆 Weekly Wrap-Up
-\u200b
-**Week of ${week}** · Sunday Edition
-──────────────────────────────`
-    )
+function buildGitHubProfileEmbed(ghUser) {
+  return new EmbedBuilder()
+    .setColor(0x24292E)
+    .setAuthor({
+      name: `${ghUser.name || ghUser.login}'s GitHub Profile`,
+      iconURL: ghUser.avatar_url,
+      url: ghUser.html_url
+    })
+    .setTitle(`🐙 ${ghUser.login}`)
+    .setURL(ghUser.html_url)
+    .setThumbnail(ghUser.avatar_url)
+    .setDescription([
+      ghUser.bio ? `> *${ghUser.bio}*\n` : '',
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `📦 **Public Repositories:** \`${ghUser.public_repos}\``,
+      `👥 **Followers:** \`${ghUser.followers}\` · **Following:** \`${ghUser.following}\``,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `[**View Full GitHub Profile ↗️**](${ghUser.html_url})`
+    ].join('\n'))
+    .setFooter({ text: 'BigOof GitHub Integration' })
     .setTimestamp();
-
-  // ── 1. Solves Champion ─────────────────────────────────────────
-  if (allSolved.length > 0 && allSolved[0].solved_this_week > 0) {
-    const maxSolved = allSolved[0].solved_this_week;
-    const coChamps  = allSolved.filter(u => u.solved_this_week === maxSolved);
-    const names     = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
-
-    // Show all platforms separately where solved count > 0
-    const perUserLines = coChamps.map(u => {
-      const opts = [
-        { emoji: emojis.cf   || '🔵', label: 'CF',   count: u.cf_solved   ?? 0 },
-        { emoji: emojis.ac   || '🔴', label: 'AC',   count: u.ac_solved   ?? 0 },
-        { emoji: emojis.toph || '🟣', label: 'Toph', count: u.toph_solved ?? 0 }
-      ].filter(o => o.count > 0);
-      return opts.map(o => `> ${o.emoji} **${o.label}** — **${o.count}** problems`).join('\n');
-    }).filter(Boolean).join('\n');
-
-    embed.addFields({
-      name: '🧩 Solves Champion   💥',
-      value: `👑 ${names}\n> 📊 **${(coChamps[0].cf_solved ?? 0) + (coChamps[0].ac_solved ?? 0) + (coChamps[0].toph_solved ?? 0)}** total problems this week!\n${perUserLines}\n\u200b`,
-      inline: false
-    });
-  } else {
-    embed.addFields({
-      name: '🧩 Solves Champion',
-      value: '_No problems solved this week. Let\'s go harder next week!_\n\u200b',
-      inline: false
-    });
-  }
-
-  // ── 2. Rating Champion ─────────────────────────────────────────
-  if (allRatingGains.length > 0 && allRatingGains[0].rating_gained > 0) {
-    const maxGain  = allRatingGains[0].rating_gained;
-    const coChamps = allRatingGains.filter(u => u.rating_gained === maxGain);
-    const names    = coChamps.map(u => `<@${u.discord_id}>`).join(' & ');
-
-    // Show all platforms separately where rating gain > 0
-    const perUserLines = coChamps.map(u => {
-      const opts = [
-        { emoji: emojis.cf   || '🔵', label: 'CF',   gain: u.cf_gain   ?? 0, start: u.cf_start,   end: u.cf_end   },
-        { emoji: emojis.ac   || '🔴', label: 'AC',   gain: u.ac_gain   ?? 0, start: u.ac_start,   end: u.ac_end   },
-        { emoji: emojis.toph || '🟣', label: 'Toph', gain: u.toph_gain ?? 0, start: u.toph_start, end: u.toph_end }
-      ].filter(o => o.gain > 0);
-      return opts.map(o => `> ${o.emoji} **${o.label}** \`${o.start} → ${o.end}\` **(+${o.gain})**`).join('\n');
-    }).filter(Boolean).join('\n');
-
-    embed.addFields({
-      name: '📈 Rating Champion   ⚡',
-      value: `👑 ${names}\n> 🚀 **+${maxGain}** rating gained this week!\n${perUserLines}\n\u200b`,
-      inline: false
-    });
-  } else {
-    embed.addFields({
-      name: '📈 Rating Champion',
-      value: '_No rating gains this week. Contest more!_\n\u200b',
-      inline: false
-    });
-  }
-
-
-  embed
-    .addFields({ name: '\u200b', value: '──────────────────────────────', inline: false })
-    .setFooter({ text: 'See you next Sunday · Consistency beats talent 💪' });
-
-  return embed;
 }
 
-/**
- * Build sleek, minimal, professional GitHub Commit Embed
- */
 function buildGitHubCommitEmbed(user, pushEvent, commitDetails) {
   const repoName = pushEvent.repo.name;
   const repoUrl = `https://github.com/${repoName}`;
-  const actorName = pushEvent.actor.login;
-  const avatarUrl = pushEvent.actor.avatar_url;
-  
-  const fullMsg = (commitDetails?.message || 'New commit').trim();
-  const msgLines = fullMsg.split('\n');
-  const commitTitle = msgLines[0];
-  const commitBody = msgLines.slice(1).join('\n').trim();
+  const commitMsg = commitDetails.message.split('\n')[0];
+  const shortSha = commitDetails.sha.slice(0, 7);
 
-  const shortSha = commitDetails?.shortSha || (pushEvent.payload.head ? pushEvent.payload.head.substring(0, 7) : 'head');
-  const commitUrl = commitDetails?.commitUrl || (pushEvent.payload.head ? `${repoUrl}/commit/${pushEvent.payload.head}` : repoUrl);
-  const branch = (pushEvent.payload.ref || 'refs/heads/main').replace('refs/heads/', '');
-
-  const stats = commitDetails?.stats || { additions: 0, deletions: 0 };
-  const statsLine = `\`+${stats.additions}\` \`-${stats.deletions}\``;
-
-  const files = commitDetails?.files || [];
-  let filesText = '';
-  if (files.length > 0) {
-    const { detectLanguage } = require('./github');
-    const fileLines = files.slice(0, 4).map(f => {
-      const lang = detectLanguage(f.filename);
-      const shortName = f.filename.length > 48 ? '...' + f.filename.slice(-45) : f.filename;
-      return `${lang.emoji} \`${shortName}\``;
-    });
-    if (files.length > 4) fileLines.push(`*+ ${files.length - 4} more file(s)*`);
-    filesText = fileLines.join('\n');
-  }
-
-  const embed = new EmbedBuilder()
-    .setColor(0x24292E) // Minimalist GitHub Dark
+  return new EmbedBuilder()
+    .setColor(0x2EA44F) // GitHub Green
     .setAuthor({
-      name: `${actorName} committed to ${repoName}`,
-      iconURL: avatarUrl,
+      name: `${user.username} pushed code to ${repoName}`,
+      iconURL: user.avatarURL,
       url: repoUrl
     })
-    .setTitle(commitTitle.length > 250 ? commitTitle.slice(0, 247) + '...' : commitTitle)
-    .setURL(commitUrl)
-    .setDescription(
-      (commitBody ? `> *${commitBody.slice(0, 180)}*\n\n` : '') +
-      (filesText ? `${filesText}\n\n` : '') +
-      `🌿 \`${branch}\`  •  🔖 [\`${shortSha}\`](${commitUrl})  •  ${statsLine}`
-    )
-    .setFooter({
-      text: 'GitHub',
-      iconURL: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
-    })
-    .setTimestamp(new Date(pushEvent.created_at || Date.now()));
-
-  return embed;
+    .setTitle(`🔨 Commit [${shortSha}]`)
+    .setURL(commitDetails.url)
+    .setDescription([
+      `> **${commitMsg}**`,
+      ``,
+      `📁 **Changed Files:** \`${commitDetails.filesCount || 1}\``,
+      `🌿 **Branch:** \`${pushEvent.payload?.ref?.replace('refs/heads/', '') || 'main'}\``,
+      `[**Inspect Commit on GitHub ↗️**](${commitDetails.url})`
+    ].join('\n'))
+    .setFooter({ text: 'BigOof GitHub Stream' })
+    .setTimestamp();
 }
 
-/**
- * Build GitHub User Profile Embed
- */
-function buildGitHubProfileEmbed(ghUser) {
-  const embed = new EmbedBuilder()
-    .setColor(0x24292E) // GitHub Dark
-    .setAuthor({
-      name: `${ghUser.name} (@${ghUser.login})`,
-      iconURL: ghUser.avatarUrl,
-      url: ghUser.profileUrl
-    })
-    .setTitle(`🐙 GitHub Developer Profile`)
-    .setURL(ghUser.profileUrl)
-    .setThumbnail(ghUser.avatarUrl)
-    .setDescription(
-      (ghUser.bio ? `> *${ghUser.bio}*\n\n` : '') +
-      `[🔗 View Full GitHub Profile](${ghUser.profileUrl})`
-    )
-    .addFields(
-      { name: '📦 Public Repos', value: `\`${ghUser.publicRepos}\``, inline: true },
-      { name: '👥 Followers',    value: `\`${ghUser.followers}\``,   inline: true },
-      { name: '⭐ Following',    value: `\`${ghUser.following}\``,   inline: true }
-    )
-    .setFooter({
-      text: 'GitHub Integration',
-      iconURL: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
-    })
-    .setTimestamp(new Date(ghUser.createdAt || Date.now()));
-
-  return embed;
-}
-
-/**
- * Build sleek, minimal GitHub Activity Embed for any event (pushes, new repos, PRs, issues, releases, branches)
- */
-function buildGitHubActivityEmbed(user, event, extraDetails) {
-  if (event.type === 'PushEvent') {
-    return buildGitHubCommitEmbed(user, event, extraDetails);
-  }
-
+function buildGitHubActivityEmbed(user, event) {
   const repoName = event.repo.name;
   const repoUrl = `https://github.com/${repoName}`;
-  const actorName = event.actor.login;
-  const avatarUrl = event.actor.avatar_url;
-  const payload = event.payload || {};
+  const actor = event.actor.login;
 
-  let title = '';
-  let url = repoUrl;
-  let desc = '';
-  let color = 0x24292E;
-
-  if (event.type === 'CreateEvent') {
-    const refType = payload.ref_type;
-    const ref = payload.ref;
-    if (refType === 'repository') {
-      title = `📦 Created repository ${repoName}`;
-      url = repoUrl;
-      desc = payload.description ? `> *${payload.description}*\n\n` : '';
-      desc += `[View Repository on GitHub ↗️](${repoUrl})`;
-      color = 0x2EA44F;
-    } else if (refType === 'branch') {
-      title = `🌿 Created branch \`${ref}\` in ${repoName}`;
-      url = `${repoUrl}/tree/${ref}`;
-      desc = `[View Branch on GitHub ↗️](${url})`;
-    } else if (refType === 'tag') {
-      title = `🏷️ Created tag \`${ref}\` in ${repoName}`;
-      url = `${repoUrl}/releases/tag/${ref}`;
-      desc = `[View Tag on GitHub ↗️](${url})`;
-    }
-  } else if (event.type === 'PullRequestEvent') {
-    const pr = payload.pull_request || {};
-    const action = payload.action;
-    const isMerged = pr.merged;
-    const prNumber = pr.number || payload.number || '';
-    const prTitle = pr.title || 'Pull Request';
-    url = pr.html_url || repoUrl;
-
-    if (action === 'opened') {
-      title = `🔀 Opened PR #${prNumber}: ${prTitle}`;
-      desc = `🌿 \`${pr.head?.ref || 'branch'}\` ➔ \`${pr.base?.ref || 'main'}\`  •  \`+${pr.additions || 0}\` \`-${pr.deletions || 0}\`\n\n[View Pull Request ↗️](${url})`;
-      color = 0x2EA44F;
-    } else if (action === 'closed' && isMerged) {
-      title = `🟣 Merged PR #${prNumber}: ${prTitle}`;
-      desc = `Merged into \`${pr.base?.ref || 'main'}\`\n\n[View Pull Request ↗️](${url})`;
-      color = 0x8957E5;
-    } else {
-      title = `🔀 ${action === 'closed' ? 'Closed' : 'Updated'} PR #${prNumber}: ${prTitle}`;
-      desc = `[View Pull Request ↗️](${url})`;
-    }
-  } else if (event.type === 'IssuesEvent') {
-    const issue = payload.issue || {};
-    const action = payload.action;
-    url = issue.html_url || repoUrl;
-    title = `❗ ${action === 'opened' ? 'Opened' : 'Closed'} Issue #${issue.number || ''}: ${issue.title || ''}`;
-    desc = `[View Issue on GitHub ↗️](${url})`;
-    color = action === 'opened' ? 0x2EA44F : 0x8957E5;
-  } else if (event.type === 'ReleaseEvent') {
-    const rel = payload.release || {};
-    url = rel.html_url || repoUrl;
-    title = `🚀 Published Release ${rel.name || rel.tag_name || ''} in ${repoName}`;
-    desc = rel.body ? `> ${rel.body.slice(0, 150)}\n\n` : '';
-    desc += `[View Release ↗️](${url})`;
-    color = 0x238636;
-  } else if (event.type === 'ForkEvent') {
-    const forkee = payload.forkee || {};
-    url = forkee.html_url || repoUrl;
-    title = `🍴 Forked ${repoName} to ${forkee.full_name || forkee.name || 'fork'}`;
-    desc = `[View Fork on GitHub ↗️](${url})`;
-  } else {
-    title = `Activity in ${repoName}`;
-    desc = `[View on GitHub ↗️](${repoUrl})`;
-  }
-
-  const embed = new EmbedBuilder()
-    .setColor(color)
-    .setAuthor({
-      name: `${actorName} on GitHub`,
-      iconURL: avatarUrl,
-      url: `https://github.com/${actorName}`
-    })
-    .setTitle(title.length > 250 ? title.slice(0, 247) + '...' : title)
-    .setURL(url)
-    .setDescription(desc)
-    .setFooter({
-      text: 'GitHub',
-      iconURL: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
-    })
-    .setTimestamp(new Date(event.created_at || Date.now()));
-
-  return embed;
+  return new EmbedBuilder()
+    .setColor(0x8957E5) // GitHub Violet
+    .setAuthor({ name: `${actor} on GitHub`, iconURL: event.actor.avatar_url, url: repoUrl })
+    .setTitle(`📦 Activity in ${repoName}`)
+    .setURL(repoUrl)
+    .setDescription(`[**View activity in ${repoName} on GitHub ↗️**](${repoUrl})`)
+    .setFooter({ text: 'BigOof GitHub Stream' })
+    .setTimestamp();
 }
 
 module.exports = {
@@ -801,6 +628,9 @@ module.exports = {
   buildWeeklyWrapupEmbed,
   buildGitHubCommitEmbed,
   buildGitHubProfileEmbed,
-  buildGitHubActivityEmbed
+  buildGitHubActivityEmbed,
+  buildCompareEmbed,
+  getCFRankColor,
+  renderProgressBar,
+  COLORS
 };
-
