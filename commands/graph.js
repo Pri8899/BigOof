@@ -98,14 +98,14 @@ module.exports = {
         name: `${PLATFORM_NAMES[platform]} Career Rating Trajectory`,
         iconURL: target.user.displayAvatarURL({ dynamic: true })
       })
-      .setTitle(`${platformEmoji} ${PLATFORM_NAMES[platform]} Progression — ${target.displayName}`)
-      .setDescription(
-        `╭─ 👤 **Member**: <@${target.id}> (\`${target.displayName}\`)\n` +
-        `├─ 🌐 **Platform**: ${platformEmoji} **${PLATFORM_NAMES[platform]}**\n` +
-        `├─ 🏆 **Peak Rating**: **${maxR}**\n` +
-        `╰─ 📈 **All-Time Net**: **${sign}** (\`${ratings[0]}\` ➔ \`${lastR}\`)\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-      )
+      .setDescription([
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `> 👤 **Member:** <@${target.id}> (\`${target.displayName}\`)`,
+        `> 🌐 **Platform:** ${platformEmoji} **${PLATFORM_NAMES[platform]}**`,
+        `> 🏆 **Peak Rating:** **${maxR}**`,
+        `> 📈 **All-Time Net:** **${sign}** (\`${ratings[0]}\` ➔ \`${lastR}\`)`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      ].join('\n'))
       .setImage(chartUrl)
       .addFields(
         { name: '📊 Current',  value: `\`${lastR}\``,  inline: true },

@@ -260,19 +260,22 @@ function buildLobbyEmbed(match, participants) {
       iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
     })
     .setTitle(`⚔️ Lockout Match Lobby · ID \`${match.id}\``)
-    .setDescription(
-      `╭─ 👑 **Host**: <@${match.creator_id}>\n` +
-      `├─ 🏅 **Target Rating**: **${match.rating}**\n` +
-      `├─ 🏆 **Division**: ${divValue}\n` +
-      `├─ ⏱️ **Time Limit**: **${match.duration_min} mins**\n` +
-      `├─ 🔢 **Problems**: **${match.problems_count} challenges**\n` +
-      (match.tag ? `├─ 🏷️ **Tag**: \`${match.tag}\`\n` : '') +
-      `╰─ 🆔 **Match Key**: \`${match.id}\`\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `👥 **Contenders Ready (${participants.length})**:\n` +
-      (pList || '> *Waiting for challengers to click Join below...*') +
-      `\n\n💡 *Host can click **Start Match** once at least 2 contenders have joined!*`
-    )
+    .setDescription([
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `> 👑 **Host:** <@${match.creator_id}>`,
+      `> 🏅 **Target Rating:** **${match.rating}**`,
+      `> 🏆 **Division:** ${divValue}`,
+      `> ⏱️ **Time Limit:** **${match.duration_min} mins**`,
+      `> 🔢 **Problems:** **${match.problems_count} challenges**`,
+      match.tag ? `> 🏷️ **Tag:** \`${match.tag}\`` : null,
+      `> 🆔 **Match Key:** \`${match.id}\``,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      ``,
+      `👥 **Contenders Ready (${participants.length}):**`,
+      (pList || '> *Waiting for challengers to click Join below...*'),
+      ``,
+      `💡 *Host can click **Start Match** once at least 2 contenders have joined!*`
+    ].filter(Boolean).join('\n'))
     .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
     .setFooter({ text: 'BigOof Lockout Duel · Real-time Codeforces sync' })
     .setTimestamp();

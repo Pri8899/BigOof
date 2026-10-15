@@ -215,14 +215,15 @@ function buildVSMatchEmbed(match, participants) {
       iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
     })
     .setTitle(`⚡ Lockout Clash Active · ID \`${match.id}\``)
-    .setDescription(
-      `╭─ 🏅 **Target Rating**: **${match.rating}**\n` +
-      `├─ ⏱️ **Time Left**: <t:${match.ends_at}:R> (ends <t:${match.ends_at}:t>)\n` +
-      (match.tag ? `├─ 🏷️ **Tag Filter**: \`${match.tag}\`\n` : '') +
-      (match.division ? `├─ 🏆 **Division**: \`${divLabels[match.division] ?? match.division}\`\n` : '') +
-      `╰─ 🆔 **Match ID**: \`${match.id}\`\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-    )
+    .setDescription([
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `> 🏅 **Target Rating:** **${match.rating}**`,
+      `> ⏱️ **Time Left:** <t:${match.ends_at}:R> (ends <t:${match.ends_at}:t>)`,
+      match.tag ? `> 🏷️ **Tag Filter:** \`${match.tag}\`` : null,
+      match.division ? `> 🏆 **Division:** \`${divLabels[match.division] ?? match.division}\`` : null,
+      `> 🆔 **Match ID:** \`${match.id}\``,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ].filter(Boolean).join('\n'))
     .addFields(
       { name: '📋 Contest Problem Set', value: problemsListText, inline: false },
       { name: '📊 Live Standings', value: standingsText, inline: false }
@@ -245,8 +246,8 @@ async function refreshMatchEmbed(client, channel, match, participants) {
   const matchMsg = [...messages.values()].find(m => 
     m.author.id === client.user.id && 
     m.embeds.length > 0 && 
-    m.embeds[0].description && 
-    m.embeds[0].description.includes(`Match ID: \`${match.id}\``)
+    ((m.embeds[0].description && m.embeds[0].description.includes(match.id)) ||
+     (m.embeds[0].title && m.embeds[0].title.includes(match.id)))
   );
 
   if (matchMsg) {
@@ -299,12 +300,13 @@ async function concludeMatch(client, channel, match, participants, reason) {
       iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
     })
     .setTitle(`🏆 Lockout Clash Concluded · ID \`${match.id}\``)
-    .setDescription(
-      `╭─ 🏁 **Resolution**: \`${reason}\`\n` +
-      `├─ 🆔 **Match ID**: \`${match.id}\`\n` +
-      `╰─ 🏆 **Final Verdict**: ${winnersText}\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-    )
+    .setDescription([
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `> 🏁 **Resolution:** \`${reason}\``,
+      `> 🆔 **Match ID:** \`${match.id}\``,
+      `> 🏆 **Final Verdict:** ${winnersText}`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ].join('\n'))
     .addFields(
       { name: '📊 Final Standings', value: finalStandingsText, inline: false }
     )

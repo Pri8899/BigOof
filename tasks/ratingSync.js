@@ -103,14 +103,19 @@ async function postRatingChange(client, discordId, username, platform, oldRating
     const platEmoji = { cf: emojis.cf || '🔵', ac: emojis.ac || '🔴', toph: emojis.toph || '🟣' }[platform] ?? '🔵';
     const platName  = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' }[platform] ?? platform;
 
-    const desc =
-      `╭─ 👤 **Member**: <@${discordId}> (\`${username}\`)\n` +
-      `├─ 🌐 **Platform**: ${platEmoji} **${platName}**\n` +
-      `├─ 🏅 **Rank Tier**: **${rankTitle}**\n` +
-      (lastContest ? `├─ 🏆 **Contest**: ${lastContest}\n` : '') +
-      `╰─ 📊 **Rating Shift**: **${sign}** (\`${oldRating}\` ➔ \`${newRating}\`)\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      motiveLine;
+    const desc = [
+      isUp
+        ? `🎉 **<@${discordId}>** gained rating in the latest contest!`
+        : `📉 **<@${discordId}>** completed a contest round.`,
+      '',
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `> 📊 **Rating Change:** **\`${oldRating}\` ➔ \`${newRating}\`** (**${sign} pts**)`,
+      `> 🏅 **Rank Tier:** **${rankTitle}**`,
+      lastContest ? `> 🏆 **Contest:** ${lastContest}` : '',
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      '',
+      motiveLine
+    ].filter(Boolean).join('\n');
 
     const platIcon = platform === 'cf'
       ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'

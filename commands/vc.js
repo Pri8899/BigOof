@@ -69,20 +69,23 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
     .setTimestamp();
 
   if (!ended) {
-    embed.setDescription(
-      `╭─ ⏱️ **Clock**: <t:${endsAt}:R> (ends <t:${endsAt}:t>)\n` +
-      `├─ 👥 **Format**: ${isTeam ? `Team Contest (${teamsCount} Squad${teamsCount > 1 ? 's' : ''})` : 'Individual Round'}\n` +
-      `╰─ 🎯 **Challenges**: **${problems.length} problems**\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    embed.setDescription([
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `> ⏱️ **Clock:** <t:${endsAt}:R> (ends <t:${endsAt}:t>)`,
+      `> 👥 **Format:** ${isTeam ? `Team Contest (${teamsCount} Squad${teamsCount > 1 ? 's' : ''})` : 'Individual Round'}`,
+      `> 🎯 **Challenges:** **\`${problems.length}\` problems**`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      ``,
       `*Click the **Join Contest** button below to participate!*`
-    );
+    ].join('\n'));
   } else {
-    embed.setDescription(
-      `╭─ 🏁 **Contest Concluded!**\n` +
-      `├─ 👥 **Format**: ${isTeam ? `Team Contest (${teamsCount} Squad${teamsCount > 1 ? 's' : ''})` : 'Individual Round'}\n` +
-      `╰─ 🏆 **Results**: Final scores & standings calculated below!\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-    );
+    embed.setDescription([
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `> 🏁 **Contest Status:** \`Concluded\``,
+      `> 👥 **Format:** ${isTeam ? `Team Contest (${teamsCount} Squad${teamsCount > 1 ? 's' : ''})` : 'Individual Round'}`,
+      `> 🏆 **Results:** Final scores & standings calculated below!`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+    ].join('\n'));
   }
 
   const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];

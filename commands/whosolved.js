@@ -75,25 +75,29 @@ module.exports = {
       .setTimestamp();
 
     if (!hasSolvers) {
-      embed.setDescription(
-        `╭─ 📌 **Problem**: [${contestId}${index} on Codeforces ↗️](${link})\n` +
-        `╰─ ⏳ **Status**: Unclaimed in this server\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `> 💡 **No one has solved this problem yet!**\n` +
-        `> Be the first pioneer to submit an **Accepted** solution and earn bragging rights! 🚀`
-      );
+      embed.setDescription([
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `> 📌 **Problem:** [**${contestId}${index} on Codeforces ↗️**](${link})`,
+        `> ⏳ **Status:** \`Unclaimed in this server\``,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        ``,
+        `💡 **No one has solved this problem yet!**`,
+        `Be the first coder to submit an **Accepted** solution and earn server glory! 🚀`
+      ].join('\n'));
     } else {
       const solverLines = solvers.map((s, idx) => {
         const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🔹';
         return `${medal} <@${s.discord_id}> · [\`${s.cf_handle}\`](https://codeforces.com/profile/${s.cf_handle})`;
       });
 
-      embed.setDescription(
-        `╭─ 📌 **Problem**: [${contestId}${index} on Codeforces ↗️](${link})\n` +
-        `╰─ 🏆 **Solvers**: **${solvers.length}** server member${solvers.length > 1 ? 's' : ''}\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      embed.setDescription([
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `> 📌 **Problem:** [**${contestId}${index} on Codeforces ↗️**](${link})`,
+        `> 🏆 **Solvers:** **\`${solvers.length}\`** server member${solvers.length > 1 ? 's' : ''}`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        ``,
         solverLines.join('\n')
-      );
+      ].join('\n'));
     }
 
     embed.setFooter({ text: 'BigOof Solver Directory · /whosolved' });

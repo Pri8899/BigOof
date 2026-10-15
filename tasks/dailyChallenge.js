@@ -332,7 +332,7 @@ async function checkFirstBloods(client) {
                   const memMb = (sub.memoryConsumedBytes / 1048576).toFixed(2);
                   
                   const embed = new EmbedBuilder()
-                    .setColor(0xFF1744)
+                    .setColor(0xFF1744) // Vivid Crimson
                     .setAuthor({
                       name: 'FIRST BLOOD CLAIMED! 🩸',
                       iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
@@ -340,17 +340,14 @@ async function checkFirstBloods(client) {
                     .setTitle(`⚡ ${p.label} Solved First by @${user.cf_handle}!`)
                     .setURL(`https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`)
                     .setDescription(
-                      `╭─ ⚔️ **First Solver**: <@${user.discord_id}> ([\`${user.cf_handle}\`](https://codeforces.com/profile/${user.cf_handle}))\n` +
-                      `├─ 🎯 **Challenge Level**: **${p.label}**\n` +
-                      `╰─ 🏆 **Problem**: [${sub.problem.name}](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})\n\n` +
-                      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+                      `🔥 **<@${user.discord_id}>** was the **absolute first person** in the server to conquer the **${p.label}** daily challenge!\n\n` +
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                      `**Problem:** [**${sub.problem.name}**](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})\n` +
+                      `**Runtime:** \`${timeSec}s\` · **Memory:** \`${memMb} MB\`\n` +
+                      `**Verdict:** \`Accepted (AC)\` 🩸\n` +
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
                     )
-                    .addFields(
-                      { name: '⏱️ Runtime', value: `\`${timeSec}s\``, inline: true },
-                      { name: '💾 Memory', value: `\`${memMb} MB\``, inline: true },
-                      { name: '🏅 Verdict', value: '`✅ Accepted (AC)`', inline: true }
-                    )
-                    .setThumbnail(`https://cdn-icons-png.flaticon.com/512/3112/3112946.png`)
+                    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
                     .setFooter({ text: 'BigOof First Blood Tracker · Speed & Accuracy Honor', iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' })
                     .setTimestamp();
 

@@ -62,12 +62,13 @@ module.exports = {
         iconURL: interaction.guild.iconURL({ dynamic: true }) || undefined
       })
       .setTitle(`⚙️ Channel Router — ${interaction.guild.name}`)
-      .setDescription(
-        `╭─ 🏛️ **Server**: **${interaction.guild.name}**\n` +
-        `├─ 📡 **Active Feeds**: **${activeCount}** of **${CHANNEL_DEFS.length}** configured\n` +
-        `╰─ 💡 **One-Click**: Run \`/set-channel feature:All Features\` to bind all feeds to one channel!\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-      )
+      .setDescription([
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `> 🏛️ **Server:** **${interaction.guild.name}**`,
+        `> 📡 **Active Feeds:** **\`${activeCount}\`** of **\`${CHANNEL_DEFS.length}\`** configured`,
+        `> 💡 **Quick Setup:** Run \`/set-channel feature:All Features\` to bind all feeds at once!`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      ].join('\n'))
       .addFields(
         { name: '⚡ Competitive Feeds & Dashboards', value: coreFields, inline: false },
         { name: '📢 Community, Integrations & Systems', value: commFields, inline: false }

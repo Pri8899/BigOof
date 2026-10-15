@@ -38,14 +38,16 @@ module.exports = {
         name: 'Community Problem Solving Support',
         iconURL: user.displayAvatarURL({ dynamic: true })
       })
-      .setTitle(`🆘 Assistance Requested by ${user.username}`)
-      .setDescription(
-        `╭─ 👤 **Author**: <@${user.id}>\n` +
-        `╰─ 📌 **Problem & Context**:\n` +
-        `> ${problem.replace(/\n/g, '\n> ')}\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      .setDescription([
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `> 👤 **Author:** <@${user.id}>`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        ``,
+        `**Problem & Context:**`,
+        `> ${problem.replace(/\n/g, '\n> ')}`,
+        ``,
         `💡 *Got an idea, edge case, or complexity hint? Jump in to discuss!*`
-      )
+      ].join('\n'))
       .setThumbnail(user.displayAvatarURL({ dynamic: true }))
       .setFooter({ text: 'BigOof Peer Support · /ask-help', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
       .setTimestamp();

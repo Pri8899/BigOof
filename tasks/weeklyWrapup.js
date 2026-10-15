@@ -88,6 +88,7 @@ async function runWeeklyWrapup(client, updateSnapshots = false) {
       
       allSolved.push({
         discord_id: user.discord_id,
+        username: user.username,
         cf_solved:   cfSolved   || 0,
         ac_solved:   acSolved   || 0,
         toph_solved: tophSolved || 0,
@@ -96,7 +97,11 @@ async function runWeeklyWrapup(client, updateSnapshots = false) {
 
       allRatingGains.push({
         discord_id: user.discord_id,
+        username: user.username,
+        gain: userTotalRatingGain,
         rating_gained: userTotalRatingGain,
+        start: cfStart || acStart || tophStart || 0,
+        end: cfEnd || acEnd || tophEnd || 0,
         cf_gain:    cfGain   || 0, cf_start: cfStart,   cf_end: cfEnd,   cf_linked:   !!user.cf_handle,
         ac_gain:    acGain   || 0, ac_start: acStart,   ac_end: acEnd,   ac_linked:   !!user.ac_handle,
         toph_gain:  tophGain || 0, toph_start: tophStart, toph_end: tophEnd, toph_linked: !!user.toph_handle

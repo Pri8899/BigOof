@@ -213,14 +213,14 @@ module.exports = {
           name: 'Competitive Programming RPG Archetype',
           iconURL: targetUser.displayAvatarURL({ dynamic: true })
         })
-        .setTitle(`⚔️ CP Character Sheet — ${targetUser.username}`)
-        .setDescription(
-          `╭─ 🏆 **Class Title**: \`${title}\`\n` +
-          `├─ 👤 **Codeforces**: [\`${dbUser.cf_handle}\`](https://codeforces.com/profile/${dbUser.cf_handle})\n` +
-          `├─ 📊 **Mastery**: **Level ${overallLevelInfo.level}** (\`${overallLevelInfo.currentExp}/${overallLevelInfo.nextLevelExp}\` EXP)\n` +
-          `╰─ 📈 **XP Bar**: ${drawProgressBar(overallLevelInfo.currentExp, overallLevelInfo.nextLevelExp, 12)}\n\n` +
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-        )
+        .setDescription([
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+          `> 🏆 **Class Title:** \`${title}\``,
+          `> 👤 **Codeforces:** [\`${dbUser.cf_handle}\`](https://codeforces.com/profile/${dbUser.cf_handle})`,
+          `> 📊 **Mastery:** **Level ${overallLevelInfo.level}** (\`${overallLevelInfo.currentExp}/${overallLevelInfo.nextLevelExp}\` EXP)`,
+          `> 📈 **XP Bar:** ${drawProgressBar(overallLevelInfo.currentExp, overallLevelInfo.nextLevelExp, 12)}`,
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        ].join('\n'))
         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
         .addFields(
           {

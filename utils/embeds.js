@@ -235,60 +235,51 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
 
   function cfRankLabel(rating) {
     if (!rating || rating === 0) return 'Unrated';
-    if (rating >= 3000) return 'Legendary GM';
-    if (rating >= 2600) return 'Intl. GM';
-    if (rating >= 2400) return 'Grandmaster';
-    if (rating >= 2300) return 'Intl. Master';
+    if (rating >= 3000) return 'LGM';
+    if (rating >= 2600) return 'IGM';
+    if (rating >= 2400) return 'GM';
+    if (rating >= 2300) return 'IM';
     if (rating >= 2100) return 'Master';
-    if (rating >= 1900) return 'Cand. Master';
+    if (rating >= 1900) return 'CM';
     if (rating >= 1600) return 'Expert';
     if (rating >= 1400) return 'Specialist';
     if (rating >= 1200) return 'Pupil';
     return 'Newbie';
   }
 
-  function rcgDot(rating) {
-    if (!rating || rating === 0) return '⚪';
-    if (rating >= 3000) return '🔴';
-    if (rating >= 2400) return '🟠';
-    if (rating >= 2100) return '🟡';
-    if (rating >= 1900) return '🟣';
-    if (rating >= 1600) return '🔵';
-    if (rating >= 1400) return '🟦';
-    if (rating >= 1200) return '🟢';
-    return '⚪';
-  }
-
   const embed = new EmbedBuilder()
-    .setColor(0x5865F2)
-    .setTitle(`🏆 Server Competitive Programming Leaderboard`)
+    .setColor(0xFFD700) // Championship Gold
+    .setAuthor({
+      name: 'Server Leaderboard · Top Competitive Coders',
+      iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
+    })
+    .setTitle('🏆 Community Standings')
     .setDescription([
-      `Live community standings ranked by Codeforces ratings, solves, and active daily streaks.`,
+      `Ranked by **Codeforces rating**, solved problems, and active daily streaks.`,
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     ].join('\n'));
 
   if (rows.length === 0) {
     embed.addFields({
       name: 'No Active Members',
-      value: '_No members have linked their accounts yet._\nUse `/link platform:Codeforces handle:your_handle` to get on the board!'
+      value: '_No members have linked their accounts yet._\nUse `/link platform:Codeforces handle:your_handle` to appear on the leaderboard!'
     });
   } else {
     const listLines = rows.slice(0, 15).map((row, i) => {
       const medal = medals[i] ?? `\`#${(i + 1).toString().padStart(2, '0')}\``;
-      const dot = rcgDot(row.cf_rating || 0);
       const name = (row.cf_handle || row.username || 'Coder').replace(/([_*~|`\\])/g, '\\$1');
       const rank = cfRankLabel(row.cf_rating || 0);
-      const rating = row.cf_rating > 0 ? `**${row.cf_rating}**` : '—';
-      const solves = row.cf_solved ? `\`${row.cf_solved} solves\`` : '`0 solves`';
+      const rating = row.cf_rating > 0 ? `⭐ **${row.cf_rating}** (${rank})` : '⭐ *Unrated*';
+      const solves = row.cf_solved ? `\`${row.cf_solved.toLocaleString()} solved\`` : '`0 solved`';
 
       const cfStreak = streakMap[row.discord_id]?.cf ?? row.cf_streak ?? 0;
       const streak = streakBadge(cfStreak);
 
-      return `${medal} ${dot} **${name}** · ${rating} (${rank}) · ${solves} ${streak}`;
+      return `${medal} **${name}** · ${rating} · ${solves} ${streak ? `· ${streak}` : ''}`;
     });
 
     embed.addFields({
-      name: `🏅 Top ${Math.min(rows.length, 15)} Coders`,
+      name: `🏅 Top ${Math.min(rows.length, 15)} Competitors`,
       value: listLines.join('\n')
     });
   }
@@ -316,16 +307,20 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
 
   const embed = new EmbedBuilder()
     .setColor(0x1F8DD6)
+    .setAuthor({
+      name: 'Autonomous Contest Radar',
+      iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png'
+    })
     .setTitle(`📅 Upcoming Competitive Programming Contests`)
     .setDescription([
-      `Autonomous contest radar with real-time countdowns and 24h / 1h reminder alerts.`,
+      `Live contest schedule with real-time countdowns and 24h / 1h reminder alerts.`,
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     ].join('\n'));
 
   if (filtered.length === 0) {
     embed.addFields({
       name: 'No Contests Scheduled',
-      value: '_No upcoming contests found matching your filter._'
+      value: '_No upcoming contests found matching your selected platform filter._'
     });
     return embed;
   }
@@ -351,7 +346,7 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
         const durStr = dm > 0 ? `${dh}h ${dm}m` : `${dh}h`;
 
         const timeStr = start ? `<t:${start}:R> (<t:${start}:d>)` : 'N/A';
-        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n> ⏱️ \`${durStr}\` · ⏳ ${timeStr}`;
+        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n> ⏱️ \`${durStr}\` · ⏳ Starts ${timeStr}`;
       });
 
       embed.addFields({
@@ -378,35 +373,40 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
 function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
   const isCF = platform === 'cf';
   const isAC = platform === 'ac';
+  const platName = isCF ? 'Codeforces' : isAC ? 'AtCoder' : 'Toph';
 
   const diffVal = problem.rating || problem.difficulty;
-  let diffBadge = '⚪ Unrated';
+  let diffBadge = '⭐ Standard';
   if (diffVal) {
     const d = Number(diffVal);
     const tier = d >= 2400 ? '🔴 Very Hard' : d >= 1900 ? '🟠 Hard' : d >= 1400 ? '🟡 Medium' : d >= 800 ? '🟢 Easy' : '⚪ Beginner';
-    diffBadge = `${tier} (\`${d}\`)`;
+    diffBadge = `${tier} (${d})`;
   }
 
   const tags = (problem.tags && problem.tags.length)
-    ? problem.tags.slice(0, 4).map(t => `\`#${t}\``).join(' ')
-    : '`#ad-hoc`';
+    ? problem.tags.slice(0, 4).map(t => `\`${t}\``).join(' • ')
+    : '`General`';
 
   const embed = new EmbedBuilder()
-    .setColor(COLORS.Success) // Bright Emerald
+    .setColor(0x00E676) // Vivid Emerald Green
     .setAuthor({
-      name: `Accepted Solution! — ${isCF ? 'Codeforces' : isAC ? 'AtCoder' : 'Toph'}`,
-      iconURL: 'https://cdn-icons-png.flaticon.com/512/190/190411.png'
+      name: `Accepted Solution! · ${platName}`,
+      iconURL: isCF
+        ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
+        : 'https://img.atcoder.jp/assets/logo.png'
     })
     .setTitle(`🎉 ${user.username} just conquered a problem!`)
-    .setDescription([
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-      `**Problem:** [**${problem.index ? `${problem.index}. ` : ''}${problem.name}**](${problem.url})`,
-      `> 📊 **Difficulty:** ${diffBadge}`,
-      `> 🏷️ **Tags:** ${tags}`,
+    .setDescription(
+      `**<@${user.discord_id}>** submitted an **Accepted** solution!\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `**Problem:** [**${problem.index ? `${problem.index}. ` : ''}${problem.name}**](${problem.url})\n` +
+      `**Difficulty:** ${diffBadge}\n` +
+      (problem.timeSec ? `**Execution:** \`${problem.timeSec}s\` · \`${problem.memoryMb || '1.8'} MB\` · \`Accepted\`\n` : '') +
+      `**Topic Tags:** ${tags}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
-    ].join('\n'))
+    )
     .setThumbnail(isCF ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' : 'https://img.atcoder.jp/assets/logo.png')
-    .setFooter({ text: 'BigOof Live Feed · Keep that streak alive! 🔥' })
+    .setFooter({ text: 'BigOof Live Submission Feed · Keep the streak alive! 🔥' })
     .setTimestamp();
 
   return embed;
@@ -424,24 +424,40 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵'
       name: 'BigOof Weekly Hall of Fame 🏆',
       iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
     })
-    .setTitle(`📰 Weekly Community Wrap-Up`)
+    .setTitle(`📰 Weekly Community Digest`)
     .setDescription([
       `Celebrating our community's hardest grinders and top rating climbers this week!`,
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     ].join('\n'));
 
-  if (topClimber && topClimber.gain > 0) {
+  if (topClimber && (topClimber.gain > 0 || topClimber.rating_gained > 0)) {
+    const gainVal = topClimber.gain || topClimber.rating_gained;
+    const climberPing = topClimber.discord_id ? `<@${topClimber.discord_id}>` : `**${topClimber.username}**`;
     embed.addFields({
-      name: `🚀 Rating MVP of the Week`,
-      value: `> 👑 **${topClimber.username}** gained **\`+${topClimber.gain} rating\`** this week!\n> *(${topClimber.start} ➔ ${topClimber.end})*`
+      name: `🚀 Rating Climber MVP of the Week`,
+      value: `👑 ${climberPing} gained **\`+${gainVal} rating\`** this week!\n*(${topClimber.start || topClimber.cf_start} ➔ ${topClimber.end || topClimber.cf_end})*`,
+      inline: false
     });
   }
 
   if (topGrinder && topGrinder.solved_this_week > 0) {
+    const grinderPing = topGrinder.discord_id ? `<@${topGrinder.discord_id}>` : `**${topGrinder.username}**`;
     embed.addFields({
       name: `🔨 Problem Grinder MVP of the Week`,
-      value: `> 🌟 **${topGrinder.username}** conquered **\`${topGrinder.solved_this_week}\`** Accepted problems this week!`
+      value: `🌟 ${grinderPing} conquered **\`${topGrinder.solved_this_week}\`** Accepted problems this week!`,
+      inline: false
     });
+  }
+
+  // Top 3 Problem Solvers
+  const topSolvers = allSolved.filter(s => s.solved_this_week > 0).slice(0, 3);
+  if (topSolvers.length > 1) {
+    const lines = topSolvers.map((s, idx) => {
+      const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉';
+      const userRef = s.discord_id ? `<@${s.discord_id}>` : `**${s.username || 'Coder'}**`;
+      return `${medal} ${userRef} · \`${s.solved_this_week} problems solved\``;
+    });
+    embed.addFields({ name: '🎯 Top Problem Solvers This Week', value: lines.join('\n'), inline: false });
   }
 
   embed.setFooter({ text: 'BigOof Weekly Digest · Posted every Sunday at 9:00 PM' });

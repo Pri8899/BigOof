@@ -53,12 +53,13 @@ module.exports = {
         .setTitle(`📊 Codeforces Portfolio — @${user.cf_handle}`)
         .setURL(`https://codeforces.com/profile/${user.cf_handle}`)
         .setThumbnail(target.user.displayAvatarURL({ dynamic: true }))
-        .setDescription(
-          `╭─ 👤 **Account**: [\`${user.cf_handle}\`](https://codeforces.com/profile/${user.cf_handle})\n` +
-          `├─ 🏅 **Rating**: **${cfRating > 0 ? cfRating : 'Unrated'}** · *${cfRank}*\n` +
-          `╰─ 🎯 **Total Solved**: **${cfSolved.toLocaleString()}** problems\n` +
-          `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-        );
+        .setDescription([
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+          `> 👤 **Handle:** [\`${user.cf_handle}\`](https://codeforces.com/profile/${user.cf_handle})`,
+          `> 🏅 **Rating:** **${cfRating > 0 ? cfRating : 'Unrated'}** · *${cfRank}*`,
+          `> 🧩 **Total Solved:** **\`${cfSolved.toLocaleString()}\`** problems`,
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        ].join('\n'));
 
       const breakdown = await getCFDivisionBreakdown(user.cf_handle);
       if (breakdown) {

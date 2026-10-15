@@ -160,20 +160,20 @@ module.exports = {
         name: 'Codeforces Practice Recommender',
         iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
       })
-      .setTitle(`💡 Curated Problem Set (${problems.length} Problem${problems.length > 1 ? 's' : ''})`)
-      .setDescription(
-        `╭─ 🎯 **Rating Window**: **${minR}–${maxR}**\n` +
-        (tag ? `├─ 🏷️ **Tag Filter**: \`${tag}\`\n` : '') +
-        (division ? `├─ 🏆 **Division**: **${division.toUpperCase().replace('DIV', 'Div. ')}**\n` : '') +
-        `╰─ 👤 **Tailored For**: <@${interaction.user.id}> (${cfRating > 0 ? `Rating **${cfRating}**` : 'Unrated'})\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-      );
+      .setDescription([
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `> 🎯 **Rating Window:** **\`${minR}\` ➔ \`${maxR}\`**`,
+        tag ? `> 🏷️ **Tag Filter:** \`${tag}\`` : null,
+        division ? `> 🏆 **Division:** **${division.toUpperCase().replace('DIV', 'Div. ')}**` : null,
+        `> 👤 **Tailored For:** <@${interaction.user.id}> (${cfRating > 0 ? `Rating **${cfRating}**` : 'Unrated'})`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      ].filter(Boolean).join('\n'));
 
     problems.forEach((p, i) => {
-      const tagStr = p.tags && p.tags.length > 0 ? p.tags.slice(0, 4).join(' • ') : 'Implementation';
+      const tagStr = p.tags && p.tags.length > 0 ? p.tags.slice(0, 4).map(t => `\`${t}\``).join(' • ') : '`General`';
       embed.addFields({
-        name: `${i + 1}. ${p.name} · ⭐ ${p.rating}`,
-        value: `🔗 [Solve on Codeforces ↗️](${p.url})\n\`🏷️ ${tagStr}\``,
+        name: `\`#${i + 1}\` ${p.name} · ⭐ **${p.rating}**`,
+        value: `> 🔗 [**Solve Challenge on Codeforces ↗️**](${p.url})\n> 🏷️ ${tagStr}`,
         inline: false
       });
     });

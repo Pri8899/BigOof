@@ -34,12 +34,13 @@ module.exports = {
         iconURL: member.guild.iconURL({ dynamic: true }) || undefined
       })
       .setTitle(`👋 Welcome to ${member.guild.name}, ${member.user.username}!`)
-      .setDescription(
-        `╭─ 🚀 **Welcome to the competitive programming circle!**\n` +
-        `├─ 🏷️ **Role**: You have been granted the **CP** role!\n` +
-        `╰─ 💡 **First Step**: Link your handles to appear on the server leaderboard!\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-      )
+      .setDescription([
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `> 🚀 **Welcome to the competitive programming circle!**`,
+        `> 🏷️ **Role:** You have been granted the **CP** role!`,
+        `> 💡 **First Step:** Link your handles to appear on the server leaderboard!`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      ].join('\n'))
       .addFields(
         {
           name: '⚡ Link Your Profiles',

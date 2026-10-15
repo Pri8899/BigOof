@@ -1,5 +1,4 @@
-// commands/admin/announce.js — Broadcast an announcement via a Modal
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const { getConfig }            = require('../../database/db');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
 
@@ -63,9 +62,28 @@ module.exports = {
     const messageContent = submitted.fields.getTextInputValue('announcementMessage').trim();
 
     try {
-      // 5. Send message with @everyone to target channel
+      // 5. Build modern announcement embed & send with @everyone to target channel
+      const announcementEmbed = new EmbedBuilder()
+        .setColor(0x5865F2) // Discord Blurple
+        .setAuthor({
+          name: `${interaction.guild.name} · Official Announcement`,
+          iconURL: interaction.guild.iconURL({ dynamic: true }) || interaction.client.user.displayAvatarURL()
+        })
+        .setTitle('📢 Community Announcement')
+        .setDescription(
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `${messageContent}\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        )
+        .setFooter({
+          text: `Broadcast by ${interaction.user.tag}`,
+          iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+        })
+        .setTimestamp();
+
       await targetChannel.send({
-        content: `@everyone\n\n${messageContent}`
+        content: '@everyone',
+        embeds: [announcementEmbed]
       });
 
       await submitted.editReply({
