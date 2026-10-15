@@ -10,7 +10,7 @@ module.exports = {
     upsertUser(member.id, member.user.username);
 
     // Assign CP role
-    const cpRoleId = getConfig('cp_role_id');
+    const cpRoleId = getConfig('cp_role_id', member.guild.id);
     if (cpRoleId) {
       const role = member.guild.roles.cache.get(cpRoleId);
       if (role) {
@@ -29,7 +29,7 @@ module.exports = {
     // Send welcome DM
     const welcomeEmbed = new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('👋 Welcome to the CP Server!')
+      .setTitle(`👋 Welcome to ${member.guild.name}!`)
       .setDescription([
         `Hey **${member.user.username}**! Welcome to the server.`,
         '',

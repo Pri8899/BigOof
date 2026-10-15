@@ -14,16 +14,17 @@ module.exports = {
         .addChoices(
           { name: '🏆 Codeforces', value: 'cf' },
           { name: '🎯 AtCoder',    value: 'ac' },
-          { name: '⚡ Toph',       value: 'toph' }
+          { name: '⚡ Toph',       value: 'toph' },
+          { name: '🐙 GitHub',     value: 'github' }
         )),
 
   async execute(interaction) {
     const platform = interaction.options.getString('platform');
     const userId   = interaction.user.id;
-    const names = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
+    const names = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph', github: 'GitHub' };
     const { getPlatformEmojis } = require('../utils/emojis');
     const guildEmojis = await getPlatformEmojis(interaction.guild);
-    const platformEmoji = guildEmojis[platform] || (platform === 'cf' ? '🏆' : platform === 'ac' ? '🎯' : '⚡');
+    const platformEmoji = guildEmojis[platform] || (platform === 'cf' ? '🏆' : platform === 'ac' ? '🎯' : platform === 'toph' ? '⚡' : '🐙');
 
     const user = getUser(userId);
     if (!user || !user[`${platform}_handle`]) {
@@ -36,7 +37,7 @@ module.exports = {
     unlinkPlatform(userId, platform);
 
     const { updateDashboard } = require('../tasks/ratingSync');
-    updateDashboard(interaction.client).catch(err => console.error('[unlink] Dashboard update failed:', err.message));
+    updateDashboard(interaction.client, interaction.guildId).catch(() => {});
 
     return interaction.reply({
       embeds: [successEmbed('Account Unlinked', `${platformEmoji} Your **${names[platform]}** account has been removed.`)],

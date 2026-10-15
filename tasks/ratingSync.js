@@ -76,9 +76,6 @@ async function updateDiscordRole(client, discordId, rating) {
 // ─── Rating Change Alert ─────────────────────────────────────
 async function postRatingChange(client, discordId, username, platform, oldRating, newRating, rankTitle, lastContest) {
   if (oldRating === newRating) return;
-  const channel = await getTargetChannel(client, 'rating_channel_id', 'RATING_CHANNEL_ID', ['rating-update', 'rating', 'dashboard'], '1505815592777810020');
-  if (!channel) return;
-
 
   const diff  = newRating - oldRating;
   const isUp  = diff > 0;
@@ -89,39 +86,54 @@ async function postRatingChange(client, discordId, username, platform, oldRating
     ? '🟩'.repeat(Math.min(5, Math.ceil(Math.abs(diff) / 50)))
     : '🟥'.repeat(Math.min(5, Math.ceil(Math.abs(diff) / 50)));
 
-  const { getPlatformEmojis } = require('../utils/emojis');
-  const emojis = await getPlatformEmojis(channel.guild);
-  const platEmoji = { cf: emojis.cf || '🔵', ac: emojis.ac || '🔴', toph: emojis.toph || '🟣' }[platform] ?? '🔵';
-  const platName  = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' }[platform] ?? platform;
-
   const motiveLine = isUp
     ? `> 🎉 Amazing performance! Keep it up!\n`
     : `> 💪 Losses are lessons. Come back stronger!\n`;
 
-  const desc =
-    `\u200b\n` +
-    `> ${platEmoji} **${platName}**  ·  ${trend} **${sign}** rating\n` +
-    `> \`\`\`\n` +
-    `> ${oldRating}  →  ${newRating}\n` +
-    `> \`\`\`\n` +
-    `> 🏅 **Current Rank** \u00a0 ${rankTitle ?? 'Unrated'}\n` +
-    (lastContest ? `> 🏆 **Contest** \u00a0\u00a0\u00a0\u00a0\u00a0 ${lastContest.contestName}  ·  Rank **#${lastContest.rank}**\n` : '') +
-    motiveLine +
-    `> ${bar}\n` +
-    `\u200b`;
+  const { getPlatformEmojis } = require('../utils/emojis');
 
-  const footer = isUp ? 'Keep pushing! 💪' : 'Every champion falls. What matters is getting back up! 🔥';
+  for (const guild of client.guilds.cache.values()) {
+    const isMember = guild.members.cache.has(discordId);
+    if (!isMember) continue;
 
-  const embed = new EmbedBuilder()
-    .setColor(color)
-    .setAuthor({ name: `${isUp ? '⬆️ Rating Increased' : '⬇️ Rating Decreased'} — ${platName}` })
-    .setTitle(`${trend} ${username}'s rating ${isUp ? 'went up' : 'went down'}!`)
-    .setDescription(`<@${discordId}>\n${desc}`)
-    .setTimestamp()
-    .setFooter({ text: footer });
+    const channel = await getTargetChannel(client, 'rating_channel_id', 'RATING_CHANNEL_ID', guild.id);
+    if (!channel) continue;
 
-  await channel.send({ content: `<@${discordId}>`, embeds: [embed] }).catch(() => {});
+    const emojis = await getPlatformEmojis(guild);
+    const platEmoji = { cf: emojis.cf || '🔵', ac: emojis.ac || '🔴', toph: emojis.toph || '🟣' }[platform] ?? '🔵';
+    const platName  = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' }[platform] ?? platform;
+
+    const desc =
+      `\u200b\n` +
+      `> ${platEmoji} **${platName}**  ·  ${trend} **${sign}** rating\n` +
+      `> \`\`\`\n` +
+      `> ${oldRating}  →  ${newRating}\n` +
+      `> \`\`\`\n` +
+      `> 🏅 New Rank: **${rankTitle}**\n` +
+      (lastContest ? `> 🏆 Contest: **${lastContest}**\n` : '') +
+      `\u200b\n` +
+      motiveLine;
+
+    const platIcon = platform === 'cf'
+      ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
+      : platform === 'ac'
+        ? 'https://img.atcoder.jp/assets/logo.png'
+        : 'https://toph.co/images/appleicon.png';
+
+    const embed = new EmbedBuilder()
+      .setColor(color)
+      .setAuthor({
+        name: `${username}'s rating ${isUp ? 'increased' : 'decreased'}!`,
+        iconURL: platIcon
+      })
+      .setDescription(desc)
+      .setFooter({ text: `${platName} Rating Update` })
+      .setTimestamp();
+
+    await channel.send({ content: `📣 <@${discordId}>`, embeds: [embed] }).catch(() => {});
+  }
 }
+
 
 
 // Track last streak sync time so streaks only update once per hour
@@ -274,77 +286,74 @@ async function syncAllRatings(client) {
 }
 
 // ─── Update Dashboard ────────────────────────────────────────
-async function updateDashboard(client) {
+async function updateDashboard(client, specificGuildId = null) {
   try {
-    const channel = await getTargetChannel(client, 'dashboard_channel_id', 'DASHBOARD_CHANNEL_ID', ['dashboard', 'leaderboard'], '1505815433255587870');
-    if (!channel) return;
-
-    if (!channel) return;
-
-    const users   = getAllUsers();
-    const ratings = getAllRatings();
-    const streaks = getAllStreaks();
-    const rows    = computeLeaderboard(users, ratings, streaks);
+    const { getAllGuildConfigs } = require('../database/db');
+    const allUsers = getAllUsers();
+    const ratings  = getAllRatings();
+    const streaks  = getAllStreaks();
     const { getPlatformEmojis } = require('../utils/emojis');
-    const emojis  = await getPlatformEmojis(channel.guild);
-    const embed   = buildDashboardEmbed(rows, streaks, emojis);
 
-    // Fetch recent messages in the channel to find any existing dashboard messages sent by the bot
-    let existingMessages = [];
-    try {
-      const messages = await channel.messages.fetch({ limit: 50 });
-      // Filter for messages sent by the bot that have the dashboard/leaderboard embed title or description
-      existingMessages = [...messages.values()].filter(m => 
-        m.author.id === client.user.id && 
-        m.embeds.length > 0 && 
-        ((m.embeds[0].title && (m.embeds[0].title.includes('Leaderboard') || m.embeds[0].title.includes('🏅 CP Server Leaderboard'))) ||
-         (m.embeds[0].description && (m.embeds[0].description.includes('Leaderboard') || m.embeds[0].description.includes('🏅 CP Server Leaderboard'))))
-      );
-    } catch (err) {
-      console.warn('[Dashboard] Failed to fetch recent channel messages:', err.message);
-    }
-
-    let msg = null;
-    if (existingMessages.length > 0) {
-      // Sort existingMessages by creation time descending (newest first)
-      existingMessages.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
-      
-      // Use the newest one as our primary message to edit
-      msg = existingMessages[0];
-      setConfig('dashboard_message_id', msg.id);
-
-      // Clean up any extra/duplicate dashboard messages to enforce exactly one message in the channel
-      if (existingMessages.length > 1) {
-        console.log(`[Dashboard] Found ${existingMessages.length} dashboard messages. Cleaning up duplicates...`);
-        for (let i = 1; i < existingMessages.length; i++) {
-          await existingMessages[i].delete().catch(() => {});
-        }
-      }
-    }
-
-    if (msg) {
-      // Delete the old message — new one will be posted below
-      await msg.delete().catch(() => {});
-      console.log('[Dashboard] Deleted old dashboard message.');
-    }
-
-    // Post fresh — retry until it succeeds so the channel is never left empty
-    let newMsg = null;
-    for (let attempt = 1; attempt <= 10; attempt++) {
-      try {
-        newMsg = await channel.send({ embeds: [embed] });
-        break; // success
-      } catch (err) {
-        console.warn(`[Dashboard] Send attempt ${attempt}/10 failed: ${err.message}`);
-        if (attempt < 10) await new Promise(r => setTimeout(r, 5000)); // wait 5s before retry
-      }
-    }
-
-    if (newMsg) {
-      setConfig('dashboard_message_id', newMsg.id);
-      console.log('[Dashboard] Created new dashboard message.');
+    const targets = [];
+    if (specificGuildId) {
+      const chId = getConfig('dashboard_channel_id', specificGuildId);
+      if (chId) targets.push({ guild_id: specificGuildId, value: chId });
     } else {
-      console.error('[Dashboard] Failed to post dashboard after 10 attempts!');
+      const configs = getAllGuildConfigs('dashboard_channel_id');
+      targets.push(...configs);
+      const globalChId = getConfig('dashboard_channel_id', 'global') || process.env.DASHBOARD_CHANNEL_ID;
+      if (globalChId && !targets.some(t => t.value === globalChId)) {
+        targets.push({ guild_id: 'global', value: globalChId });
+      }
+    }
+
+    if (targets.length === 0) return;
+
+    for (const { guild_id, value: channelId } of targets) {
+      try {
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel || !channel.isTextBased()) continue;
+
+        // Filter users to members of this specific server
+        const guildMembers = channel.guild.members.cache;
+        const serverUsers = allUsers.filter(u => guildMembers.has(u.discord_id));
+
+        const rows   = computeLeaderboard(serverUsers, ratings, streaks);
+        const emojis = await getPlatformEmojis(channel.guild);
+        const embed  = buildDashboardEmbed(rows, streaks, emojis);
+
+        // Fetch recent messages to find previous dashboard message
+        let existingMessages = [];
+        try {
+          const messages = await channel.messages.fetch({ limit: 25 });
+          existingMessages = [...messages.values()].filter(m =>
+            m.author.id === client.user.id &&
+            m.embeds.length > 0 &&
+            ((m.embeds[0].title && m.embeds[0].title.includes('Leaderboard')) ||
+             (m.embeds[0].description && m.embeds[0].description.includes('Leaderboard')))
+          );
+        } catch (err) {
+          console.warn(`[Dashboard] Failed to fetch messages in channel ${channelId}:`, err.message);
+        }
+
+        if (existingMessages.length > 0) {
+          for (const oldMsg of existingMessages) {
+            await oldMsg.delete().catch(() => {});
+          }
+        }
+
+        const newMsg = await channel.send({ embeds: [embed] }).catch(err => {
+          console.warn(`[Dashboard] Failed to send dashboard to channel ${channelId}: ${err.message}`);
+          return null;
+        });
+
+        if (newMsg) {
+          setConfig('dashboard_message_id', newMsg.id, guild_id);
+          console.log(`[Dashboard] Updated dashboard in #${channel.name} (${channel.guild.name}).`);
+        }
+      } catch (guildErr) {
+        console.error(`[Dashboard] Error updating dashboard for channel ${channelId}:`, guildErr.message);
+      }
     }
   } catch (err) {
     console.error('[Dashboard] updateDashboard critical error:', err);
@@ -355,7 +364,6 @@ async function updateDashboard(client) {
 function startRatingSync(client) {
   let isRunning = false;
 
-  // ── 5-min rating poller: only refreshes dashboard if a rating actually changed
   const poll = async () => {
     if (isRunning) return;
     isRunning = true;
@@ -363,7 +371,7 @@ function startRatingSync(client) {
       console.log(`[RatingSync] Polling ratings...`);
       const changed = await syncAllRatings(client);
       if (changed) {
-        console.log('[RatingSync] Rating change detected — refreshing dashboard.');
+        console.log('[RatingSync] Rating change detected — refreshing dashboards.');
         await updateDashboard(client);
       }
     } catch (err) {
@@ -371,10 +379,9 @@ function startRatingSync(client) {
     } finally {
       isRunning = false;
     }
-    setTimeout(poll, 5 * 60 * 1000); // next check in 5 min
+    setTimeout(poll, 5 * 60 * 1000);
   };
 
-  // Refresh dashboard on startup after 5s so the leaderboard instantly reflects any code/sorting updates
   setTimeout(async () => {
     try {
       console.log('[RatingSync] Startup dashboard refresh...');
@@ -384,20 +391,21 @@ function startRatingSync(client) {
     }
   }, 5000);
 
-  // Start first poll 15s after boot
   setTimeout(poll, 15000);
 
-  // ── Daily 9 AM dashboard refresh (unconditional, keeps leaderboard fresh)
+  const TZ = process.env.TIMEZONE || 'UTC';
+
+  // Daily 9 AM dashboard refresh
   cron.schedule('0 9 * * *', async () => {
     try {
-      console.log('[RatingSync] Daily 9 AM dashboard refresh.');
+      console.log(`[RatingSync] Daily 9 AM dashboard refresh (${TZ}).`);
       await updateDashboard(client);
     } catch (err) {
       console.error('[RatingSync] Daily dashboard refresh error:', err.message);
     }
-  }, { timezone: 'Asia/Dhaka' });
+  }, { timezone: TZ });
 
-  console.log('[RatingSync] Started: ratings polled every 5 min (dashboard only updates on change or daily 9 AM).');
+  console.log(`[RatingSync] Started: ratings polled every 5 min (Timezone: ${TZ}).`);
 }
 
 function epochToDateStr(epoch, offset) {
@@ -465,6 +473,18 @@ function calculateMaxStreakForActivity(activityMap) {
  * Calculate the current and maximum consecutive days a Codeforces user has submitted at least one problem (any verdict).
  * Timezone-agnostic offset search is used to match Codeforces profile activity calendar and streaks exactly.
  */
+function getTzOffsetHours() {
+  try {
+    const tz = process.env.TIMEZONE || 'UTC';
+    const now = new Date();
+    const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const tzDate = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+    return Math.round((tzDate.getTime() - utcDate.getTime()) / 3600000);
+  } catch (_) {
+    return 0;
+  }
+}
+
 async function calculateCFStreak(handle) {
   try {
     const res = await axios.get(`${CF_BASE}/user.status?handle=${handle}&from=1&count=2000`, { timeout: 12000 });
@@ -472,7 +492,7 @@ async function calculateCFStreak(handle) {
 
     const subs = res.data.result.filter(sub => sub.creationTimeSeconds);
 
-    const offset = 6; // Asia/Dhaka
+    const offset = getTzOffsetHours();
     const activityMap = {};
     for (const sub of subs) {
       const dStr = epochToDateStr(sub.creationTimeSeconds, offset);
@@ -511,7 +531,7 @@ async function calculateACStreak(handle) {
 
     if (allSubs.length === 0) return { current: 0, max: 0 };
 
-    const offset = 6; // Asia/Dhaka
+    const offset = getTzOffsetHours();
     const activityMap = {};
     for (const sub of allSubs) {
       const dateStr = epochToDateStr(sub.epoch_second, offset);

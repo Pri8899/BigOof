@@ -7,6 +7,35 @@ const { getTargetChannel } = require('../utils/envHelper');
 
 let isPolling = false;
 
+async function broadcastGitHubEvent(client, user, embed) {
+  let sentAny = false;
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      const member = await guild.members.fetch(user.discord_id).catch(() => null);
+      if (!member) continue;
+
+      const targetChannel = await getTargetChannel(client, 'github_channel_id', 'GITHUB_CHANNEL_ID', guild.id);
+      if (targetChannel) {
+        await targetChannel.send({ embeds: [embed] }).catch(err => {
+          console.error(`[GitHubFeed] Error sending embed in ${guild.name}:`, err.message);
+        });
+        sentAny = true;
+      }
+    } catch (_) {}
+  }
+
+  // Fallback to global channel if no guild channel was found
+  if (!sentAny) {
+    const globalChannel = await getTargetChannel(client, 'github_channel_id', 'GITHUB_CHANNEL_ID');
+    if (globalChannel) {
+      await globalChannel.send({ embeds: [embed] }).catch(() => {});
+      sentAny = true;
+    }
+  }
+
+  return sentAny;
+}
+
 async function runGitHubFeed(client, specificDiscordId = null) {
   if (isPolling && !specificDiscordId) return { success: false, count: 0, reason: 'Already polling' };
   isPolling = true;
@@ -14,17 +43,6 @@ async function runGitHubFeed(client, specificDiscordId = null) {
   let postedCount = 0;
 
   try {
-    const channel = await getTargetChannel(
-      client,
-      'github_channel_id',
-      'GITHUB_CHANNEL_ID',
-      ['github', 'git-feed', 'git', 'commits']
-    );
-
-    if (!channel) {
-      return { success: false, count: 0, reason: 'GitHub channel not found. Use `/set-github-channel` to set it.' };
-    }
-
     let users = getAllUsers().filter(u => u.github_handle);
     if (specificDiscordId) {
       users = users.filter(u => u.discord_id === specificDiscordId);
@@ -67,15 +85,15 @@ async function runGitHubFeed(client, specificDiscordId = null) {
           const embed = buildGitHubActivityEmbed(user, event, extraDetails);
 
           try {
-            await channel.send({ embeds: [embed] });
-            postedCount++;
-            console.log(`[GitHubFeed] 🚀 Posted ${event.type} for ${user.github_handle} (${event.repo?.name || 'GitHub'})`);
+            const sent = await broadcastGitHubEvent(client, user, embed);
+            if (sent) postedCount++;
+            console.log(`[GitHubFeed] 🚀 Processed ${event.type} for ${user.github_handle} (${event.repo?.name || 'GitHub'})`);
 
             // Mark as processed in database
             db.prepare('INSERT OR IGNORE INTO processed_github_commits (sha, repo, author) VALUES (?, ?, ?)')
               .run(dedupKey, event.repo?.name || 'GitHub', user.github_handle);
           } catch (sendErr) {
-            console.error(`[GitHubFeed] Error sending embed to #${channel.name}:`, sendErr.message);
+            console.error(`[GitHubFeed] Error sending embed for ${user.github_handle}:`, sendErr.message);
           }
 
           // Small pause between multiple event sends

@@ -159,8 +159,20 @@ async function getTophUser(handle) {
 
 /**
  * Calculate Toph submission streak by scraping activity timestamps from profile page.
- * Uses Asia/Dhaka (UTC+6) timezone — same as CF/AC streak logic.
+ * Uses configured TIMEZONE — same as CF/AC streak logic.
  */
+function getTophTzOffset() {
+  try {
+    const tz = process.env.TIMEZONE || 'UTC';
+    const now = new Date();
+    const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const tzDate = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+    return Math.round((tzDate.getTime() - utcDate.getTime()) / 3600000);
+  } catch (_) {
+    return 0;
+  }
+}
+
 async function calculateTophStreak(handle) {
   try {
     const res = await tophGet(`https://toph.co/u/${handle}`);
@@ -173,8 +185,8 @@ async function calculateTophStreak(handle) {
 
     const activitiesHtml = activitiesPanelMatch[1];
 
-    // Build activity map: date -> count (UTC+6)
-    const OFFSET = 6; // Asia/Dhaka
+    // Build activity map: date -> count
+    const OFFSET = getTophTzOffset();
     const activityMap = {};
 
     const itemRegex = /<div class="fg-1 fs-1 fb-0">([\s\S]*?)<\/div>\s*<div[^>]*>\s*<span[^>]*data-timestamp=(\d+)[^>]*>/g;

@@ -1,11 +1,13 @@
-// tasks/dailyChallenge.js — Daily suggestions post at 9pm UTC+6 (15:00 UTC)
-// Posts CF details to #cp-suggestions and tracks First Blood
+// tasks/dailyChallenge.js — Daily suggestions post at 9pm
+// Posts CF details to configured suggest channels and tracks First Blood
 const cron = require('node-cron');
 const axios = require('axios');
 const { EmbedBuilder } = require('discord.js');
-const { getConfig, setDailyProblems, getDailyProblems, setFirstBlood, getAllUsers, setSweepAnnounced, getRatings } = require('../database/db');
+const { getConfig, setDailyProblems, getDailyProblems, setFirstBlood, getAllUsers, setSweepAnnounced, getRatings, getAllGuildConfigs } = require('../database/db');
 const { getCFProblems }       = require('../utils/codeforces');
 const { getValidId, getTargetChannel } = require('../utils/envHelper');
+
+const TIMEZONE = process.env.TIMEZONE || 'UTC';
 
 
 // CF tiers as requested
@@ -40,13 +42,10 @@ async function getMergedSolvedSet() {
 
 // ─── Post Daily Problem Recommendations ──────────────────────
 async function postDailySuggestions(client, targetDate = null) {
-  const channel = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID', ['suggestions', 'suggest'], '1505815730531340340');
-  if (!channel) return;
-
   let activeDate = targetDate;
   if (!activeDate) {
     const now = new Date();
-    const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', hour: 'numeric', hour12: false });
+    const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: 'numeric', hour12: false });
     const currentHour = parseInt(formatterHour.format(now), 10);
     activeDate = now;
     if (currentHour < 21) {
@@ -55,10 +54,10 @@ async function postDailySuggestions(client, targetDate = null) {
   }
 
   const today = activeDate.toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Dhaka'
+    weekday: 'long', month: 'long', day: 'numeric', timeZone: TIMEZONE
   });
 
-  const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
   const todayDateStr = formatterDate.format(activeDate);
 
   // Check if suggestions are already generated in the database
@@ -164,11 +163,7 @@ async function postDailySuggestions(client, targetDate = null) {
     return;
   }
 
-
   // ── Codeforces Section ──
-  const { getPlatformEmojis } = require('../utils/emojis');
-  const emojis = await getPlatformEmojis(channel.guild);
-
   const cfEmbed = new EmbedBuilder()
     .setColor(0x2B2D31)
     .setAuthor({ name: 'Codeforces Daily Challenges', iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png' })
@@ -183,33 +178,72 @@ async function postDailySuggestions(client, targetDate = null) {
   if (p4) cfEmbed.addFields({ name: `⚡ Level 4 (Rating ${p4.rating})`, value: `**[${p4.name}](${p4.url})**\n\`${p4.tags.join(', ') || 'N/A'}\``, inline: false });
   if (p5) cfEmbed.addFields({ name: `👑 Level 5 (Rating ${p5.rating})`, value: `**[${p5.name}](${p5.url})**\n\`${p5.tags.join(', ') || 'N/A'}\``, inline: false });
 
-  // Clean up old suggestion messages
-  try {
-    const messages = await channel.messages.fetch({ limit: 50 });
-    const oldMessages = [...messages.values()].filter(m => 
-      m.author.id === client.user.id && 
-      m.embeds.length > 0 && 
-      ((m.embeds[0].title && m.embeds[0].title.includes('Daily Problem Suggestions')) ||
-       (m.embeds[0].description && m.embeds[0].description.includes('Daily Problem Suggestions')))
-    );
-    for (const msg of oldMessages) {
-      await msg.delete().catch(() => {});
+  // Collect target channels across all guilds
+  const targetChannels = [];
+  const guildConfigs = getAllGuildConfigs('suggest_channel_id');
+  for (const row of guildConfigs) {
+    if (row.guild_id && row.guild_id !== 'global' && row.value) {
+      const ch = await client.channels.fetch(row.value).catch(() => null);
+      if (ch && !targetChannels.some(c => c.id === ch.id)) {
+        targetChannels.push(ch);
+      }
     }
-  } catch (err) {
-    console.warn('[Suggest] Failed to clean up old messages:', err.message);
   }
 
-  await channel.send({ content: '@everyone', embeds: [cfEmbed] }).catch(() => {});
-  console.log('[Suggest] Posted daily suggestions.');
+  // Fallback check (global config or env)
+  if (targetChannels.length === 0) {
+    const fallbackChannel = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID');
+    if (fallbackChannel) targetChannels.push(fallbackChannel);
+  }
+
+  if (targetChannels.length === 0) {
+    console.log('[Suggest] No suggest channels configured across any guilds.');
+    return;
+  }
+
+  for (const channel of targetChannels) {
+    // Clean up old suggestion messages
+    try {
+      const messages = await channel.messages.fetch({ limit: 50 });
+      const oldMessages = [...messages.values()].filter(m => 
+        m.author.id === client.user.id && 
+        m.embeds.length > 0 && 
+        ((m.embeds[0].title && m.embeds[0].title.includes('Daily Problem Suggestions')) ||
+         (m.embeds[0].description && m.embeds[0].description.includes('Daily Problem Suggestions')))
+      );
+      for (const msg of oldMessages) {
+        await msg.delete().catch(() => {});
+      }
+    } catch (err) {
+      console.warn(`[Suggest] Failed to clean up old messages in #${channel.name}:`, err.message);
+    }
+
+    await channel.send({ content: '@everyone', embeds: [cfEmbed] }).catch(err => {
+      console.warn(`[Suggest] Failed to send with @everyone in #${channel.name}, retrying without mention:`, err.message);
+      return channel.send({ embeds: [cfEmbed] }).catch(() => {});
+    });
+  }
+
+  console.log(`[Suggest] Posted daily suggestions to ${targetChannels.length} channel(s).`);
 }
 
-// Calculate active cycle window (9pm Dhaka to 9pm Dhaka next day, which corresponds to 15:00 UTC to 15:00 UTC)
+// Calculate active cycle window (21:00 local time on activeDate to 21:00 next day)
 function getActiveCycleWindow(activeDate) {
-  const activeYear = parseInt(activeDate.toLocaleDateString('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric' }), 10);
-  const activeMonth = parseInt(activeDate.toLocaleDateString('en-US', { timeZone: 'Asia/Dhaka', month: 'numeric' }), 10);
-  const activeDay = parseInt(activeDate.toLocaleDateString('en-US', { timeZone: 'Asia/Dhaka', day: 'numeric' }), 10);
-  
-  const startTimeUtc = Date.UTC(activeYear, activeMonth - 1, activeDay, 15, 0, 0) / 1000;
+  const formatterYMD = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const parts = formatterYMD.formatToParts(activeDate);
+  const partMap = {};
+  for (const p of parts) partMap[p.type] = p.value;
+
+  const approx = new Date(Date.UTC(parseInt(partMap.year, 10), parseInt(partMap.month, 10) - 1, parseInt(partMap.day, 10), 21, 0, 0));
+  const getLocalHour = (d) => {
+    const f = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: 'numeric', minute: 'numeric', hour12: false });
+    const pList = f.formatToParts(d);
+    const h = parseInt(pList.find(p => p.type === 'hour').value, 10);
+    const m = parseInt(pList.find(p => p.type === 'minute').value, 10);
+    return h * 60 + m;
+  };
+  const diffMinutes = (21 * 60) - getLocalHour(approx);
+  const startTimeUtc = Math.floor((approx.getTime() + diffMinutes * 60 * 1000) / 1000);
   const endTimeUtc = startTimeUtc + 24 * 60 * 60;
   return { startTimeUtc, endTimeUtc };
 }
@@ -218,7 +252,7 @@ function getActiveCycleWindow(activeDate) {
 async function checkFirstBloods(client) {
   try {
     const now = new Date();
-    const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', hour: 'numeric', hour12: false });
+    const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: 'numeric', hour12: false });
     const currentHour = parseInt(formatterHour.format(now), 10);
     
     let activeDate = now;
@@ -226,17 +260,13 @@ async function checkFirstBloods(client) {
       activeDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     }
     
-    const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
     const activeDateStr = formatterDate.format(activeDate);
     
     const daily = getDailyProblems(activeDateStr);
     if (!daily) return; // No problems posted for active date
 
     const { startTimeUtc, endTimeUtc } = getActiveCycleWindow(activeDate);
-
-    const channel = await getTargetChannel(client, 'general_channel_id', 'GENERAL_CHANNEL_ID', ['general', 'main'], '1505614835650658355');
-    if (!channel) return;
-
 
     const users = getAllUsers().filter(u => u.cf_handle);
     const problemsToCheck = [
@@ -284,7 +314,7 @@ async function checkFirstBloods(client) {
                   
                   const embed = new EmbedBuilder()
                     .setColor(0xE74C3C)
-                    .setAuthor({ name: 'FIRST BLOOD ACHIVED! 🩸', iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png' })
+                    .setAuthor({ name: 'FIRST BLOOD ACHIEVED! 🩸', iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png' })
                     .setDescription(`**<@${user.discord_id}>** is the absolute first person to solve the **${p.label}** daily challenge!\n\n**Problem:** [${sub.problem.name}](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})`)
                     .addFields(
                       { name: '⏱️ Time', value: `${timeSec} s`, inline: true },
@@ -293,7 +323,22 @@ async function checkFirstBloods(client) {
                     .setThumbnail(`https://cdn-icons-png.flaticon.com/512/3112/3112946.png`)
                     .setTimestamp();
 
-                  await channel.send({ content: `<@${user.discord_id}>`, embeds: [embed] }).catch(() => {});
+                  // Broadcast First Blood across user's mutual guilds
+                  for (const guild of client.guilds.cache.values()) {
+                    try {
+                      const member = await guild.members.fetch(user.discord_id).catch(() => null);
+                      if (!member) continue;
+
+                      const targetChannel = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID', guild.id)
+                        || await getTargetChannel(client, 'feed_channel_id', 'FEED_CHANNEL_ID', guild.id)
+                        || await getTargetChannel(client, 'general_channel_id', 'GENERAL_CHANNEL_ID', guild.id);
+
+                      if (targetChannel) {
+                        await targetChannel.send({ content: `<@${user.discord_id}>`, embeds: [embed] }).catch(() => {});
+                      }
+                    } catch (_) {}
+                  }
+
                   console.log(`[FirstBlood] Announced ${user.cf_handle} for problem ${pId}`);
                 }
               }
@@ -341,7 +386,22 @@ async function checkFirstBloods(client) {
               .setFooter({ text: 'A legendary achievement!' })
               .setTimestamp();
 
-            await channel.send({ content: `**<@${user.discord_id}> just swept the daily challenges!** 🔥`, embeds: [sweepEmbed] }).catch(() => {});
+            // Broadcast sweep across user's mutual guilds
+            for (const guild of client.guilds.cache.values()) {
+              try {
+                const member = await guild.members.fetch(user.discord_id).catch(() => null);
+                if (!member) continue;
+
+                const targetChannel = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID', guild.id)
+                  || await getTargetChannel(client, 'feed_channel_id', 'FEED_CHANNEL_ID', guild.id)
+                  || await getTargetChannel(client, 'general_channel_id', 'GENERAL_CHANNEL_ID', guild.id);
+
+                if (targetChannel) {
+                  await targetChannel.send({ content: `**<@${user.discord_id}> just swept the daily challenges!** 🔥`, embeds: [sweepEmbed] }).catch(() => {});
+                }
+              } catch (_) {}
+            }
+
             console.log(`[Sweep] Announced ${user.cf_handle} for daily sweep of date ${activeDateStr}`);
           }
         }
@@ -361,19 +421,19 @@ async function runOneTimeStartupReset(client) {}
 
 // ─── Scheduler ───────────────────────────────────────────────
 function startDailyChallenge(client) {
-  // 9:00 PM (21:00) every day in Asia/Dhaka timezone
+  // 9:00 PM (21:00) every day in configured timezone
   cron.schedule('0 21 * * *', async () => {
     try {
-      console.log('[Daily] Scheduled 9 PM daily suggestions trigger. Posting...');
+      console.log(`[Daily] Scheduled 9 PM daily suggestions trigger (${TIMEZONE}). Posting...`);
       await postDailySuggestions(client);
       
       const { setConfig } = require('../database/db');
-      const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
-      setConfig('last_suggest_post_date', formatterDate.format(new Date()));
+      const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
+      setConfig('last_suggest_post_date', formatterDate.format(new Date()), 'global');
     } catch (err) {
       console.error('[Daily Scheduler Error]', err);
     }
-  }, { timezone: 'Asia/Dhaka' });
+  }, { timezone: TIMEZONE });
 
   // Run immediately on boot with a 10s delay to perform catch-up if needed
   setTimeout(async () => {
@@ -382,18 +442,18 @@ function startDailyChallenge(client) {
       await runOneTimeStartupReset(client);
 
       // 2. Then perform the catch-up check
-      const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit' });
-      const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', hour: 'numeric', hour12: false });
+      const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
+      const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: 'numeric', hour12: false });
       
       const todayDateStr = formatterDate.format(new Date());
       const currentHour = parseInt(formatterHour.format(new Date()), 10);
       const { getConfig, setConfig } = require('../database/db');
-      const lastPostDate = getConfig('last_suggest_post_date');
+      const lastPostDate = getConfig('last_suggest_post_date', 'global');
       
       if (currentHour >= 21 && lastPostDate !== todayDateStr) {
-        console.log('[Daily] Startup catch-up check: past 9:00 PM Dhaka and not posted today. Posting...');
+        console.log(`[Daily] Startup catch-up check: past 9:00 PM (${TIMEZONE}) and not posted today. Posting...`);
         await postDailySuggestions(client);
-        setConfig('last_suggest_post_date', todayDateStr);
+        setConfig('last_suggest_post_date', todayDateStr, 'global');
       }
     } catch (err) {
       console.error('[Daily Startup Catch-up Error]', err);
@@ -405,7 +465,7 @@ function startDailyChallenge(client) {
     await checkFirstBloods(client);
   });
 
-  console.log('[Daily] Strict 9 PM daily cron scheduler & 5-min First Blood checker started.');
+  console.log(`[Daily] Daily cron scheduler (${TIMEZONE}) & 5-min First Blood checker started.`);
 }
 
 module.exports = { startDailyChallenge, postDailySuggestions, checkFirstBloods };

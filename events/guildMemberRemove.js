@@ -27,14 +27,11 @@ module.exports = {
 
     const handlesStr = linkedHandles.length > 0 ? linkedHandles.join(', ') : 'None';
 
-    // Completely log out and wipe all user data from the server database
-    purgeUser(userId);
+    console.log(`[guildMemberRemove] 🚪 ${displayName} left or was removed from ${guildName}.`);
 
-    console.log(`[guildMemberRemove] 🚪 ${displayName} left or was kicked/banned from ${guildName}. All linked accounts [${handlesStr}] were logged out and purged.`);
-
-    // Immediately update dashboard to remove member from server leaderboard
+    // Update the dashboard for this guild to reflect current member roster
     if (discordClient) {
-      updateDashboard(discordClient).catch(err =>
+      updateDashboard(discordClient, member.guild.id).catch(err =>
         console.error('[guildMemberRemove] Error updating dashboard after member leave:', err.message)
       );
     }

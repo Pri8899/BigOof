@@ -12,9 +12,17 @@ module.exports = {
     await interaction.deferReply();
 
     try {
-      const allUsers = getAllUsers().filter(u => u.cf_handle);
+      let memberIds = new Set(interaction.guild.members.cache.keys());
+      if (memberIds.size <= 1) {
+        try {
+          const fetched = await interaction.guild.members.fetch();
+          memberIds = new Set(fetched.keys());
+        } catch (_) {}
+      }
+
+      const allUsers = getAllUsers().filter(u => u.cf_handle && memberIds.has(u.discord_id));
       if (allUsers.length < 3) {
-        return interaction.editReply('Not enough linked Codeforces users to build teams! You need at least 3.');
+        return interaction.editReply('Not enough linked Codeforces users in this server to build teams! You need at least 3.');
       }
 
       // 1. Get CF ratings from database

@@ -1,276 +1,336 @@
-# 🏆 CP-Bot: The Ultimate Autonomous Competitive Programming Discord Engine
+<div align="center">
+  <img src="assets/bot-avatar.png" width="160" height="160" alt="CP-Bot Logo" style="border-radius: 50%; box-shadow: 0 4px 20px rgba(0,0,0,0.4);" />
+  <h1>🏆 Competitive Programming Discord Bot</h1>
+  <p><b>An autonomous, multi-tenant Discord companion for competitive programming clubs, university communities, and ICPC teams.</b></p>
 
-Welcome to the **CP-Bot**, a highly advanced, fully autonomous Discord bot engineered from the ground up for Competitive Programming (CP) communities. 
-
-Whether your server is a small college coding club or a massive regional hub for CP enthusiasts, CP-Bot completely automates the tracking, gamification, and organization of your members' coding journeys across platforms like **Codeforces** and **AtCoder**.
+  <p>
+    <a href="https://discord.js.org/"><img src="https://img.shields.io/badge/discord.js-v14.16-blue?logo=discord&logoColor=white" alt="Discord.js" /></a>
+    <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node->=18.0.0-green?logo=node.js&logoColor=white" alt="Node.js" /></a>
+    <a href="https://github.com/WiseLibs/better-sqlite3"><img src="https://img.shields.io/badge/sqlite-better--sqlite3-003B57?logo=sqlite&logoColor=white" alt="SQLite" /></a>
+    <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  </p>
+</div>
 
 ---
 
 ## 📖 Table of Contents
 
-1. [Vision & Philosophy](#-vision--philosophy)
-2. [The Autonomous Engine (Cron Jobs)](#-the-autonomous-engine-cron-jobs)
-3. [Ranking & Leaderboard System](#-ranking--leaderboard-system)
-4. [Gamification: VS Matches & Virtual Contests](#-gamification-vs-matches--virtual-contests)
-5. [Analytics & Insights](#-analytics--insights)
-6. [Comprehensive Command Reference](#-comprehensive-command-reference)
-7. [Database Architecture & Schema](#-database-architecture--schema)
-8. [API Integrations & Caching](#-api-integrations--caching)
-9. [Complete Setup & Installation Guide](#-complete-setup--installation-guide)
-10. [Deployment (Railway / VPS)](#-deployment-railway--vps)
-11. [Roadmap](#-roadmap)
+- [Overview](#-overview)
+- [System Architecture](#-system-architecture)
+- [Key Features](#-key-features)
+  - [⚡ Live Submission Tracker](#-live-submission-tracker)
+  - [📊 Dynamic Dashboard & Leaderboard](#-dynamic-dashboard--leaderboard)
+  - [🩸 Daily Challenges & First Blood](#-daily-challenges--first-blood)
+  - [📅 Contest Radar & Smart Countdown Alerts](#-contest-radar--smart-countdown-alerts)
+  - [⚔️ Codeforces Duels & Virtual Contests](#️-codeforces-duels--virtual-contests)
+  - [🤖 ICPC Team Builder & Skill Radar](#-icpc-team-builder--skill-radar)
+  - [🐙 GitHub Developer Feed](#-github-developer-feed)
+- [Command Reference](#-command-reference)
+  - [👤 User & Profile Commands](#-user--profile-commands)
+  - [📈 Discovery & Statistics](#-discovery--statistics)
+  - [🎮 Versus & Virtual Contests](#-versus--virtual-contests)
+  - [⚙️ Server Administration](#️-server-administration)
+  - [🔒 Bot Owner Operations](#-bot-owner-operations)
+- [Installation & Setup](#-installation--setup)
+  - [1. Discord Developer Portal Setup](#1-discord-developer-portal-setup)
+  - [2. Local Setup](#2-local-setup)
+  - [3. Setting the Bot Avatar & Profile](#3-setting-the-bot-avatar--profile)
+  - [4. Deploying Slash Commands](#4-deploying-slash-commands)
+- [Production Deployment](#-production-deployment)
+  - [Option A: Docker & Docker Compose (Recommended)](#option-a-docker--docker-compose-recommended)
+  - [Option B: Railway / PaaS](#option-b-railway--paas)
+  - [Option C: Linux VPS with pm2](#option-c-linux-vps-with-pm2)
+- [Configuration Reference](#-configuration-reference)
+- [Database Architecture](#-database-architecture)
+- [Troubleshooting & FAQ](#-troubleshooting--faq)
+- [Contributing](#-contributing)
+- [License](#-license)
 
 ---
 
-## 👁️ Vision & Philosophy
+## 🌟 Overview
 
-Managing a Competitive Programming Discord server manually is exhausting. Tracking who solved what, announcing upcoming contests, updating roles when someone reaches a new rank, and keeping members engaged takes constant administrative effort.
+**CP-Bot** is an open-source, production-ready Discord bot engineered specifically for competitive programmers and university coding clubs. Built with **Discord.js v14**, **SQLite (via `better-sqlite3`)**, and an autonomous multi-task background scheduler, it tracks coding journeys across **Codeforces**, **AtCoder**, **Toph**, and **GitHub** with zero manual intervention required.
 
-**CP-Bot changes everything.** Once deployed and configured, it requires **zero human intervention**. It autonomously orchestrates the server by assigning roles, posting live feeds, updating leaderboards, and running daily algorithmic challenges. 
-
-Built with **Discord.js v14** and **SQLite**, it uses a highly modular background cron system that guarantees precision timing without hitting API rate limits.
+Designed from the ground up with a **multi-tenant architecture**: any Discord server can invite the bot and configure its own channels, role tiers, and alert preferences independently without any cross-server data leaks or hardcoded channel bindings.
 
 ---
 
-## ⚙️ The Autonomous Engine (Cron Jobs)
+## 🏛 System Architecture
 
-The heart of CP-Bot is its `tasks/` directory. Unlike traditional bots that only respond to commands, CP-Bot acts as an active agent, continuously polling and pushing updates based on an internal clock.
+```mermaid
+flowchart TD
+    subgraph Discord ["Discord Cloud"]
+        User["Discord User"]
+        Guild["Discord Server (Guild)"]
+    end
 
-### 1. The Minute-by-Minute Loop (Live Feeds & Games)
-- **Live Submission Feed (`submissionFeed.js`):** Every 60 seconds, the bot queries the Codeforces and AtCoder APIs for recent submissions of all linked users. If it detects a new "Accepted" verdict, it instantly broadcasts an embed in the designated Feed channel. It also instantaneously calculates and updates the user's active daily solving streak!
-- **Match Poller (`vsPoller.js`):** Monitors active 1v1 and group Versus (`/vs`) matches. It tracks the time remaining, queries the Codeforces API to see who solved the assigned problems first, updates the live scoreboard, and gracefully concludes the match when time expires.
-- **First Blood Tracker (`dailyChallenge.js`):** Every 5 minutes, the bot checks if any member has solved the current day's Daily Challenges. The first solver gets a server-wide "First Blood 🩸" announcement.
+    subgraph BotEngine ["CP-Bot Core Engine"]
+        Gateway["Discord.js Gateway Client"]
+        CmdRouter["Slash Command Router (25 Commands)"]
+        
+        subgraph CronTasks ["Autonomous Background Scheduler"]
+            FeedTask["Submission Feed (Every 60s)"]
+            ContestTask["Contest Radar (Hourly)"]
+            DailyTask["Daily Challenge & First Blood (5 min / 21:00)"]
+            RatingTask["Rating & Rank Sync (09:00 local)"]
+            GitHubTask["GitHub Stream (Every 2 min)"]
+            BackupTask["Automated DB Backups (Hourly)"]
+        end
+        
+        EmbedEngine["Dynamic Embed & Chart Engine"]
+    end
 
-### 2. The Hourly Loop (Contest Radar)
-- **Contest Fetcher (`contestFetcher.js`):** At the top of every hour, the bot queries the Codeforces and AtCoder schedules. It cross-references its internal `notified_contests` database to handle contest delays and renaming dynamically.
-- **Radar Updates:** It maintains a single pinned message in the Contest channel, keeping it constantly updated with upcoming contests.
-- **Automated Pings:** Exactly 24 hours and 1 hour before a contest starts, the bot automatically pings the `<@&ContestPing>` role (or DMs users) to ensure nobody misses a rated round.
+    subgraph DataStore ["Persistence Layer"]
+        DB[("SQLite Database (WAL Mode)")]
+        GuildConfig["guild_config (Multi-Tenant Key-Value)"]
+        Users["users & ratings & streaks"]
+        ContestStore["custom_contests & notified_contests"]
+    end
 
-### 3. The Daily Loop (Leaderboards & Challenges)
-- **Morning Sync (9:00 AM):** The bot performs a deep sync of all users (`ratingSync.js`). It updates everyone's max ratings, total solved counts, and calculates if any streaks were broken due to inactivity on the previous day. The main Dashboard embed is refreshed.
-- **Nightly Challenges (9:00 PM):** The bot randomly selects three Codeforces problems (e.g., 800, 1000, and 1200 difficulty) that have a low solve-rate among server members. It posts them as the "Daily Challenges".
+    subgraph Platforms ["External Platform APIs"]
+        CF["Codeforces API"]
+        AC["AtCoder Problems API"]
+        Toph["Toph Platform"]
+        GH["GitHub REST API"]
+    end
 
-### 4. The Weekly Loop (Sunday Wrap-Up)
-- **Weekly Wrap-Up (`weeklyWrapup.js`):** Every Sunday at midnight, the bot compares current user ratings/solves against the previous week's snapshot. It announces the "Top Climbers" (most rating gained) and "Top Grinders" (most problems solved).
+    User <-->|Slash Commands| Gateway
+    Gateway --> CmdRouter
+    CmdRouter --> EmbedEngine
+    CmdRouter <--> DB
 
----
-
-## 🏆 Ranking & Leaderboard System
-
-### Exact Rank Roles
-When a user links their account, the bot automatically creates a Discord Role matching their exact Codeforces Rank (e.g., *Newbie*, *Pupil*, *Specialist*, *Expert*, *Candidate Master*, etc.). 
-- **Exact Colors:** The roles are painted using the exact hex codes used on the Codeforces website.
-- **Auto-Promotion:** If a user gains rating in a contest and promotes to a new rank, the bot automatically strips their old role and grants them their new rank role during the next sync.
-
-### The Autonomous Dashboard
-Instead of users constantly typing `/leaderboard`, the bot maintains a permanent, auto-updating dashboard in a designated channel.
-The dashboard sorts members by:
-1. **Global Codeforces Rating**
-2. **AtCoder Rating**
-3. **Total Problems Solved**
-4. **Current Active Streaks (🔥)**
-
-### Timezone-Aware Streaks
-Streaks are fundamental to gamification. The bot tracks consecutive days a user has solved at least one problem. The day boundary is rigidly set to midnight in the local configured timezone, ensuring fair streak keeping. Users receive milestone streak roles (7 Days, 30 Days, 100 Days).
-
----
-
-## ⚔️ Gamification: VS Matches & Virtual Contests
-
-To foster healthy competition, CP-Bot introduces native matchmaking and contest hosting directly inside Discord.
-
-### Versus Matches (`/vs`)
-Members can challenge each other to live coding duels.
-1. **Creation:** User A types `/vs create rating:1400 duration:60`.
-2. **Lobby:** The bot opens a lobby. User B (and others) can click "Join Match" on the embed.
-3. **Problem Selection:** Once started, the bot fetches a random 1400-rated Codeforces problem that **none** of the participants have solved before.
-4. **Live Scoreboard:** The bot tracks submissions in real-time. The first person to get an Accepted verdict wins the match and claims the glory!
-
-### Virtual Contests (`/vc`)
-For server-wide practice, admins can start a Virtual Contest.
-1. **Start:** `/vc-start duration:120 difficulty:div2`
-2. **Problemset:** The bot builds a balanced 5-problem set (A, B, C, D, E) mimicking a real Codeforces Div. 2 round.
-3. **Participation:** Members type `/vc-join` to enter.
-4. **Tracking:** The bot tracks exactly how many problems each participant solves during the 2-hour window and ranks them by finish time.
-
-### AI Team Builder (`/build-teams`)
-Preparing for ICPC? The `/build-teams` command analyzes the Codeforces histories of all interested members. It maps their strongest tags (Math, DP, Graphs, Greedy) and runs a Depth-First Search (DFS) algorithm to group members into balanced 3-person teams with diverse, non-overlapping skill sets.
+    CronTasks <--> Platforms
+    CronTasks <--> DB
+    CronTasks --> EmbedEngine
+    EmbedEngine -->|Broadcast Embeds & Alerts| Guild
+    DB --- GuildConfig
+    DB --- Users
+    DB --- ContestStore
+```
 
 ---
 
-## 🔎 Analytics & Insights
+## ✨ Key Features
 
-### `/skills <handle>`
-This command generates a gorgeous **Radar Chart** image natively in Discord. It scans a user's entire Codeforces submission history, tallies up the tags of their solved problems, and plots their proficiency in areas like Data Structures, Dynamic Programming, Math, and Strings.
+### ⚡ Live Submission Tracker
+- Continuously polls Codeforces, AtCoder, and Toph for newly submitted solutions.
+- When an `AC` (Accepted) verdict is verified, the bot broadcasts a celebratory announcement embed to the server's configured feed channel with problem tags, runtime, memory, and difficulty rating.
+- Automatically calculates and updates the solver's active daily solving streak.
 
-### `/graph <handle>`
-Fetches a user's entire rating history from the Codeforces API and plots a 2D line graph over time, overlaying the background colors of the Codeforces rank tiers.
+### 📊 Dynamic Dashboard & Leaderboard
+- Maintains a live, pinned dashboard in your designated channel.
+- Displays server members categorized by official Codeforces rank tiers (Newbie to Legendary Grandmaster) and active streaks.
+- Supports `/leaderboard` on-demand with sorting by rating, solves count, or active daily streak.
 
-### `/whosolved <problem_link>`
-Stuck on a problem and need a hint? Paste the link into this command. The bot will scan the server's database and list every single member in the Discord who has an Accepted verdict on that exact problem, telling you exactly who to DM for help.
+### 🩸 Daily Challenges & First Blood
+- Posts a curated problem set every evening tailored to your server's average rating range.
+- **First Blood 🩸:** The first community member to submit an Accepted solution on Codeforces is recognized with a special instant celebration embed.
+- Tracks daily problem sweeps when members solve all daily challenges.
+
+### 📅 Contest Radar & Smart Countdown Alerts
+- Aggregates upcoming contest schedules across Codeforces, AtCoder, Toph, and admin-added custom contests.
+- Keeps a pinned radar embed in your contest channel.
+- Automatically dispatches countdown reminder pings **24 hours** and **1 hour** prior to contest start.
+
+### ⚔️ Codeforces Duels & Virtual Contests
+- **Versus Mode (`/vs`):** Start 1v1 or multiplayer programming duels. Players receive a problem matched to their target difficulty and race to submit an Accepted solution within the time limit.
+- **Virtual Contests (`/vc`):** Organize server-wide simulated contest rounds featuring balanced problemsets, live timers, and post-round scoreboards.
+
+### 🤖 ICPC Team Builder & Skill Radar
+- **Skill Radar (`/skills`):** Visualizes individual member proficiencies across algorithmic categories (Dynamic Programming, Graph Theory, Math, Data Structures, Greedy, etc.) as an RPG-style stat sheet.
+- **ICPC Team Builder (`/build-teams`):** Uses diversity and complementarity heuristics to auto-form balanced 3-person teams based on solved tag profiles.
+
+### 🐙 GitHub Developer Feed
+- Monitors linked members' GitHub public activity.
+- Broadcasts new repository creation, commit pushes, and pull requests to a dedicated developer channel.
 
 ---
 
-## 📚 Comprehensive Command Reference
+## 📚 Command Reference
 
-### 👤 User Account Commands
+### 👤 User & Profile Commands
+
 | Command | Options | Description |
 |---|---|---|
-| `/link` | `platform` (Codeforces/AtCoder), `handle` | Links a CP account to your Discord ID. Instantly updates the dashboard and assigns rank roles. |
-| `/unlink` | `platform` | Removes a linked account and deletes your history from the local database. |
-| `/profile` | `user` (Optional) | Displays an elegant summary card of a user's ratings, max ratings, total solves, and current streaks. |
+| `/link` | `platform` (Codeforces / AtCoder / Toph / GitHub), `handle` | Links your competitive programming or GitHub account to your Discord profile. |
+| `/unlink` | `platform` | Unlinks a competitive programming or GitHub account. |
+| `/profile` | `user` *(optional)* | Displays ratings, max ratings, platform ranks, total solves, and current streak. |
+| `/solved` | `user` *(optional)* | Visualizes Codeforces solves grouped by problem rating and difficulty bracket. |
+| `/github` | `user` *(optional)* | Displays GitHub statistics, top repositories, recent commits, and contribution metrics. |
 
-### 📊 Statistics & Analytics Commands
+### 📈 Discovery & Statistics
+
 | Command | Options | Description |
 |---|---|---|
-| `/leaderboard` | None | Generates an on-demand, paginated leaderboard of all server members. |
-| `/contests` | `platform` (Optional) | Fetches the upcoming contest radar to your current channel. |
-| `/graph` | `handle` | Generates a rating history line graph. |
-| `/skills` | `handle` | Generates a radar chart of CP topic proficiencies. |
-| `/whosolved` | `problem_link` | Finds all server members who have solved a specific problem. |
+| `/leaderboard` | None | Displays the server leaderboard ranked by rating, solves, and active streaks. |
+| `/contests` | `platform` *(optional)* | Displays upcoming contests filtered by platform (All, Codeforces, AtCoder, Toph, Custom). |
+| `/graph` | `handle`, `platform` *(optional)* | Renders a visual rating progression chart over time. |
+| `/skills` | `handle` | Generates a topic proficiency radar sheet (DP, Math, Graphs, Trees, Strings, etc.). |
+| `/whosolved` | `problem_link` | Searches the server database to reveal all members who solved a given problem. |
+| `/suggest` | `rating` *(optional)*, `tag` *(optional)* | Recommends an unsolved Codeforces problem tailored to your rating level. |
+| `/ask-help` | `problem`, `details` *(optional)* | Posts a formatted help request asking community members for hints or debugging assistance. |
+| `/help` | None | Interactive guide featuring category dropdowns explaining all bot features. |
 
-### 🎮 Gamification Commands
+### 🎮 Versus & Virtual Contests
+
 | Command | Options | Description |
 |---|---|---|
-| `/suggest` | `tag` (Optional), `difficulty` (Optional) | The bot queries the CF API to find a problem you haven't solved matching the criteria. |
-| `/vs create` | `rating`, `duration`, `tag` (Optional) | Opens a VS Match lobby. |
-| `/vs join` | `match_id` | Joins an open match lobby. |
-| `/vs start` | `match_id` | Starts the match and reveals the problem. |
-| `/vs cancel` | `match_id` | Cancels a pending lobby. |
-| `/vc-start` | `duration`, `difficulty` | Starts a server-wide Virtual Contest. |
-| `/vc-join` | None | Joins the active Virtual Contest. |
-| `/vc-end` | None | Force-ends an active Virtual Contest early. |
-| `/build-teams` | None | Generates balanced 3-person teams based on CF tags. |
+| `/vs create` | `rating`, `duration`, `tag` *(optional)* | Creates a new Versus duel lobby with custom rating and time limits. |
+| `/vs join` | `match_id` | Joins an open Versus match lobby. |
+| `/vs start` | `match_id` | Starts the Versus match, selects the problem, and opens the race. |
+| `/vs cancel` | `match_id` | Cancels a pending Versus duel. |
+| `/vc start` | `duration`, `difficulty` | Launches a server-wide Virtual Contest with a balanced problemset. |
+| `/vc end` | None | Concludes the active Virtual Contest and calculates final standings. |
+| `/vc status` | None | Displays the remaining time and standings for the active Virtual Contest. |
+| `/build-teams` | None | Analyzes member skill sets to form balanced 3-person ICPC teams. |
 
-### ⚙️ Admin Configuration Commands
-*Only accessible to users with the Administrator permission.*
+### ⚙️ Server Administration
+*Requires `Administrator` or `Manage Server` permission.*
+
 | Command | Options | Description |
 |---|---|---|
-| `/admin set-channel` | `type` (feed, radar, daily, dashboard), `channel` | Configures which Discord channels the background crons will post their automated messages to. |
+| `/set-channel` | `feature`, `channel` | Sets the target channel for `feed`, `dashboard`, `contest`, `rating`, `suggest`, `github`, `backup`, or `general`. |
+| `/view-channels` | None | Displays all currently configured bot channels for this server. |
+| `/setup-roles` | None | Automatically creates the base `CP` role, all 10 Codeforces rank tier roles (with official colors), and streak milestone roles. |
+| `/custom-contest` | `action` (add / edit / delete / list), ... | Manages custom server contests included in the radar and countdown pings. |
+| `/force-unlink` | `target`, `platform` | Unlinks an account on behalf of a server member and updates the server dashboard. |
+| `/announce` | `message`, `channel` *(optional)*, `ping` *(optional)* | Broadcasts a formatted announcement embed with optional `@everyone` mention. |
+
+### 🔒 Bot Owner Operations
+*Strictly restricted to the `OWNER_ID` defined in your environment.*
+
+| Command | Options | Description |
+|---|---|---|
+| `/set-bot` | `action` (avatar / username), `image` *(optional)*, `url` *(optional)*, `name` *(optional)* | Updates the bot application's avatar image or username across Discord. |
+| `/backupdb` | None | Manually triggers an immediate database backup to the backup channel. |
+| `/restoredb` | `source` (latest / attachment) | Restores the SQLite database from a backup snapshot. |
 
 ---
 
-## 🗄️ Database Architecture & Schema
+## 🚀 Installation & Setup
 
-CP-Bot uses **SQLite** (`better-sqlite3`) for blazing-fast, synchronous local data storage. The database leverages **Write-Ahead Logging (WAL)** for high concurrency.
+### 1. Discord Developer Portal Setup
 
-### Core Tables:
-- **`users`**: Maps Discord IDs to Codeforces and AtCoder handles.
-- **`ratings`**: Stores cached ratings, max ratings, rank titles, and solve counts to avoid spamming the APIs.
-- **`streaks`**: Tracks the `current_streak`, `max_streak`, and `last_active_date` for every user.
-- **`rating_history`**: Appends a new row every time a user's rating changes, used for weekly wrap-ups and analysis.
-- **`last_submissions`**: Stores the highest submission ID seen for a user to know where to resume polling for the Live Feed.
-- **`notified_contests`**: Caches upcoming contests. Includes `notified_24h` and `notified_1h` flags to prevent duplicate pings. Uses `ON CONFLICT DO UPDATE` to elegantly handle Codeforces contest rescheduling and renaming.
-- **`daily_problems`**: Stores the 3 problems randomly selected for the day and who got "First Blood" on them.
-- **`vs_matches` & `vs_participants`**: Ephemeral tables managing the state of live 1v1 duels.
-- **`virtual_contests` & `vc_participants`**: Manages active server-wide virtual contests.
-- **`guild_config`**: Key-value store for channel IDs and bot settings.
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and create a **New Application**.
+2. Navigate to the **Bot** tab:
+   - Click **Reset Token** to generate a bot token and copy it.
+   - Under **Privileged Gateway Intents**, enable:
+     - ✅ **Server Members Intent** (required to sync member roles and calculate server leaderboards).
+     - ✅ **Message Content Intent** (required for problem link parsing and channel interactions).
+3. Navigate to **OAuth2 > URL Generator**:
+   - Under **Scopes**: Select `bot` and `applications.commands`.
+   - Under **Bot Permissions**: Select `Administrator` (or *Manage Roles*, *Send Messages*, *Embed Links*, *Attach Files*, *Read Message History*).
+   - Copy the generated URL and open it in your browser to invite the bot to your server.
 
----
+### 2. Local Setup
 
-## 🌐 API Integrations & Caching
-
-Competitive Programming APIs (especially Codeforces) have strict rate limits. CP-Bot is specifically engineered to never get IP-banned.
-
-### Codeforces API (`https://codeforces.com/api/`)
-- **Problemset Caching:** Calling `problemset.problems` is incredibly heavy (returning thousands of problems). CP-Bot caches the entire problemset in memory and only refreshes it once every 6 hours. When generating VS Matches or Daily Problems, it filters locally from the cache!
-- **Batching & Delays:** When syncing 50+ users simultaneously, the bot batches requests using `Promise.all` in chunks of 5, injecting artificial 1-second delays between chunks to satisfy the CF API's 5-requests-per-second limit.
-- **Error Fallbacks:** If the CF API goes down (returns 503), the bot gracefully catches the error, preserves the user's existing data in SQLite, and tries again on the next cron cycle without crashing.
-
-### AtCoder API (`https://kenkoooo.com/atcoder/`)
-- The bot relies on the unofficial Kenkoooo API for AtCoder submissions and ratings. Similar caching and timeout logic is applied to ensure stability.
-
----
-
-## 🚀 Complete Setup & Installation Guide
-
-Follow these steps carefully to self-host the CP-Bot on your own machine or server.
-
-### Prerequisites
-- **Node.js** v18.16.0 or higher.
-- **npm** or **yarn** package manager.
-- Git.
-
-### Step 1: Discord Developer Portal
-1. Navigate to the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Click **New Application** and give it a name (e.g., "CP-Bot").
-3. Go to the **Bot** tab on the left.
-4. Click **Reset Token** and copy your **Bot Token**. Keep this highly secure.
-5. Scroll down to **Privileged Gateway Intents** and enable:
-   - ✅ **Server Members Intent** (Required to iterate over server members for syncing).
-   - ✅ **Message Content Intent** (Required for reading chat messages).
-6. Go to **OAuth2 > URL Generator**.
-7. Select scopes: `bot` and `applications.commands`.
-8. Select bot permissions: `Administrator` (or manually select Manage Roles, Send Messages, Embed Links, Attach Files, Manage Channels).
-9. Copy the generated URL and paste it into your browser to invite the bot to your server.
-10. Go to the **General Information** tab and copy your **Application ID (Client ID)**.
-
-### Step 2: Local Project Setup
-Open your terminal and run the following:
+Clone the repository and install dependencies:
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/DC-Bot.git
+git clone https://github.com/Pri8899/DC-Bot.git
 cd DC-Bot
-
-# Install dependencies (Discord.js, Axios, Better-SQLite3, Chart.js, Canvas, etc.)
 npm install
 ```
 
-### Step 3: Environment Configuration
-Create a file named `.env` in the root directory of the project:
+Copy the example environment configuration:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your values:
 
 ```env
-# Required Authentication
-DISCORD_TOKEN=your_bot_token_here
-CLIENT_ID=your_application_id_here
-GUILD_ID=your_discord_server_id_here
+# Required Discord Authentication
+DISCORD_TOKEN=your_discord_bot_token_here
+CLIENT_ID=your_application_client_id_here
 
-# (Optional initially) Channel IDs for autonomous posts
-# You can also set these inside Discord using /admin set-channel
-CONTEST_CHANNEL_ID=your_channel_id_here
-DASHBOARD_CHANNEL_ID=your_channel_id_here
-SUGGEST_CHANNEL_ID=your_channel_id_here
-FEED_CHANNEL_ID=your_channel_id_here
+# Bot Owner User ID (required for /set-bot, /backupdb, /restoredb)
+OWNER_ID=your_personal_discord_id_here
+
+# Deployment Scope (leave blank for global slash commands across all servers)
+GUILD_ID=
+
+# Optional: GitHub Token (raises rate limit from 60 to 5,000 requests/hour)
+GITHUB_TOKEN=
+
+# Optional: Server Timezone (defaults to UTC; e.g. Asia/Dhaka, America/New_York)
+TIMEZONE=UTC
 ```
 
-*To get a Channel ID, enable "Developer Mode" in your Discord User Settings, right-click a channel, and select "Copy Channel ID".*
+### 3. Setting the Bot Avatar & Profile
 
-### Step 4: Deploy Slash Commands
-Before running the bot, you must register the Slash Commands with Discord's API.
+To set the bot's Discord profile picture to the included high-resolution branding logo:
 
 ```bash
-node deploy-commands.js
+npm run set-avatar
 ```
-*You should see a success message indicating that 15+ commands were registered.*
 
-### Step 5: Start the Engine
+*(You can also use the `/set-bot avatar` slash command directly within Discord at any time).*
+
+### 4. Deploying Slash Commands
+
+Register all slash commands with Discord:
+
 ```bash
-node index.js
+npm run deploy
 ```
-*The console will light up, indicating that the SQLite database has initialized, the Codeforces caches are warming up, and the cron jobs have started ticking.*
+
+*(Note: When `GUILD_ID` is set in `.env`, commands update instantly on that specific server. When `GUILD_ID` is left empty, commands register globally across all servers).*
+
+Start the bot:
+
+```bash
+npm start
+```
+
+For live development with auto-reloading:
+
+```bash
+npm run dev
+```
 
 ---
 
-## ☁️ Deployment (Railway / VPS)
+## ☁️ Production Deployment
 
-Running the bot on your local PC means it turns off when you sleep. For 24/7 uptime, you must deploy it to a cloud provider.
+### Option A: Docker & Docker Compose (Recommended)
 
-### Deploying to Railway.app (Recommended)
-1. Push your code to a private GitHub repository.
-2. Go to [Railway](https://railway.app/), create a New Project, and connect your GitHub repo.
-3. Railway will automatically detect Node.js and run `npm install` & `node index.js`.
-4. **Environment Variables:** Go to the Variables tab in Railway and paste your `.env` variables.
+The repository includes a production multi-stage `Dockerfile` and `docker-compose.yml`:
 
-**CRITICAL: Persistent SQLite Storage**
-By default, Railway containers are ephemeral. Every time you push an update, the filesystem is wiped, meaning your `cpbot.db` database will be deleted!
-To fix this:
-1. In your Railway service settings, go to **Volumes**.
-2. Click **Create Volume** and map it to the Mount Path: `/data`
-3. The bot's `database/db.js` file is automatically programmed to detect the `/data` folder on Railway and will save the database there safely, persisting it across deployments!
+1. Ensure your `.env` file is configured in the project root.
+2. Build and start the bot container:
 
-### Deploying to a VPS (Ubuntu/Linux)
-If using a standard VPS (like DigitalOcean or AWS EC2), you should use `pm2` to keep the bot alive.
+```bash
+docker compose up -d
+```
+
+3. View live logs:
+
+```bash
+docker compose logs -f
+```
+
+The database is persisted in `./data/cpbot.db` on your host machine.
+
+### Option B: Railway / PaaS
+
+1. Fork or push your repository to GitHub.
+2. Create a new project in [Railway](https://railway.app/) and select your repository.
+3. In Railway **Variables**, add:
+   - `DISCORD_TOKEN`
+   - `CLIENT_ID`
+   - `OWNER_ID`
+   - `TIMEZONE`
+4. **Attach Persistent Storage:**
+   - In Railway service settings, add a **Persistent Volume** mounted at `/data`.
+   - The bot automatically detects Railway and stores the SQLite database at `/data/cpbot.db` to survive redeployments.
+
+### Option C: Linux VPS with pm2
+
+To run the bot persistently in the background on any Ubuntu/Debian server:
 
 ```bash
 npm install -g pm2
@@ -281,21 +341,77 @@ pm2 startup
 
 ---
 
-## 🔮 Roadmap
+## ⚙️ Configuration Reference
 
-We are constantly improving CP-Bot. Upcoming planned features include:
-- **LeetCode Integration:** Fetching LeetCode contest ratings and daily challenges.
-- **CodeChef Integration:** Tracking CodeChef Star ratings.
-- **Web Dashboard:** A companion website connected via Discord OAuth to view your server's stats visually.
-- **Custom Problem Sets:** The ability for admins to upload custom JSON problemsets for Virtual Contests instead of relying purely on Codeforces.
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DISCORD_TOKEN` | **Yes** | — | Bot authentication token from Discord Developer Portal. |
+| `CLIENT_ID` | **Yes** | — | Discord Application ID. |
+| `OWNER_ID` | **Yes** | — | Discord snowflake ID of the bot owner (authorized for admin commands). |
+| `GUILD_ID` | No | *(Global)* | Guild ID for instant development command registration. Leave empty for production. |
+| `GITHUB_TOKEN` | No | — | GitHub Personal Access Token for higher API rate limits. |
+| `TIMEZONE` | No | `UTC` | Timezone string for daily challenges and weekly summaries (e.g., `Asia/Dhaka`). |
+| `DATABASE_PATH` | No | `./cpbot.db` | Custom path to the SQLite database file. |
 
 ---
 
-## 📜 License & Credits
+## 🗄 Database Architecture
 
-Built with passion for the Competitive Programming community. 
-Powered by the incredible [Codeforces API](https://codeforces.com/apiHelp) and [Kenkoooo's AtCoder API](https://github.com/kenkoooo/AtCoderProblems).
+CP-Bot uses **SQLite** through `better-sqlite3` configured in **WAL (Write-Ahead Logging)** mode for zero-lag concurrent reads and writes.
 
-This project is open-source. Feel free to fork, modify, and contribute via Pull Requests!
+| Table | Purpose |
+|---|---|
+| `guild_config` | Multi-tenant key-value store (`guild_id`, `key`, `value`) isolating settings across servers. |
+| `users` | Maps Discord User IDs to Codeforces, AtCoder, Toph, and GitHub handles. |
+| `ratings` | Caches current rating, max rating, platform rank, and total solved count. |
+| `streaks` | Stores current consecutive daily solving streaks and all-time records. |
+| `daily_problems` | Tracks daily challenge problem sets, solvers, and first blood records. |
+| `vs_matches` & `vs_participants` | Manages live 1v1 and multiplayer duel lobbies, problems, and submission timers. |
+| `virtual_contests` | Manages server-wide simulated contest rounds and scoreboards. |
+| `custom_contests` | Admin-defined contests featured in the radar and countdown alerts. |
+| `notified_contests` | Deduplication store preventing redundant contest announcement pings. |
+| `processed_submissions` | Deduplication index ensuring solved celebrations are never broadcast twice. |
+| `processed_github_commits` | Deduplication index ensuring GitHub commits are never broadcast twice. |
 
-> *"Talk is cheap. Show me the code." - Linus Torvalds*
+---
+
+## ❓ Troubleshooting & FAQ
+
+### Q: `An invalid token was provided.`
+> **Fix:** Discord bot tokens expire or are reset when exposed. Go to the [Discord Developer Portal](https://discord.com/developers/applications) > Your Application > **Bot** > click **Reset Token**, and update `DISCORD_TOKEN` in your `.env`.
+
+### Q: Slash commands are not showing up in my Discord server.
+> **Fix:** Run `npm run deploy`. If you leave `GUILD_ID` blank, Discord may take up to an hour to cache global commands. For instant testing in your private server, set `GUILD_ID=your_server_id` in `.env` and rerun `npm run deploy`.
+
+### Q: The bot cannot assign rank or streak roles (`Missing Permissions`).
+> **Fix:** In your Discord server's **Server Settings > Roles**, drag the bot's integrated role **above** the rank and streak roles (`Legendary Grandmaster`, `CP`, etc.). Discord prevents bots from managing roles positioned higher than their highest role.
+
+### Q: Solving streaks are resetting at the wrong time of day.
+> **Fix:** Configure your local timezone in `.env` (e.g. `TIMEZONE=Asia/Dhaka` or `TIMEZONE=America/New_York`). Streaks will calculate accurately against your local midnight.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome from the competitive programming and open-source developer communities!
+
+1. Fork the Project.
+2. Create your Feature Branch:
+   ```bash
+   git checkout -b feature/AmazingFeature
+   ```
+3. Commit your Changes:
+   ```bash
+   git commit -m 'feat: Add some AmazingFeature'
+   ```
+4. Push to the Branch:
+   ```bash
+   git push origin feature/AmazingFeature
+   ```
+5. Open a Pull Request.
+
+---
+
+## 📜 License
+
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.

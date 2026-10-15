@@ -1,0 +1,11 @@
+services:
+  cp-bot:
+    build: .
+    container_name: cp-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_PATH=/data/cpbot.db
+    volumes:
+      - ./data:/data

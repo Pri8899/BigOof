@@ -260,33 +260,49 @@ async function fetchACSubmissions(user) {
   }
 }
 
-const { getValidId } = require('../utils/envHelper');
+const { getValidId, getTargetChannel } = require('../utils/envHelper');
+
+async function broadcastSubmission(client, user, sub, platform) {
+  let sentAny = false;
+  const { getPlatformEmojis } = require('../utils/emojis');
+
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      const member = await guild.members.fetch(user.discord_id).catch(() => null);
+      if (!member) continue;
+
+      const targetChannel = await getTargetChannel(client, 'feed_channel_id', 'FEED_CHANNEL_ID', guild.id)
+        || await getTargetChannel(client, 'dashboard_channel_id', 'DASHBOARD_CHANNEL_ID', guild.id)
+        || await getTargetChannel(client, 'rating_channel_id', 'RATING_CHANNEL_ID', guild.id);
+
+      if (targetChannel) {
+        const emojis = await getPlatformEmojis(guild);
+        const embed = buildSubmissionEmbed(user, sub, platform, emojis);
+        await targetChannel.send({ embeds: [embed] }).catch(err => {
+          console.error(`[SubmissionFeed] Failed to send embed in ${guild.name}:`, err.message);
+        });
+        sentAny = true;
+      }
+    } catch (_) {}
+  }
+
+  // Fallback to global channel if no guild channels were configured
+  if (!sentAny) {
+    const globalChannel = await getTargetChannel(client, 'feed_channel_id', 'FEED_CHANNEL_ID');
+    if (globalChannel) {
+      const emojis = await getPlatformEmojis(globalChannel.guild);
+      const embed = buildSubmissionEmbed(user, sub, platform, emojis);
+      await globalChannel.send({ embeds: [embed] }).catch(() => {});
+      sentAny = true;
+    }
+  }
+
+  return sentAny;
+}
 
 async function runSubmissionFeed(client) {
-  const channelId = getConfig('feed_channel_id') || getConfig('dashboard_channel_id') || getConfig('rating_channel_id') || getValidId(process.env.FEED_CHANNEL_ID, null) || getValidId(process.env.DASHBOARD_CHANNEL_ID, null) || getValidId(process.env.RATING_CHANNEL_ID, null) || getValidId(process.env.GENERAL_CHANNEL_ID, '1505614835650658355');
-
-  console.log(`[SubmissionFeed] Resolved channelId: ${channelId || 'NONE'}`);
-  if (!channelId) {
-    console.warn('[SubmissionFeed] No feed/dashboard/rating channel configured. Please set one using /set-feed-channel or /set-dashboard-channel.');
-    return;
-  }
-
-  const channel = await client.channels.fetch(channelId).catch(err => {
-    console.error(`[SubmissionFeed] Channel fetch failed for ID ${channelId}:`, err.message);
-    return null;
-  });
-  if (!channel) {
-    console.warn(`[SubmissionFeed] Configured channel ID ${channelId} could not be fetched.`);
-    return;
-  }
-  console.log(`[SubmissionFeed] Channel found: #${channel.name}`);
-
   const users = getAllUsers();
-  console.log(`[SubmissionFeed] Scanning ${users.length} users for new submissions...`);
   let shouldUpdateDashboard = false;
-  
-  const { getPlatformEmojis } = require('../utils/emojis');
-  const emojis = await getPlatformEmojis(channel.guild);
 
   for (const user of users) {
     const { fetchTophSubmissions } = require('../utils/toph');
@@ -295,16 +311,10 @@ async function runSubmissionFeed(client) {
     const tophNew = await fetchTophSubmissions(user);
 
     for (const sub of cfNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'cf', emojis);
-      try {
-        await channel.send({ embeds: [embed] });
-        console.log(`[SubmissionFeed] Successfully sent CF announcement for ${user.cf_handle}: ${sub.id}`);
-        // Mark as processed only AFTER successfully sending
-        if (sub.dedupKey) {
-          db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
-        }
-      } catch (err) {
-        console.error(`[SubmissionFeed] FAILED to send embed for CF ${sub.id} (user: ${user.cf_handle}):`, err);
+      await broadcastSubmission(client, user, sub, 'cf');
+      console.log(`[SubmissionFeed] Processed CF solve for ${user.cf_handle}: ${sub.id}`);
+      if (sub.dedupKey) {
+        db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
       }
     }
     if (highestId !== null) {
@@ -312,14 +322,10 @@ async function runSubmissionFeed(client) {
     }
     
     for (const sub of acNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'ac', emojis);
-      try {
-        await channel.send({ embeds: [embed] });
-        if (sub.dedupKey) {
-          db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
-        }
-      } catch (err) {
-        console.error(`[SubmissionFeed] FAILED to send embed for AC ${sub.id} (user: ${user.ac_handle}):`, err);
+      await broadcastSubmission(client, user, sub, 'ac');
+      console.log(`[SubmissionFeed] Processed AC solve for ${user.ac_handle}: ${sub.id}`);
+      if (sub.dedupKey) {
+        db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
       }
     }
     if (highestTime !== null) {
@@ -327,14 +333,10 @@ async function runSubmissionFeed(client) {
     }
 
     for (const sub of tophNew) {
-      const embed = buildSubmissionEmbed(user, sub, 'toph', emojis);
-      try {
-        await channel.send({ embeds: [embed] });
-        if (sub.dedupKey) {
-          db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
-        }
-      } catch (err) {
-        console.error(`[SubmissionFeed] FAILED to send embed for Toph ${sub.id} (user: ${user.toph_handle}):`, err);
+      await broadcastSubmission(client, user, sub, 'toph');
+      console.log(`[SubmissionFeed] Processed Toph solve for ${user.toph_handle}: ${sub.id}`);
+      if (sub.dedupKey) {
+        db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
       }
     }
 

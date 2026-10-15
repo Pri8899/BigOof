@@ -73,15 +73,27 @@ module.exports = {
     .setDescription('View the server CP leaderboard'),
 
   async execute(interaction) {
-    const users   = getAllUsers();
+    await interaction.deferReply();
+
+    let memberIds = new Set(interaction.guild.members.cache.keys());
+    if (memberIds.size <= 1) {
+      try {
+        const fetched = await interaction.guild.members.fetch();
+        memberIds = new Set(fetched.keys());
+      } catch (_) {}
+    }
+
+    const allUsers = getAllUsers();
+    const serverUsers = allUsers.filter(u => memberIds.has(u.discord_id));
+
     const ratings = getAllRatings();
     const { getAllStreaks } = require('../database/db');
     const streaks = getAllStreaks();
-    const rows    = computeLeaderboard(users, ratings, streaks);
+    const rows    = computeLeaderboard(serverUsers, ratings, streaks);
     const { getPlatformEmojis } = require('../utils/emojis');
     const emojis  = await getPlatformEmojis(interaction.guild);
     const embed   = buildDashboardEmbed(rows, streaks, emojis);
-    return interaction.reply({ embeds: [embed] });
+    return interaction.editReply({ embeds: [embed] });
   },
 
   computeLeaderboard

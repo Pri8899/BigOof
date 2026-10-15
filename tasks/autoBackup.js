@@ -15,8 +15,8 @@ if (process.env.RAILWAY_ENVIRONMENT && fs.existsSync('/data')) {
 const DB_PATH = process.env.DATABASE_PATH || defaultDbPath;
 
 async function getBackupChannel(client) {
-  // 1. Try DB config
-  let channelId = getConfig('backup_channel_id');
+  // 1. Try DB config (global)
+  let channelId = getConfig('backup_channel_id', 'global');
   if (channelId) {
     const ch = await client.channels.fetch(channelId).catch(() => null);
     if (ch) return ch;
@@ -27,16 +27,6 @@ async function getBackupChannel(client) {
   if (channelId) {
     const ch = await client.channels.fetch(channelId).catch(() => null);
     if (ch) return ch;
-  }
-
-  // 3. Auto-detect channel by name ("🔴-backup" or "backup") across all guilds
-  for (const guild of client.guilds.cache.values()) {
-    const found = guild.channels.cache.find(c => c.isTextBased() && (c.name.includes('backup') || c.name.includes('🔴')));
-    if (found) {
-      console.log(`[Backup] Auto-detected backup channel: #${found.name} (${found.id})`);
-      setConfig('backup_channel_id', found.id);
-      return found;
-    }
   }
 
   return null;
@@ -129,10 +119,11 @@ function startAutoBackup(client) {
   // Run auto backup 30s after startup (upload initial snapshot)
   setTimeout(() => runBackup(client), 30000);
 
-  // Run auto backup every 1 hour at minute 0 in Asia/Dhaka timezone
+  const TIMEZONE = process.env.TIMEZONE || 'UTC';
+  // Run auto backup every 1 hour at minute 0 in configured timezone
   cron.schedule('0 * * * *', () => {
     runBackup(client);
-  }, { timezone: 'Asia/Dhaka' });
+  }, { timezone: TIMEZONE });
 
   console.log('[Backup] Auto-backup task started (every 1 hour + startup check).');
 }

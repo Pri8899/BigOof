@@ -32,16 +32,24 @@ module.exports = {
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
+    const isOwner = interaction.user.id === process.env.OWNER_ID ||
+      (interaction.client.application?.owner?.id === interaction.user.id) ||
+      (interaction.client.application?.owner?.members?.has(interaction.user.id));
+
+    if (!isOwner) {
+      return interaction.editReply('❌ Permission Denied: Database restore is restricted to the Bot Owner.');
+    }
+
     const source = interaction.options.getString('source');
     let downloadUrl = null;
     let fileName    = 'cpbot.db';
 
     // ── Source: latest backup from channel ─────────────────────
     if (source === 'latest') {
-      const channelId = getConfig('backup_channel_id') || getValidId(process.env.BACKUP_CHANNEL_ID, null);
+      const channelId = getConfig('backup_channel_id', interaction.guildId) || getConfig('backup_channel_id', 'global') || getValidId(process.env.BACKUP_CHANNEL_ID, null);
 
       if (!channelId) {
-        return interaction.editReply('❌ No backup channel found in DB or env vars.\n\nFix: Add `BACKUP_CHANNEL_ID = <your backup channel id>` to Railway Variables, then redeploy and try again.');
+        return interaction.editReply('❌ No backup channel found in DB or env vars.\n\nFix: Set a backup channel with `/set-channel` or add `BACKUP_CHANNEL_ID = <id>` to your environment, then try again.');
       }
 
       const channel = await interaction.client.channels.fetch(channelId).catch(() => null);

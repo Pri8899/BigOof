@@ -414,13 +414,14 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
     }
   }
 
-  const dhakaTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
-  let hr = dhakaTime.getHours();
-  if (dhakaTime.getMinutes() > 50) hr += 1;
+  const TZ = process.env.TIMEZONE || 'UTC';
+  const localTime = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
+  let hr = localTime.getHours();
+  if (localTime.getMinutes() > 50) hr += 1;
   hr = hr % 24;
   const ampm = hr >= 12 ? 'pm' : 'am';
   const displayHr = hr % 12 === 0 ? 12 : hr % 12;
-  const timeStr = `${displayHr}:00 ${ampm}`;
+  const timeStr = `${displayHr}:00 ${ampm} (${TZ})`;
 
   embed
     .setDescription(`${header}\n\n` + sections.join('\n\n'))
@@ -521,7 +522,8 @@ function buildSubmissionEmbed(user, problem, platform, emojis = { cf: '🔵', ac
  */
 function buildWeeklyWrapupEmbed(allSolved, allRatingGains, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
   const now  = new Date();
-  const week = `${now.toLocaleString('en-US', { month: 'short', timeZone: 'Asia/Dhaka' })} ${now.getFullYear()}`;
+  const TZ = process.env.TIMEZONE || 'UTC';
+  const week = `${now.toLocaleString('en-US', { month: 'short', timeZone: TZ })} ${now.getFullYear()}`;
 
   const embed = new EmbedBuilder()
     .setColor(0xF1C40F)

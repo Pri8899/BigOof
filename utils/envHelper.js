@@ -9,54 +9,42 @@ function getValidId(val, fallback) {
 }
 
 /**
- * Robust channel finder:
- * 1. Checks DB config
- * 2. Checks process.env variable
- * 3. Checks hardcoded fallback ID
- * 4. Auto-detects by searching channel names across server
+ * Guild-aware channel finder:
+ * 1. Checks DB config for the specific guild
+ * 2. Checks DB config for global/fallback
+ * 3. Checks process.env variable (optional hosting default)
+ * 4. Checks fallback ID if explicitly provided
  */
-async function getTargetChannel(client, configKey, envVarName, keywords = [], fallbackId = null) {
-  // 1. Check DB config
-  const dbId = getConfig(configKey);
-  if (dbId) {
-    const ch = await client.channels.fetch(dbId).catch(() => null);
+async function getTargetChannel(client, configKey, envVarName = null, guildId = null, fallbackId = null) {
+  // 1. Check guild-specific DB config
+  if (guildId) {
+    const guildDbId = getConfig(configKey, guildId);
+    if (guildDbId) {
+      const ch = await client.channels.fetch(guildDbId).catch(() => null);
+      if (ch) return ch;
+    }
+  }
+
+  // 2. Check global DB config
+  const globalDbId = getConfig(configKey, 'global');
+  if (globalDbId) {
+    const ch = await client.channels.fetch(globalDbId).catch(() => null);
     if (ch) return ch;
   }
 
-  // 2. Check env variable
-  const envId = getValidId(process.env[envVarName], null);
-  if (envId) {
-    const ch = await client.channels.fetch(envId).catch(() => null);
-    if (ch) {
-      setConfig(configKey, ch.id);
-      return ch;
+  // 3. Check env variable
+  if (envVarName) {
+    const envId = getValidId(process.env[envVarName], null);
+    if (envId) {
+      const ch = await client.channels.fetch(envId).catch(() => null);
+      if (ch) return ch;
     }
   }
 
-  // 3. Check fallback ID
+  // 4. Check fallback ID
   if (fallbackId) {
     const ch = await client.channels.fetch(fallbackId).catch(() => null);
-    if (ch) {
-      setConfig(configKey, ch.id);
-      return ch;
-    }
-  }
-
-  // 4. Auto-detect by channel name keywords
-  if (Array.isArray(keywords) && keywords.length > 0) {
-    for (const guild of client.guilds.cache.values()) {
-      const found = guild.channels.cache.find(c => {
-        if (!c.isTextBased()) return false;
-        const lowerName = c.name.toLowerCase();
-        return keywords.some(k => lowerName.includes(k.toLowerCase()));
-      });
-
-      if (found) {
-        console.log(`[AutoChannel] Auto-detected channel #${found.name} (${found.id}) for key: ${configKey}`);
-        setConfig(configKey, found.id);
-        return found;
-      }
-    }
+    if (ch) return ch;
   }
 
   return null;

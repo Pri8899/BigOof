@@ -100,8 +100,10 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS guild_config (
-    key   TEXT PRIMARY KEY,
-    value TEXT
+    guild_id TEXT NOT NULL DEFAULT 'global',
+    key      TEXT NOT NULL,
+    value    TEXT,
+    PRIMARY KEY (guild_id, key)
   );
 
   CREATE TABLE IF NOT EXISTS rating_history (
@@ -279,44 +281,27 @@ try {
 }
 
 
-// One-time database correction for parth0_paul's handles (revert back to ImposterBhO0)
+// Run migration to upgrade guild_config to multi-guild (guild_id) if not present
 try {
-  const row = db.prepare("SELECT cf_handle, ac_handle FROM users WHERE discord_id = '1367493270703444078'").get();
-  if (row) {
-    // 1. Codeforces Handle Correction
-    if (row.cf_handle) {
-      const cfLower = row.cf_handle.toLowerCase();
-      if (cfLower === 'imposterbhoo') {
-        // Wrong handle (ends in O), update and clear
-        db.prepare("UPDATE users SET cf_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
-        db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078' AND platform = 'cf'").run();
-        db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'cf'").run();
-        console.log('[Migration] Corrected wrong Codeforces handle from ImposterBhOO to ImposterBhO0 and cleared history.');
-      } else if (cfLower === 'imposterbho0' && row.cf_handle !== 'ImposterBhO0') {
-        // Correct handle but wrong casing, just update handle casing without clearing
-        db.prepare("UPDATE users SET cf_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
-        console.log('[Migration] Corrected Codeforces handle casing to ImposterBhO0.');
-      }
-    }
-
-    // 2. AtCoder Handle Correction
-    if (row.ac_handle) {
-      const acLower = row.ac_handle.toLowerCase();
-      if (acLower === 'imposterbhoo') {
-        // Wrong handle (ends in O), update and clear
-        db.prepare("UPDATE users SET ac_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
-        db.prepare("DELETE FROM ratings WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
-        db.prepare("DELETE FROM last_submissions WHERE discord_id = '1367493270703444078' AND platform = 'ac'").run();
-        console.log('[Migration] Corrected wrong AtCoder handle from ImposterBhOO to ImposterBhO0 and cleared history.');
-      } else if (acLower === 'imposterbho0' && row.ac_handle !== 'ImposterBhO0') {
-        // Correct handle but wrong casing, just update handle casing without clearing
-        db.prepare("UPDATE users SET ac_handle = 'ImposterBhO0' WHERE discord_id = '1367493270703444078'").run();
-        console.log('[Migration] Corrected AtCoder handle casing to ImposterBhO0.');
-      }
-    }
+  const tableInfo = db.prepare("PRAGMA table_info(guild_config)").all();
+  const hasGuildId = tableInfo.some(col => col.name === 'guild_id');
+  if (tableInfo.length > 0 && !hasGuildId) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS guild_config_new (
+        guild_id TEXT NOT NULL DEFAULT 'global',
+        key      TEXT NOT NULL,
+        value    TEXT,
+        PRIMARY KEY (guild_id, key)
+      );
+      INSERT OR IGNORE INTO guild_config_new (guild_id, key, value)
+      SELECT 'global', key, value FROM guild_config;
+      DROP TABLE guild_config;
+      ALTER TABLE guild_config_new RENAME TO guild_config;
+    `);
+    console.log('[Migration] Upgraded guild_config to multi-guild schema.');
   }
 } catch (e) {
-  console.error('[Migration] Handle correction failed:', e.message);
+  console.error('[Migration] guild_config migration check error:', e.message);
 }
 
 
@@ -557,16 +542,38 @@ function setSweepAnnounced(dateStr, sweepAnnouncedJson) {
 }
 
 // ─── Config Helpers ───────────────────────────────────────────
-function getConfig(key) {
-  const row = db.prepare('SELECT value FROM guild_config WHERE key = ?').get(key);
-  return row ? row.value : null;
+function getConfig(key, guildId = 'global') {
+  if (guildId && guildId !== 'global') {
+    const row = db.prepare('SELECT value FROM guild_config WHERE guild_id = ? AND key = ?').get(String(guildId), key);
+    if (row && row.value !== null) return row.value;
+  }
+  const globalRow = db.prepare('SELECT value FROM guild_config WHERE guild_id = ? AND key = ?').get('global', key);
+  return globalRow ? globalRow.value : null;
 }
 
-function setConfig(key, value) {
+function setConfig(key, value, guildId = 'global') {
+  const gid = guildId ? String(guildId) : 'global';
   db.prepare(`
-    INSERT INTO guild_config (key, value) VALUES (?, ?)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).run(key, value);
+    INSERT INTO guild_config (guild_id, key, value) VALUES (?, ?, ?)
+    ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value
+  `).run(gid, key, value !== null && value !== undefined ? String(value) : null);
+}
+
+function deleteConfig(key, guildId = 'global') {
+  const gid = guildId ? String(guildId) : 'global';
+  db.prepare('DELETE FROM guild_config WHERE guild_id = ? AND key = ?').run(gid, key);
+}
+
+function getAllGuildConfigs(key) {
+  return db.prepare("SELECT guild_id, value FROM guild_config WHERE key = ? AND guild_id != 'global' AND value IS NOT NULL").all(key);
+}
+
+function getFullGuildConfig(guildId) {
+  const gid = guildId ? String(guildId) : 'global';
+  const rows = db.prepare('SELECT key, value FROM guild_config WHERE guild_id = ?').all(gid);
+  const result = {};
+  for (const r of rows) result[r.key] = r.value;
+  return result;
 }
 
 // ─── Live Submissions Helpers ─────────────────────────────────
@@ -675,7 +682,7 @@ module.exports = {
   getUser, upsertUser, linkPlatform, unlinkPlatform, purgeUser, getAllUsers,
   upsertRating, getRatings, getAllRatings,
   contestExists, upsertContest, getUpcomingContests, markContestNotified,
-  getConfig, setConfig,
+  getConfig, setConfig, deleteConfig, getAllGuildConfigs, getFullGuildConfig,
   insertRatingHistory, getRatingHistory,
   upsertStreak, getStreak, getAllStreaks,
   createVC, getVC, getActiveVCs, endVC, joinVC, getVCParticipants, updateVCSolved, getActiveVCForChannel,

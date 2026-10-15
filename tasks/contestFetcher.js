@@ -84,100 +84,93 @@ function startContestFetcher(client) {
     }
   }, 5000);
 
-  // Exact 12-hour schedule (runs at 12:00 AM and 12:00 PM Dhaka time)
+  const TZ = process.env.TIMEZONE || 'UTC';
+
+  // Exact 12-hour schedule (runs at 12:00 AM and 12:00 PM configured timezone)
   cron.schedule('0 0,12 * * *', async () => {
     try {
-      console.log(`[ContestFetcher] 12-hour cron triggered. Refreshing...`);
+      console.log(`[ContestFetcher] 12-hour cron triggered (${TZ}). Refreshing...`);
       await performContestRefresh(client);
     } catch (err) {
       console.error('[ContestFetcher 12-Hour Cron Error]', err);
     }
-  }, { timezone: 'Asia/Dhaka' });
-  console.log('[ContestFetcher] Strict 12-hour (12:00 AM/PM Dhaka time) cron scheduler started.');
+  }, { timezone: TZ });
+  console.log(`[ContestFetcher] Strict 12-hour cron scheduler started (Timezone: ${TZ}).`);
 }
 
 /**
- * Post / edit a pinned grouped contest overview in #contest-radar
+ * Post / edit a pinned grouped contest overview across all configured servers
  */
-const { getValidId, getTargetChannel } = require('../utils/envHelper');
-
-async function postContestSummary(client) {
+async function postContestSummary(client, specificGuildId = null) {
   try {
-    console.log('[ContestFetcher] postContestSummary started.');
-    const channel = await getTargetChannel(client, 'contest_channel_id', 'CONTEST_CHANNEL_ID', ['contest-radar', 'contest', 'radar'], '1505615735479865497');
-    if (!channel) return;
-
-    console.log('[ContestFetcher] Channel found:', !!channel);
-
+    const { getAllGuildConfigs } = require('../database/db');
     const contests = getUpcomingContests(30 * 24 * 3600); // next 30 days
-    console.log(`[ContestFetcher] Found ${contests.length} upcoming/running contests.`);
     
     // Read API status from DB config
     const cfStatus   = getConfig('cf_api_online')   !== '0';
     const acStatus   = getConfig('ac_api_online')   !== '0';
     const tophStatus = getConfig('toph_api_online') !== '0';
-    console.log(`[ContestFetcher] API status - CF: ${cfStatus}, AC: ${acStatus}, Toph: ${tophStatus}`);
+
+    const targets = [];
+    if (specificGuildId) {
+      const chId = getConfig('contest_channel_id', specificGuildId);
+      if (chId) targets.push({ guild_id: specificGuildId, value: chId });
+    } else {
+      const configs = getAllGuildConfigs('contest_channel_id');
+      targets.push(...configs);
+      const globalChId = getConfig('contest_channel_id', 'global') || process.env.CONTEST_CHANNEL_ID;
+      if (globalChId && !targets.some(t => t.value === globalChId)) {
+        targets.push({ guild_id: 'global', value: globalChId });
+      }
+    }
+
+    if (targets.length === 0) {
+      console.log('[ContestFetcher] No contest radar channels configured across servers.');
+      return;
+    }
 
     const { getPlatformEmojis } = require('../utils/emojis');
-    const emojis = await getPlatformEmojis(channel.guild);
-    const embed = buildContestListEmbed(contests, 'all', { cf: cfStatus, ac: acStatus, toph: tophStatus }, emojis);
 
-    // Fetch recent messages in the channel to find any existing summary messages sent by the bot
-    let existingMessages = [];
-    try {
-      const messages = await channel.messages.fetch({ limit: 50 });
-      // Filter for messages sent by the bot that have the summary embed title or description
-      existingMessages = [...messages.values()].filter(m => 
-        m.author.id === client.user.id && 
-        m.embeds.length > 0 && 
-        ((m.embeds[0].title && (m.embeds[0].title.includes('Upcoming Contests') || m.embeds[0].title.includes('Full Overview'))) ||
-         (m.embeds[0].description && (m.embeds[0].description.includes('Upcoming Contests') || m.embeds[0].description.includes('Full Overview'))))
-      );
-    } catch (err) {
-      console.warn('[ContestFetcher] Failed to fetch recent channel messages:', err.message);
-    }
-
-    let msg = null;
-    if (existingMessages.length > 0) {
-      // Sort existingMessages by creation time descending (newest first)
-      existingMessages.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
-      
-      // Use the newest one as our primary message to edit
-      msg = existingMessages[0];
-      setConfig('contest_summary_msg_id', msg.id);
-
-      // Clean up any extra/duplicate overview messages to enforce exactly one message in the channel
-      if (existingMessages.length > 1) {
-        console.log(`[ContestFetcher] Found ${existingMessages.length} overview messages. Cleaning up duplicates...`);
-        for (let i = 1; i < existingMessages.length; i++) {
-          await existingMessages[i].delete().catch(() => {});
-        }
-      }
-    }
-
-    if (msg) {
-      // Delete the old message — new one will be posted below
-      await msg.delete().catch(() => {});
-      console.log('[ContestFetcher] Deleted old contest summary message.');
-    }
-
-    // Post fresh with @everyone ping — retry until it succeeds so the channel is never left empty
-    let newMsg = null;
-    for (let attempt = 1; attempt <= 10; attempt++) {
+    for (const { guild_id, value: channelId } of targets) {
       try {
-        newMsg = await channel.send({ content: '@everyone', embeds: [embed] });
-        break; // success
-      } catch (err) {
-        console.warn(`[ContestFetcher] Send attempt ${attempt}/10 failed: ${err.message}`);
-        if (attempt < 10) await new Promise(r => setTimeout(r, 5000)); // wait 5s before retry
-      }
-    }
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel || !channel.isTextBased()) continue;
 
-    if (newMsg) {
-      setConfig('contest_summary_msg_id', newMsg.id);
-      console.log('[ContestFetcher] Posted fresh contest summary.');
-    } else {
-      console.error('[ContestFetcher] Failed to post contest summary after 10 attempts!');
+        const emojis = await getPlatformEmojis(channel.guild);
+        const embed = buildContestListEmbed(contests, 'all', { cf: cfStatus, ac: acStatus, toph: tophStatus }, emojis);
+
+        // Fetch recent overview messages
+        let existingMessages = [];
+        try {
+          const messages = await channel.messages.fetch({ limit: 25 });
+          existingMessages = [...messages.values()].filter(m => 
+            m.author.id === client.user.id && 
+            m.embeds.length > 0 && 
+            ((m.embeds[0].title && (m.embeds[0].title.includes('Upcoming Contests') || m.embeds[0].title.includes('Full Overview'))) ||
+             (m.embeds[0].description && (m.embeds[0].description.includes('Upcoming Contests') || m.embeds[0].description.includes('Full Overview'))))
+          );
+        } catch (err) {
+          console.warn(`[ContestFetcher] Failed to fetch recent messages in channel ${channelId}:`, err.message);
+        }
+
+        if (existingMessages.length > 0) {
+          for (const oldMsg of existingMessages) {
+            await oldMsg.delete().catch(() => {});
+          }
+        }
+
+        const newMsg = await channel.send({ content: '@everyone', embeds: [embed] }).catch(err => {
+          console.warn(`[ContestFetcher] Failed to send overview to channel ${channelId}: ${err.message}`);
+          return null;
+        });
+
+        if (newMsg) {
+          setConfig('contest_summary_msg_id', newMsg.id, guild_id);
+          console.log(`[ContestFetcher] Posted fresh contest summary to #${channel.name} (${channel.guild.name}).`);
+        }
+      } catch (guildErr) {
+        console.error(`[ContestFetcher] Error updating contest radar for channel ${channelId}:`, guildErr.message);
+      }
     }
   } catch (err) {
     console.error('[ContestFetcher] postContestSummary critical error:', err);

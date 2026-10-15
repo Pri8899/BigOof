@@ -79,7 +79,7 @@ const getUserRecentPushEvents = getUserRecentEvents;
 
 /**
  * Fetch detailed commit information
- * @param {string} repoFullName - e.g. "parthopaul69/CP"
+ * @param {string} repoFullName - e.g. "octocat/Hello-World"
  * @param {string} sha - commit SHA
  * @returns {Promise<Object|null>}
  */
