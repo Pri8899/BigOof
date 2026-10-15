@@ -368,7 +368,14 @@ Once BigOof is online in your server, execute these 3 quick setup steps:
      ```
    - BigOof will instantly create the base `CP` role, all 10 Codeforces rank tiers with official colors (`Legendary Grandmaster` down to `Newbie`), and 3 streak milestone roles (`💫 30+ Day`, `👑 15+ Day`, `🔥 7+ Day`).
 3. **Configure Announcement Channels:**
-   - Run `/set-channel` for each feature:
+   - **Option A (Super Easy — 1 Single Channel for Everything):**
+     If you only have one bot channel and want all feeds to go there, run:
+     ```
+     /set-channel feature:All Features channel:#cp-bot
+     ```
+     *(This automatically routes submissions, leaderboards, contests, rating alerts, and daily challenges into that single channel with one click!)*
+   - **Option B (Custom Dedicated Channels):**
+     If your server has separate channels, route them individually:
      ```
      /set-channel feature:feed channel:#submissions
      /set-channel feature:dashboard channel:#leaderboard

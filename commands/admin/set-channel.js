@@ -4,6 +4,7 @@ const { setConfig } = require('../../database/db');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
 
 const FEATURES = [
+  { name: '🌐 All Features (One-Click Setup: route everything here)', value: 'all_features', label: 'All Bot Features' },
   { name: '🏆 Contest Radar (Upcoming contests overview)', value: 'contest_channel_id', label: 'Contest Radar' },
   { name: '📊 Leaderboard Dashboard (Auto-updating rankings)', value: 'dashboard_channel_id', label: 'Leaderboard Dashboard' },
   { name: '📈 Rating Updates (Rating change & rank up alerts)', value: 'rating_channel_id', label: 'Rating Updates' },
@@ -55,6 +56,32 @@ module.exports = {
       }
       // Also save backup channel to global config
       setConfig('backup_channel_id', channel.id, 'global');
+    }
+
+    if (featureKey === 'all_features') {
+      const keys = [
+        'contest_channel_id',
+        'dashboard_channel_id',
+        'rating_channel_id',
+        'suggest_channel_id',
+        'feed_channel_id',
+        'github_channel_id',
+        'announcement_channel_id',
+        'general_channel_id'
+      ];
+      for (const k of keys) {
+        setConfig(k, channel.id, guildId);
+      }
+      setConfig('dashboard_message_id', '', guildId);
+      setConfig('contest_summary_msg_id', '', guildId);
+
+      return interaction.reply({
+        embeds: [successEmbed(
+          'All Features Configured',
+          `🎉 **All bot feeds and alerts** will now post to ${channel}!\n\n*(You can still override individual features to different channels at any time).*`
+        )],
+        ephemeral: true
+      });
     }
 
     const featureObj = FEATURES.find(f => f.value === featureKey);

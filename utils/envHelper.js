@@ -23,6 +23,14 @@ async function getTargetChannel(client, configKey, envVarName = null, guildId = 
       const ch = await client.channels.fetch(guildDbId).catch(() => null);
       if (ch) return ch;
     }
+    // Guild fallback: if specific feature is unset, check general_channel_id
+    if (configKey !== 'backup_channel_id' && configKey !== 'general_channel_id') {
+      const generalDbId = getConfig('general_channel_id', guildId);
+      if (generalDbId) {
+        const ch = await client.channels.fetch(generalDbId).catch(() => null);
+        if (ch) return ch;
+      }
+    }
   }
 
   // 2. Check global DB config
