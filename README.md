@@ -62,9 +62,9 @@ Every competitive programmer knows the feeling:
 > *You submit.*  
 > *"Running on test 2..."*  
 > **Verdict: Time Limit Exceeded on Test 2 (1001 ms).**  
-> *You whisper to your monitor:* **"Big Oof."** 💀
+**BigOof** is a modern, production-grade Competitive Programming Discord bot built for university coding clubs and algorithmic communities. It provides automated contest countdowns and reminders across major platforms (Codeforces, AtCoder, LeetCode), live rating change alerts, server-wide Accepted (AC) submission feeds, solving streaks, and automated role progression.
 
-**BigOof** is built to turn that suffering into celebration! Designed from the ground up for university clubs, ICPC teams, and coding communities, BigOof tracks your members' problem-solving journeys across **Codeforces**, **AtCoder**, **Toph**, and **GitHub** completely autonomously with zero manual spreadsheets or checks required.
+Designed from the ground up for university clubs, ICPC teams, and coding communities, BigOof tracks your members' problem-solving journeys across **Codeforces**, **AtCoder**, **Toph**, and **GitHub** completely autonomously with zero manual spreadsheets or checks required.
 
 ---
 
