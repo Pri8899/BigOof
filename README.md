@@ -29,24 +29,26 @@
   - [🏁 Virtual Contests (`/vc`)](#-virtual-contests-vc)
   - [🤖 ICPC Team Builder & Skill Radar](#-icpc-team-builder--skill-radar)
   - [🐙 GitHub Developer Feed](#-github-developer-feed)
-- [📚 Command Reference (25 Slash Commands)](#-command-reference)
+- [📚 Command Reference (26 Slash Commands)](#-command-reference)
   - [👤 Profile & Account Management](#-profile--account-management)
   - [📈 Discovery & Problem Solving](#-discovery--problem-solving)
   - [🎮 Duels & Competitions](#-duels--competitions)
   - [⚙️ Server Administration](#️-server-administration)
   - [🔒 Bot Owner Operations](#-bot-owner-operations)
-- [🚀 Complete Setup & Installation Guide (Step-by-Step)](#-complete-setup--installation-guide-step-by-step)
-  - [Prerequisites](#prerequisites)
+- [🚀 Complete Setup & Installation Guide (Windows, macOS & Linux)](#-complete-setup--installation-guide-windows-macos--linux)
+  - [Prerequisites (Windows, macOS, Linux)](#prerequisites)
   - [Step 1: Create Your Bot Application on Discord Portal](#step-1-create-your-bot-application-on-discord-portal)
   - [Step 2: Clone the Repository & Install Dependencies](#step-2-clone-the-repository--install-dependencies)
   - [Step 3: Configure Your Environment (`.env`)](#step-3-configure-your-environment-env)
   - [Step 4: Register Slash Commands & Launch](#step-4-register-slash-commands--launch)
   - [Step 5: Initial In-Discord Server Setup (Important!)](#step-5-initial-in-discord-server-setup-important)
 - [☁️ 24/7 Production Deployment](#️-247-production-deployment)
-  - [Option A: Docker & Docker Compose (Recommended)](#option-a-docker--docker-compose-recommended)
-  - [Option B: Linux VPS with pm2](#option-b-linux-vps-with-pm2)
+  - [Option A: Docker & Docker Compose (Windows, macOS, Linux)](#option-a-docker--docker-compose-windows-macos-linux)
+  - [Option B: Windows 24/7 Background Service (PM2 / Task Scheduler)](#option-b-windows-247-background-service-pm2--task-scheduler)
+  - [Option C: Linux VPS with PM2 (Ubuntu, Debian, CentOS)](#option-c-linux-vps-with-pm2-ubuntu-debian-centos)
+  - [Option D: Windows Subsystem for Linux (WSL2)](#option-d-windows-subsystem-for-linux-wsl2)
 - [🗄 Database Architecture](#-database-architecture)
-- [❓ Frequently Asked Questions & Troubleshooting](#-frequently-asked-questions--troubleshooting)
+- [❓ Frequently Asked Questions & Troubleshooting (Including Windows)](#-frequently-asked-questions--troubleshooting-including-windows)
 - [🤝 Contributing](#-contributing)
 - [📜 License](#-license)
 
@@ -238,15 +240,27 @@ BigOof features **26 unified slash commands** with zero duplicates:
 
 ---
 
-## 🚀 Complete Setup & Installation Guide (Step-by-Step)
+## 🚀 Complete Setup & Installation Guide (Windows, macOS & Linux)
 
-Follow this complete guide to set up and run BigOof from scratch.
+Follow this complete guide to set up and run BigOof from scratch on **Windows**, **macOS**, or **Linux**.
 
-### Prerequisites
+### Prerequisites (Windows, macOS, Linux)
 
-Before starting, ensure you have:
-- **Node.js**: Version `18.0.0` or higher. Check via `node -v`.
-- **Git**: Installed on your system. Check via `git --version`.
+Before starting, ensure you have **Node.js** and **Git** installed on your operating system:
+
+| Tool | Windows | macOS | Linux (Ubuntu / Debian) |
+|---|---|---|---|
+| **Node.js** (v18+) | Download `.msi` from [nodejs.org](https://nodejs.org/) (LTS recommended) | `brew install node` or download `.pkg` from [nodejs.org](https://nodejs.org/) | `sudo apt update && sudo apt install -y nodejs npm` |
+| **Git** | Download from [gitforwindows.org](https://gitforwindows.org/) | `brew install git` or `xcode-select --install` | `sudo apt install -y git` |
+| **Terminal** | PowerShell, Command Prompt (CMD), Windows Terminal, or Git Bash | Terminal (Zsh / Bash) | Terminal (Bash) |
+
+Verify installation in your terminal:
+```bash
+node -v   # Should be v18.0.0 or higher (e.g., v18.x, v20.x, v22.x)
+npm -v    # Should output npm version (e.g., 9.x, 10.x)
+git --version
+```
+
 - **A Discord Account & Server**: Where you have Administrator permissions.
 
 ---
@@ -280,8 +294,9 @@ Before starting, ensure you have:
 
 ### Step 2: Clone the Repository & Install Dependencies
 
-Open your terminal and run:
+Open your preferred terminal (**PowerShell**, **Command Prompt**, or **Git Bash** on Windows; **Terminal** on macOS/Linux):
 
+#### 🪟 Windows (Command Prompt / PowerShell / Git Bash) & 🍎🐧 macOS / Linux:
 ```bash
 # 1. Clone the repository
 git clone https://github.com/Pri8899/BigOof.git
@@ -293,15 +308,34 @@ cd BigOof
 npm install
 ```
 
+> **Note for Windows Users:**  
+> BigOof uses `better-sqlite3`, which automatically downloads prebuilt native binaries for Windows 64-bit on all official Node.js LTS versions (v18, v20, v22). You do **not** need Visual Studio or Python installed!
+
 ---
 
 ### Step 3: Configure Your Environment (`.env`)
 
-Create your `.env` configuration file by copying the template:
+Create your `.env` configuration file from the provided `.env.example` template:
 
+#### 🪟 On Windows (Command Prompt / CMD):
+```cmd
+copy .env.example .env
+```
+
+#### 🪟 On Windows (PowerShell):
+```powershell
+Copy-Item .env.example .env
+```
+
+#### 🍎🐧 On macOS / Linux:
 ```bash
 cp .env.example .env
 ```
+
+#### 🖱️ Or Using File Explorer / Visual Studio Code (All Systems):
+1. Duplicate the `.env.example` file in your project folder.
+2. Rename the new file to `.env`.  
+   *(Windows Tip: If using Windows File Explorer, click **View > Show > File name extensions** to make sure the file is named `.env` and not accidentally `.env.txt`).*
 
 Open `.env` in any text editor and fill in your values:
 
@@ -390,9 +424,9 @@ Once BigOof is online in your server, execute these 3 quick setup steps:
 
 ## ☁️ 24/7 Production Deployment
 
-### Option A: Docker & Docker Compose (Recommended)
+### Option A: Docker & Docker Compose (Windows, macOS, Linux)
 
-BigOof includes a production-grade multi-stage `Dockerfile` and `docker-compose.yml`.
+BigOof includes a production-grade multi-stage `Dockerfile` and `docker-compose.yml`. This works seamlessly on **Windows** (using [Docker Desktop](https://www.docker.com/products/docker-desktop/)), **macOS**, and **Linux**.
 
 1. Ensure your `.env` is configured.
 2. Launch the container in the background:
@@ -406,9 +440,46 @@ BigOof includes a production-grade multi-stage `Dockerfile` and `docker-compose.
 
 All database files and persistent data are automatically saved to `./data/bigoof.db` on your host machine.
 
-### Option B: Linux VPS with pm2
+---
 
-To run BigOof as a continuous background daemon on Ubuntu / Debian / CentOS:
+### Option B: Windows 24/7 Background Service (PM2 / Task Scheduler)
+
+If you are hosting BigOof on a **Windows PC**, laptop, or Windows Server:
+
+#### Method 1: Using PM2 Process Manager
+```cmd
+# 1. Install PM2 globally
+npm install -g pm2
+
+# 2. Start BigOof under PM2 management
+pm2 start index.js --name "bigoof"
+
+# 3. View status and logs at any time
+pm2 status
+pm2 logs bigoof
+
+# 4. Save the running process list
+pm2 save
+```
+> **Windows Auto-Start on Boot:**  
+> Install the Windows service wrapper by running in Administrator Command Prompt:  
+> `npm install -g pm2-windows-service` followed by `pm2-service-install`.
+
+#### Method 2: Windows Task Scheduler (Native)
+1. Press `Win + R`, type `taskschd.msc`, and press Enter.
+2. Click **Create Basic Task**, name it `BigOof Bot`.
+3. Set Trigger to **When the computer starts** or **When I log on**.
+4. Set Action to **Start a program**:
+   - **Program/script:** `node` (or path to `node.exe`, e.g. `C:\Program Files\nodejs\node.exe`)
+   - **Add arguments:** `index.js`
+   - **Start in:** `C:\path\to\BigOof`
+5. Finish the wizard. BigOof will now automatically run silently in the background!
+
+---
+
+### Option C: Linux VPS with PM2 (Ubuntu, Debian, CentOS)
+
+To run BigOof as a continuous background daemon on a remote Linux server:
 
 ```bash
 # 1. Install pm2 globally
@@ -421,6 +492,25 @@ pm2 start index.js --name "bigoof"
 pm2 save
 pm2 startup
 ```
+
+---
+
+### Option D: Windows Subsystem for Linux (WSL2)
+
+If you are on Windows 10/11 and prefer a native Linux terminal:
+1. Open PowerShell and run: `wsl --install` (reboot if prompted).
+2. Open **Ubuntu** from your Windows Start Menu.
+3. Install Node.js: `sudo apt update && sudo apt install -y nodejs npm git`
+4. Clone and launch BigOof inside WSL:
+   ```bash
+   git clone https://github.com/Pri8899/BigOof.git
+   cd BigOof
+   npm install
+   cp .env.example .env
+   # Edit .env, deploy, and start:
+   npm run deploy
+   npm start
+   ```
 
 ---
 
@@ -444,18 +534,37 @@ BigOof uses **SQLite** through `better-sqlite3` configured in **WAL (Write-Ahead
 
 ---
 
-## ❓ Frequently Asked Questions & Troubleshooting
+## ❓ Frequently Asked Questions & Troubleshooting (Including Windows)
 
-### Q: `An invalid token was provided.`
+### 🪟 Q (Windows): PowerShell error `File ...\npm.ps1 cannot be loaded because running scripts is disabled on this system`.
+> **Fix:** PowerShell restricts execution of scripts by default on Windows. Open PowerShell as Administrator (or current user) and run:
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+> ```
+> Type `Y` and press Enter. Now retry running `npm run deploy` or `npm start`.
+
+### 🪟 Q (Windows): `'node'` or `'npm'` is not recognized as an internal or external command.
+> **Fix:** After installing Node.js from [nodejs.org](https://nodejs.org/), make sure to close and restart all open Command Prompt or PowerShell windows so your system updates its `%PATH%` environment variable.
+
+### 🪟 Q (Windows): My `.env` file was created as `.env.txt`.
+> **Fix:** Windows File Explorer often hides file extensions and appends `.txt` to new files.
+> - In Windows 11: Open File Explorer > click **View** on the top menu > **Show** > check **File name extensions**.
+> - In Windows 10: Open File Explorer > click the **View** tab > check the **File name extensions** box.
+> - Then rename `.env.txt` to `.env` (removing the `.txt` suffix).
+
+### 🪟 Q (Windows): `better-sqlite3` build or `node-gyp` error during `npm install`.
+> **Fix:** Ensure you are using an official Node.js LTS release (v18, v20, or v22) from [nodejs.org](https://nodejs.org/). `better-sqlite3` provides precompiled binaries for Windows x64 on all official LTS versions. If you are on an unreleased bleeding-edge version, downgrade to Node LTS (e.g., v20.x or v22.x).
+
+### 🌐 Q: `An invalid token was provided.`
 > **Fix:** In the [Discord Developer Portal](https://discord.com/developers/applications) > your application > **Bot**, click **Reset Token**, copy the freshly generated token, and paste it into `DISCORD_TOKEN` in `.env` without extra spaces or quotes.
 
-### Q: Slash commands do not show up in my Discord server.
+### 🌐 Q: Slash commands do not show up in my Discord server.
 > **Fix:** Run `npm run deploy`. If `GUILD_ID` is left empty in `.env`, Discord registers commands globally, which may take up to an hour to propagate across Discord's CDN. For instant testing in your server, set `GUILD_ID=your_server_id` in `.env` and rerun `npm run deploy`.
 
-### Q: The bot cannot assign rank or streak roles (`Missing Permissions`).
+### 🌐 Q: The bot cannot assign rank or streak roles (`Missing Permissions`).
 > **Fix:** In Discord **Server Settings > Roles**, drag the **BigOof** role **above** the rank roles (`Legendary Grandmaster`, `CP`, etc.). Discord prohibits bots from modifying roles positioned higher than their own highest role.
 
-### Q: Solving streaks reset at the wrong time of day.
+### 🌐 Q: Solving streaks reset at the wrong time of day.
 > **Fix:** Set your local timezone in `.env` (e.g. `TIMEZONE=Asia/Dhaka` or `TIMEZONE=America/New_York`). Daily streaks calculate against your local midnight.
 
 ---
