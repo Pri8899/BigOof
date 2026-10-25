@@ -128,9 +128,14 @@ async function processActiveMatch(client, match) {
 
             anyUpdates = true;
 
+            // Ping opponents so they get a Discord notification/sound immediately
+            const rivals = participants.filter(other => other.discord_id !== p.discord_id);
+            const rivalMentions = rivals.length > 0 ? rivals.map(r => `<@${r.discord_id}>`).join(' ') : '';
+            const pingPrefix = rivalMentions ? `🔔 ${rivalMentions}\n` : '';
+
             // Announce Lockout in channel!
             await channel.send({
-              content: `🔒 **LOCKOUT!** <@${p.discord_id}> (\`${p.cf_handle}\`) solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}m** and captured **+${tilePoints} pts**!\n🚫 *Tile #${matchProb.gridIndex || ''} is now locked! Rivals can no longer score this problem.*`
+              content: `${pingPrefix}🔒 **LOCKOUT ALERT!** <@${p.discord_id}> (\`${p.cf_handle}\`) just solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}m** and captured **+${tilePoints} pts**!\n🚫 *Tile #${matchProb.gridIndex || ''} is now locked! Rivals can no longer score this problem — switch to an open tile!*`
             }).catch(() => {});
 
           } else {
