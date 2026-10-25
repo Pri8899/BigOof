@@ -4,7 +4,7 @@ const {
   updateVSMatchProblems, removeVSMatch, getUser, db
 } = require('../database/db');
 const { getCFProblems } = require('./codeforces');
-const { processActiveMatch, buildVSMatchEmbed } = require('../tasks/vsPoller');
+const { processActiveMatch, buildVSMatchEmbed, buildVSMatchComponents } = require('../tasks/vsPoller');
 const axios = require('axios');
 
 const CF_BASE = 'https://codeforces.com/api';
@@ -146,20 +146,67 @@ async function handleVSStart(interaction, matchId, client) {
     }
   }
 
-  // 2. Fetch unsolved problems for rating
-  let problems = await getCFProblems(match.rating, match.rating, match.tag, match.problems_count, excludeSet, match.division);
-  
-  // If count is not enough, fall back to rating +/- 100 range
-  if (problems.length < match.problems_count) {
-    console.log(`[VS-Start] Not enough problems at rating ${match.rating}. Falling back to rating +/- 100 range...`);
-    problems = await getCFProblems(match.rating - 100, match.rating + 100, match.tag, match.problems_count, excludeSet, match.division);
-  }
+  // 2. Fetch problems based on match mode
+  let problems = [];
+  const isGrid = match.mode !== 'classic';
 
-  if (problems.length < match.problems_count) {
-    return interaction.followUp({
-      content: `❌ Could not find enough unsolved problems with these filters. Please try another rating/tag.`,
-      flags: 64
-    });
+  if (isGrid) {
+    const r = match.rating;
+    const tier1Min = Math.max(800, r - 300);
+    const tier1Max = Math.max(800, r - 100);
+    const tier2Min = Math.max(800, r - 100);
+    const tier2Max = Math.min(3500, r + 100);
+    const tier3Min = Math.min(3500, r + 100);
+    const tier3Max = Math.min(3500, r + 300);
+
+    const [t1, t2, t3] = await Promise.all([
+      getCFProblems(tier1Min, tier1Max, match.tag, 3, excludeSet, match.division).catch(() => []),
+      getCFProblems(tier2Min, tier2Max, match.tag, 3, excludeSet, match.division).catch(() => []),
+      getCFProblems(tier3Min, tier3Max, match.tag, 3, excludeSet, match.division).catch(() => [])
+    ]);
+
+    const collected = [...t1, ...t2, ...t3];
+    const seenKeys = new Set(collected.map(p => `${p.contestId}${p.index}`));
+
+    // If any tier fell short, backfill from broader range
+    if (collected.length < 9) {
+      const needed = 9 - collected.length;
+      const broaderExclude = new Set([...excludeSet, ...seenKeys]);
+      const fillers = await getCFProblems(Math.max(800, r - 300), Math.min(3500, r + 300), match.tag, needed, broaderExclude, match.division);
+      collected.push(...fillers);
+    }
+
+    if (collected.length < 9) {
+      return interaction.followUp({
+        content: `❌ Could not find enough unsolved problems with these filters for a 9-problem Lockout Grid. Try adjusting rating or removing tag.`,
+        flags: 64
+      });
+    }
+
+    // Sort by rating ascending so difficulty scales across the 3x3 grid
+    collected.sort((a, b) => (a.rating || 0) - (b.rating || 0));
+
+    // Standard Lockout 3x3 point distribution: 100, 100, 200 / 200, 300, 300 / 400, 400, 500
+    const GRID_POINTS = [100, 100, 200, 200, 300, 300, 400, 400, 500];
+    problems = collected.slice(0, 9).map((p, idx) => ({
+      ...p,
+      gridIndex: idx + 1,
+      points: GRID_POINTS[idx] ?? 100
+    }));
+  } else {
+    // Classic race mode
+    const count = match.problems_count || 5;
+    problems = await getCFProblems(match.rating, match.rating, match.tag, count, excludeSet, match.division);
+    if (problems.length < count) {
+      problems = await getCFProblems(match.rating - 100, match.rating + 100, match.tag, count, excludeSet, match.division);
+    }
+
+    if (problems.length < count) {
+      return interaction.followUp({
+        content: `❌ Could not find enough unsolved problems with these filters. Please try another rating/tag.`,
+        flags: 64
+      });
+    }
   }
 
   // 3. Update match details
@@ -173,27 +220,19 @@ async function handleVSStart(interaction, matchId, client) {
   // Retrieve updated match object
   const updatedMatch = getVSMatch(matchId);
 
-  // 4. Build active match message
+  // 4. Build active match message with interactive 3x3 buttons
   const embed = buildVSMatchEmbed(updatedMatch, participants);
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`vs-refresh_${matchId}`)
-      .setLabel('🔄 Refresh Standings')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`vs-abort_${matchId}`)
-      .setLabel('🛑 Abort Match')
-      .setStyle(ButtonStyle.Danger)
-  );
+  const components = buildVSMatchComponents(updatedMatch);
 
-  await interaction.editReply({ embeds: [embed], components: [row] });
+  await interaction.editReply({ embeds: [embed], components });
 
   // Post start alert text in the channel
   const pMentions = participants.map(p => `<@${p.discord_id}>`).join(' ');
   const channel = interaction.channel;
   if (channel) {
+    const battleType = isGrid ? '⚔️ **3x3 Lockout Grid Battle Started!**' : '🏁 **Versus Race Started!**';
     await channel.send({
-      content: `⚔️ **Versus Match Started!** ${pMentions}\nSolve the problems listed in the embed above. Good luck!`
+      content: `${battleType} ${pMentions}\nSolve the problems listed in the embed above. First to solve locks the problem in Lockout Grid! Good luck!`
     }).catch(() => {});
   }
 }
@@ -252,6 +291,9 @@ function buildLobbyEmbed(match, participants) {
 
   const divLabels = { div1: 'Div. 1', div2: 'Div. 2', div3: 'Div. 3', div4: 'Div. 4' };
   const divValue = match.division ? `\`${divLabels[match.division] ?? match.division}\`` : '`Standard`';
+  const modeLabel = match.mode === 'classic'
+    ? '🏁 **Classic Race** *(Time decay scoring)*'
+    : '⚔️ **3x3 Lockout Grid** *(First AC locks tile · 2500 pts)*';
 
   return new EmbedBuilder()
     .setColor(0x7C4DFF)
@@ -263,6 +305,7 @@ function buildLobbyEmbed(match, participants) {
     .setDescription([
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
       `> 👑 **Host:** <@${match.creator_id}>`,
+      `> 🎮 **Battle Format:** ${modeLabel}`,
       `> 🏅 **Target Rating:** **${match.rating}**`,
       `> 🏆 **Division:** ${divValue}`,
       `> ⏱️ **Time Limit:** **${match.duration_min} mins**`,

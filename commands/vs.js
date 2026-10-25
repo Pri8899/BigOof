@@ -23,6 +23,15 @@ module.exports = {
         .setAutocomplete(true)
     )
     .addStringOption(opt =>
+      opt.setName('mode')
+        .setDescription('Battle format: 3x3 Lockout Grid or Classic Race')
+        .setRequired(false)
+        .addChoices(
+          { name: '⚔️ 3x3 Lockout Grid (Default - first to AC locks tile)', value: 'grid' },
+          { name: '🏁 Classic Race (5 problems with time decay)', value: 'classic' }
+        )
+    )
+    .addStringOption(opt =>
       opt.setName('tag')
         .setDescription('Optional Codeforces topic tag')
         .setRequired(false)
@@ -30,14 +39,14 @@ module.exports = {
     )
     .addIntegerOption(opt =>
       opt.setName('duration')
-        .setDescription('Match duration in minutes (default: 30, min: 10, max: 180)')
+        .setDescription('Match duration in minutes (default: 45 for grid, 30 for classic)')
         .setRequired(false)
         .setMinValue(10)
         .setMaxValue(180)
     )
     .addIntegerOption(opt =>
       opt.setName('problems')
-        .setDescription('Number of problems to solve (default: 5, min: 1, max: 10)')
+        .setDescription('Number of problems (default: 9 for grid, 5 for classic)')
         .setRequired(false)
         .setMinValue(1)
         .setMaxValue(10)
@@ -103,9 +112,12 @@ module.exports = {
 
   async execute(interaction) {
     const rating    = interaction.options.getInteger('rating');
+    const mode      = interaction.options.getString('mode') || 'grid';
     const tag       = interaction.options.getString('tag')?.toLowerCase().trim() || null;
-    const duration  = interaction.options.getInteger('duration') ?? 30;
-    const problems  = interaction.options.getInteger('problems') ?? 5;
+    const defaultDuration = mode === 'grid' ? 45 : 30;
+    const defaultProblems = mode === 'grid' ? 9 : 5;
+    const duration  = interaction.options.getInteger('duration') ?? defaultDuration;
+    const problems  = interaction.options.getInteger('problems') ?? defaultProblems;
     const division  = interaction.options.getString('division') || null;
     const creatorId = interaction.user.id;
 
@@ -138,7 +150,7 @@ module.exports = {
     const guildId = interaction.guildId;
 
     // 4. Save match and insert creator as first participant
-    createVSMatch(matchId, channelId, guildId, creatorId, rating, tag, division, duration, problems);
+    createVSMatch(matchId, channelId, guildId, creatorId, rating, tag, division, duration, problems, mode);
     joinVSMatch(matchId, creatorId, user.cf_handle);
 
     const participants = getVSParticipants(matchId);
@@ -151,7 +163,8 @@ module.exports = {
       tag,
       division,
       duration_min: duration,
-      problems_count: problems
+      problems_count: problems,
+      mode
     }, participants);
 
     const row = new ActionRowBuilder().addComponents(

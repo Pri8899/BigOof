@@ -24,12 +24,13 @@
   - [⚡ 60s Live Submission Tracker](#-60s-live-submission-tracker)
   - [📊 Dynamic Dashboard & Leaderboard](#-dynamic-dashboard--leaderboard)
   - [🩸 Daily Challenges & First Blood Race](#-daily-challenges--first-blood-race)
+  - [🌅 Contest Wrap-up & Upsolve Radar](#-contest-wrap-up--upsolve-radar)
   - [📅 Contest Radar & Countdown Pings](#-contest-radar--countdown-pings)
-  - [⚔️ 1v1 & Multiplayer Duels (`/vs`)](#️-1v1--multiplayer-duels-vs)
+  - [⚔️ 3x3 Lockout Grid Battles & Duels (`/vs`)](#️-3x3-lockout-grid-battles--duels-vs)
   - [🏁 Virtual Contests (`/vc`)](#-virtual-contests-vc)
   - [🤖 ICPC Team Builder & Skill Radar](#-icpc-team-builder--skill-radar)
   - [🐙 GitHub Developer Feed](#-github-developer-feed)
-- [📚 Command Reference (26 Slash Commands)](#-command-reference)
+- [📚 Command Reference (27 Slash Commands)](#-command-reference)
   - [👤 Profile & Account Management](#-profile--account-management)
   - [📈 Discovery & Problem Solving](#-discovery--problem-solving)
   - [🎮 Duels & Competitions](#-duels--competitions)
@@ -153,14 +154,24 @@ flowchart TD
 - **First Blood 🩸:** The first member to solve any daily problem triggers an immediate server celebration.
 - Celebrates daily sweeps when ambitious coders solve all problems in the set.
 
+### 🌅 Contest Wrap-up & Upsolve Radar
+- **Autonomous Morning Recap (9:00 AM):** Automatically triggers the next morning at **9:00 AM** (local timezone) and posts directly to your server's `#general` channel.
+- **Personalized Roadblock Detection:** Analyzes the finished Codeforces round for all server contenders. For each participant, BigOof pinpoints the exact roadblock problem where they choked (e.g. `WA on test 4`, `TLE on test 2`, or the first unattempted problem).
+- **Direct 1-Click Problem Links:** Formats problems with clean clickable markdown links `[2277C - Edge Addeleting](url)` directly into Codeforces.
+- **Zero Ratings Delay / Zero Clutter:** Avoids unrated/null post-contest rating artifacts, eliminates ugly raw URLs, and avoids gamified reaction or thread spam.
+- **On-Demand Command (`/wrapup`):** Run `/wrapup [contest]` anytime to view recent round standings and your upsolve challenge instantly.
+
 ### 📅 Contest Radar & Countdown Pings
 - Scrapes and aggregates upcoming contests across Codeforces, AtCoder, Toph, plus server-specific custom rounds.
 - Dispatches countdown notification pings **24 hours** and **1 hour** before each contest starts.
 
-### ⚔️ 1v1 & Multiplayer Duels (`/vs`)
-- Challenge friends or server rivals to real-time coding duels!
-- Specify rating target (e.g. 1400) and duration (e.g. 30m).
-- BigOof picks an unsolved problem, starts the timer, watches the judge, and announces the winner the moment an Accepted verdict arrives.
+### ⚔️ 3x3 Lockout Grid Battles & Duels (`/vs`)
+- **3x3 Lockout Grid (Default):** Generates a dynamic 9-problem board spanning 3 rating tiers with point values from 100 to 500 (2,500 total points).
+- **True Lockout Mechanics:** The first contender to get Accepted (`OK`) permanently locks that tile and scores the points. Rivals can no longer score locked problems!
+- **Interactive Discord Problem Buttons:** Features 3 rows of direct Link buttons on Discord. Contenders click a button to immediately open that Codeforces problem in their browser.
+- **Real-Time ASCII Grid & Scoreboard:** Polled every 15 seconds with live ASCII board status, lead tug-of-war ratio bar, and automatic lockout announcements.
+- **Decisive Early Victory:** Automatically detects mathematical locks (when the leader secures $> 1,250$ points or holds an insurmountable lead over remaining open tiles) and awards victory with a championship gold verdict card.
+- **Classic Race Mode:** Supports traditional 5-problem races with time-decay scoring via `/vs mode:Classic Race`.
 
 ### 🏁 Virtual Contests (`/vc`)
 - Run simulated ICPC/Div rounds right inside Discord.
@@ -197,6 +208,7 @@ BigOof features **26 unified slash commands** with zero duplicates:
 |---|---|---|
 | `/leaderboard` | None | Shows the server leaderboard ranked by rating, solves, or active streaks. |
 | `/contests` | `platform` *(optional)* | Upcoming contests radar (All, Codeforces, AtCoder, Toph, Custom). |
+| `/wrapup` | `contest` *(optional)*, `broadcast` *(optional)* | View the latest Codeforces round wrap-up and your personal upsolve roadblock. |
 | `/graph` | `platform`, `user` *(optional)* | Generates a visual rating progress line chart. |
 | `/skills` | `user` *(optional)* | Generates an RPG topic mastery radar sheet (DP, Math, Graphs, etc.). |
 | `/whosolved` | `problem_link` | Finds every server member who has solved a given problem. |
@@ -208,10 +220,7 @@ BigOof features **26 unified slash commands** with zero duplicates:
 
 | Command | Options | Description |
 |---|---|---|
-| `/vs create` | `rating`, `duration`, `tag` *(optional)* | Creates a new Versus duel lobby. |
-| `/vs join` | `match_id` | Joins an open Versus match. |
-| `/vs start` | `match_id` | Starts the duel and reveals the problem. |
-| `/vs cancel` | `match_id` | Cancels a pending duel lobby. |
+| `/vs` | `rating`, `mode` *(optional)*, `duration` *(optional)*, `problems` *(optional)*, `tag` *(optional)*, `division` *(optional)* | Starts a 1v1 or multiplayer **3x3 Lockout Grid** battle or **Classic Race** with interactive problem buttons and live tile locking. |
 | `/vc start` | `duration`, `difficulty` | Launches a server-wide Virtual Contest round. |
 | `/vc status` | None | Displays the remaining time and standings for the active Virtual Contest. |
 | `/vc end` | None | Concludes the active Virtual Contest and calculates final standings. |
@@ -222,7 +231,7 @@ BigOof features **26 unified slash commands** with zero duplicates:
 
 | Command | Options | Description |
 |---|---|---|
-| `/set-channel` | `feature`, `channel` | Configures target channel for any feed, or select **"🌐 All Features (One-Click Setup)"** to bind every alert into one single channel. |
+| `/set-channel` | `feature`, `channel` | Configures target channel for any feed (Contest Radar, Dashboard, Feeds, Daily Challenges, Contest Wrap-up, General Channel, etc.), or select **"🌐 All Features (One-Click Setup)"**. |
 | `/view-channels` | None | Displays all configured bot channels for this server. |
 | `/setup-roles` | None | Automatically creates and configures the base `CP` role, all 10 Codeforces rank roles (with official colors), and streak milestone roles. |
 | `/custom-contest` | `action` (add / edit / delete / list), ... | Manages custom server contests included in radar embeds and pings. |

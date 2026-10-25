@@ -10,9 +10,10 @@ const FEATURES = [
   { name: '📈 Rating Updates (Rating change & rank up alerts)', value: 'rating_channel_id', label: 'Rating Updates' },
   { name: '💡 Daily Challenges (Daily problem suggestions & first blood)', value: 'suggest_channel_id', label: 'Daily Challenges' },
   { name: '⚡ Live Submissions Feed (Real-time accepted solves)', value: 'feed_channel_id', label: 'Live Submissions Feed' },
+  { name: '🌅 Contest Wrap-up (Next-day 9AM contest recap & upsolve)', value: 'wrapup_channel_id', label: 'Contest Wrap-up' },
   { name: '🐙 GitHub Activity Feed (Commits, PRs, and repositories)', value: 'github_channel_id', label: 'GitHub Activity Feed' },
   { name: '📢 Announcements (Broadcast channel for /announce)', value: 'announcement_channel_id', label: 'Announcements' },
-  { name: '💬 General Channel (General alerts & first blood broadcasts)', value: 'general_channel_id', label: 'General Channel' },
+  { name: '💬 General Channel (General alerts, first blood & auto-wrapup)', value: 'general_channel_id', label: 'General Channel' },
   { name: '💾 Database Backups (Bot Host only)', value: 'backup_channel_id', label: 'Database Backups' }
 ];
 
@@ -65,6 +66,7 @@ module.exports = {
         'rating_channel_id',
         'suggest_channel_id',
         'feed_channel_id',
+        'wrapup_channel_id',
         'github_channel_id',
         'announcement_channel_id',
         'general_channel_id'

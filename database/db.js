@@ -246,6 +246,32 @@ try {
   // Column already exists
 }
 
+// Run migration to add mode and locks columns to vs_matches
+try {
+  db.exec("ALTER TABLE vs_matches ADD COLUMN mode TEXT DEFAULT 'grid';");
+} catch (e) {
+  // Column already exists
+}
+try {
+  db.exec("ALTER TABLE vs_matches ADD COLUMN locks TEXT DEFAULT '{}';");
+} catch (e) {
+  // Column already exists
+}
+
+// Create contest_wrapups table if not exists
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contest_wrapups (
+      contest_id TEXT NOT NULL,
+      guild_id   TEXT NOT NULL,
+      posted_at  INTEGER DEFAULT (strftime('%s','now')),
+      PRIMARY KEY (contest_id, guild_id)
+    );
+  `);
+} catch (e) {
+  // Table already exists
+}
+
 // Run migration to add toph_handle column to users if it doesn't exist
 try {
   db.exec("ALTER TABLE users ADD COLUMN toph_handle TEXT;");
@@ -612,17 +638,41 @@ function cacheContestName(contestId, name) {
   db.prepare('INSERT OR REPLACE INTO cf_contest_cache (contest_id, name) VALUES (?, ?)').run(String(contestId), name);
 }
 
-// ─── Versus Match Helpers ─────────────────────────────────────
-function createVSMatch(id, channelId, guildId, creatorId, rating, tag, division, durationMin, problemsCount) {
+// ─── Contest Wrap-up Helpers ──────────────────────────────────
+function isContestWrappedUp(contestId, guildId = 'global') {
+  const gid = guildId ? String(guildId) : 'global';
+  const row = db.prepare('SELECT 1 FROM contest_wrapups WHERE contest_id = ? AND guild_id = ?').get(String(contestId), gid);
+  return !!row;
+}
+
+function markContestWrappedUp(contestId, guildId = 'global') {
+  const gid = guildId ? String(guildId) : 'global';
   db.prepare(`
-    INSERT INTO vs_matches (id, channel_id, guild_id, creator_id, rating, tag, division, duration_min, problems_count, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'lobby')
-  `).run(id, channelId, guildId, creatorId, rating, tag, division, durationMin, problemsCount);
+    INSERT OR REPLACE INTO contest_wrapups (contest_id, guild_id, posted_at)
+    VALUES (?, ?, strftime('%s','now'))
+  `).run(String(contestId), gid);
+}
+
+// ─── Versus Match Helpers ─────────────────────────────────────
+function createVSMatch(id, channelId, guildId, creatorId, rating, tag, division, durationMin, problemsCount, mode = 'grid') {
+  db.prepare(`
+    INSERT INTO vs_matches (id, channel_id, guild_id, creator_id, rating, tag, division, duration_min, problems_count, mode, locks, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 'lobby')
+  `).run(id, channelId, guildId, creatorId, rating, tag, division, durationMin, problemsCount, mode);
 }
 
 function getVSMatch(id) {
   const row = db.prepare('SELECT * FROM vs_matches WHERE id = ?').get(id);
-  if (row && row.problems) row.problems = JSON.parse(row.problems);
+  if (row) {
+    if (row.problems) {
+      try { row.problems = JSON.parse(row.problems); } catch (e) { row.problems = []; }
+    }
+    if (row.locks) {
+      try { row.locks = JSON.parse(row.locks); } catch (e) { row.locks = {}; }
+    } else {
+      row.locks = {};
+    }
+  }
   return row;
 }
 
@@ -634,6 +684,10 @@ function updateVSMatchStatus(id, status, startedAt = null, endsAt = null) {
 
 function updateVSMatchProblems(id, problems) {
   db.prepare('UPDATE vs_matches SET problems = ? WHERE id = ?').run(JSON.stringify(problems), id);
+}
+
+function updateVSMatchLocks(id, locks) {
+  db.prepare('UPDATE vs_matches SET locks = ? WHERE id = ?').run(JSON.stringify(locks), id);
 }
 
 function joinVSMatch(matchId, discordId, cfHandle) {
@@ -661,7 +715,14 @@ function updateVSParticipantScore(matchId, discordId, score, solvesJson, wrongAt
 function getActiveVSMatches() {
   const rows = db.prepare("SELECT * FROM vs_matches WHERE status = 'active'").all();
   return rows.map(r => {
-    if (r.problems) r.problems = JSON.parse(r.problems);
+    if (r.problems) {
+      try { r.problems = JSON.parse(r.problems); } catch (e) { r.problems = []; }
+    }
+    if (r.locks) {
+      try { r.locks = JSON.parse(r.locks); } catch (e) { r.locks = {}; }
+    } else {
+      r.locks = {};
+    }
     return r;
   });
 }
@@ -711,7 +772,8 @@ module.exports = {
   getLastSubmission, setLastSubmission,
   getWeeklySnapshot, setWeeklySnapshot, getAllWeeklySnapshots,
   getCachedContestName, cacheContestName,
-  createVSMatch, getVSMatch, updateVSMatchStatus, updateVSMatchProblems,
+  isContestWrappedUp, markContestWrappedUp,
+  createVSMatch, getVSMatch, updateVSMatchStatus, updateVSMatchProblems, updateVSMatchLocks,
   joinVSMatch, getVSParticipants, updateVSParticipantScore, getActiveVSMatches, removeVSMatch,
   getHeadToHeadVersus
 };

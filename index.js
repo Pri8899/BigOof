@@ -77,6 +77,7 @@ client.once('ready', async () => {
   const { startSubmissionFeed } = require('./tasks/submissionFeed');
   const { startWeeklyWrapup }   = require('./tasks/weeklyWrapup');
   const { startVSPoller }       = require('./tasks/vsPoller');
+  const { startContestWrapup }  = require('./tasks/contestWrapup');
   const { initializeProblemCache } = require('./utils/codeforces');
 
   // Asynchronously warm up the CF problem cache on startup
@@ -91,6 +92,7 @@ client.once('ready', async () => {
   startSubmissionFeed(client);
   startWeeklyWrapup(client);
   startVSPoller(client);
+  startContestWrapup(client);
   startAutoBackup(client);
   startGitHubFeed(client);
 

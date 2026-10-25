@@ -39,6 +39,7 @@ const CATEGORIES = {
     title: '🏆 Contests & Problem Solving',
     fields: [
       { name: '`/contests [platform]`', value: 'View upcoming contests across Codeforces, AtCoder, Toph, and custom server events.' },
+      { name: '`/wrapup [contest]`', value: 'View the latest Codeforces contest wrap-up and your personal upsolve roadblock.' },
       { name: '`/leaderboard`', value: 'Display the server ranking leaderboard filtered to current server members.' },
       { name: '`/suggest [tag] [rating] [div]`', value: 'Smart on-demand Codeforces problem recommender tailored to your rating.' },
       { name: '`/whosolved <problem_link>`', value: 'Find everyone in the server who has already solved a specific Codeforces problem.' },
@@ -51,7 +52,7 @@ const CATEGORIES = {
     title: '⚔️ Duels & Virtual Contests',
     fields: [
       { name: '`/compare [user1] [user2]`', value: 'Head-to-head clash comparing two rivals, problem overlaps, and 1v1 record.' },
-      { name: '`/vs <rating> [duration] [tag]`', value: 'Start a 1v1 or multiplayer Codeforces duel with live submission tracking.' },
+      { name: '`/vs <rating> [mode] [duration] [tag]`', value: 'Start a 1v1 or multiplayer 3x3 Lockout Grid battle or classic race with live tile locking.' },
       { name: '`/vc start <difficulty> [duration]`', value: 'Start a simulated Virtual Contest round (individual or team mode).' },
       { name: '`/vc status`', value: 'Check remaining time, problem set, and standings of the active virtual contest.' },
       { name: '`/vc end`', value: 'Conclude an active virtual contest early and tally the final scores.' },
