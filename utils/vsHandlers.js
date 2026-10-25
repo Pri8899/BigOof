@@ -222,7 +222,7 @@ async function handleVSStart(interaction, matchId, client) {
 
   // 4. Build active match message with interactive 3x3 buttons
   const embed = buildVSMatchEmbed(updatedMatch, participants);
-  const components = buildVSMatchComponents(updatedMatch);
+  const components = buildVSMatchComponents(updatedMatch, participants);
 
   await interaction.editReply({ embeds: [embed], components });
 
@@ -230,9 +230,10 @@ async function handleVSStart(interaction, matchId, client) {
   const pMentions = participants.map(p => `<@${p.discord_id}>`).join(' ');
   const channel = interaction.channel;
   if (channel) {
-    const battleType = isGrid ? '⚔️ **3x3 Lockout Grid Battle Started!**' : '🏁 **Versus Race Started!**';
+    const battleType = isGrid ? '⚔️ **3x3 Grid Battle Started!**' : '🏁 **Versus Race Started!**';
+    const ruleHint = isGrid ? '1st AC on a tile scores 100% full points. Later solves score 1/3 value (all tiles stay open)!' : 'Solve problems as fast as possible!';
     await channel.send({
-      content: `${battleType} ${pMentions}\nSolve the problems listed in the embed above. First to solve locks the problem in Lockout Grid! Good luck!`
+      content: `${battleType} ${pMentions}\n${ruleHint} Click the buttons in the embed to view each problem. Good luck!`
     }).catch(() => {});
   }
 }
@@ -293,7 +294,7 @@ function buildLobbyEmbed(match, participants) {
   const divValue = match.division ? `\`${divLabels[match.division] ?? match.division}\`` : '`Standard`';
   const modeLabel = match.mode === 'classic'
     ? '🏁 **Classic Race** *(Time decay scoring)*'
-    : '⚔️ **3x3 Lockout Grid** *(First AC locks tile · 2500 pts)*';
+    : '⚔️ **3x3 Battle Grid** *(1st AC: 100% pts · Later AC: 1/3 pts · 2,500 max pts)*';
 
   return new EmbedBuilder()
     .setColor(0x7C4DFF)

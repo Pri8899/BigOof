@@ -36,7 +36,6 @@ async function processActiveMatch(client, match) {
 
   const participants = getVSParticipants(match.id);
   if (participants.length === 0) {
-    // No participants, clean up
     removeVSMatch(match.id);
     return;
   }
@@ -74,15 +73,8 @@ async function processActiveMatch(client, match) {
         const matchProb = match.problems.find(pr => `${pr.contestId}-${pr.index}` === probKey);
         if (!matchProb) continue;
 
-        if (isGrid) {
-          // In Lockout Grid Mode: if tile is already locked, nobody else can score it
-          if (match.locks && match.locks[probKey]) {
-            continue;
-          }
-        } else {
-          // Classic Mode: Skip if this specific participant already solved it
-          if (p.solves[probKey]) continue;
-        }
+        // Skip if THIS participant already solved this problem
+        if (p.solves[probKey]) continue;
 
         // If not solved yet, analyze verdict
         if (sub.verdict === 'OK') {
@@ -105,38 +97,51 @@ async function processActiveMatch(client, match) {
           }
 
           if (isGrid) {
-            // Lockout Grid Tile claim
-            if (match.locks[probKey]) continue; // Double check race condition
+            const basePoints = matchProb.points || 100;
+            const isFirst = !match.locks[probKey];
 
-            const tilePoints = matchProb.points || 100;
-            match.locks[probKey] = {
-              discord_id: p.discord_id,
-              cf_handle: p.cf_handle,
-              points: tilePoints,
-              elapsedMin,
-              timestamp: sub.creationTimeSeconds,
-              gridIndex: matchProb.gridIndex || 1
-            };
+            // Option B: 1st solver gets 100% full points. Subsequent solvers get 1/3 points!
+            const awardedPoints = isFirst ? basePoints : Math.round(basePoints / 3);
 
             p.solves[probKey] = {
               elapsedMin,
-              points: tilePoints,
+              points: awardedPoints,
+              isFirst,
               timestamp: sub.creationTimeSeconds
             };
-            p.score += tilePoints;
+            p.score += awardedPoints;
             p.wrong_attempts[probKey] = wrongCount;
+
+            if (isFirst) {
+              match.locks[probKey] = {
+                discord_id: p.discord_id,
+                cf_handle: p.cf_handle,
+                points: basePoints,
+                elapsedMin,
+                timestamp: sub.creationTimeSeconds,
+                gridIndex: matchProb.gridIndex || 1,
+                solversCount: 1
+              };
+            } else {
+              match.locks[probKey].solversCount = (match.locks[probKey].solversCount || 1) + 1;
+            }
 
             anyUpdates = true;
 
-            // Ping opponents so they get a Discord notification/sound immediately
-            const rivals = participants.filter(other => other.discord_id !== p.discord_id);
-            const rivalMentions = rivals.length > 0 ? rivals.map(r => `<@${r.discord_id}>`).join(' ') : '';
-            const pingPrefix = rivalMentions ? `🔔 ${rivalMentions}\n` : '';
+            // Announce solve in channel!
+            if (isFirst) {
+              const droppedVal = Math.round(basePoints / 3);
+              const rivals = participants.filter(pt => pt.discord_id !== p.discord_id);
+              const rivalPings = rivals.map(r => `<@${r.discord_id}>`).join(' ');
 
-            // Announce Lockout in channel!
-            await channel.send({
-              content: `${pingPrefix}🔒 **LOCKOUT ALERT!** <@${p.discord_id}> (\`${p.cf_handle}\`) just solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}m** and captured **+${tilePoints} pts**!\n🚫 *Tile #${matchProb.gridIndex || ''} is now locked! Rivals can no longer score this problem — switch to an open tile!*`
-            }).catch(() => {});
+              await channel.send({
+                content: `⚡ **FIRST BLOOD ON [P${matchProb.gridIndex || ''}]!** <@${p.discord_id}> (\`${p.cf_handle}\`) solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}m** and claimed **+${basePoints} pts**!\n🟡 ${rivalPings || 'Rivals'}, Tile #${matchProb.gridIndex || ''} is now downgraded to **${droppedVal} pts** (1/3 value). You can still solve it to score partial points or switch to an open full-value tile!`
+              }).catch(() => {});
+            } else {
+              await channel.send({
+                content: `🎉 <@${p.discord_id}> (\`${p.cf_handle}\`) also solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}m** and cashed in **+${awardedPoints} pts** (1/3 value)!`
+              }).catch(() => {});
+            }
 
           } else {
             // Classic mode scoring with decay and first blood
@@ -215,33 +220,44 @@ async function processActiveMatch(client, match) {
 
     // ── Check Early Conclude Conditions ─────────────────────────
     if (isGrid) {
-      const totalBoardPoints = match.problems.reduce((sum, pr) => sum + (pr.points || 100), 0);
-      const lockedKeys = Object.keys(match.locks);
-      const allLocked = lockedKeys.length === match.problems.length;
+      const totalProblems = match.problems.length;
+      const allSolvedAll = participants.every(p => Object.keys(p.solves || {}).length === totalProblems);
+      if (allSolvedAll) {
+        await concludeMatch(client, channel, match, participants, 'All contenders solved all 9 problems!');
+        return;
+      }
 
+      // Mathematical lock: check if leader is uncatchable
       const sorted = [...participants].sort((a, b) => b.score - a.score);
       const leader = sorted[0];
-      const runnerUp = sorted[1] || { score: 0 };
 
-      // Calculate remaining available points on unlocked tiles
-      let remainingUnlockedPoints = 0;
-      for (const pr of match.problems) {
-        const k = `${pr.contestId}-${pr.index}`;
-        if (!match.locks[k]) {
-          remainingUnlockedPoints += (pr.points || 100);
+      if (sorted.length >= 2 && leader && leader.score > 0) {
+        let canAnyoneCatchUp = false;
+        for (let i = 1; i < sorted.length; i++) {
+          const contender = sorted[i];
+          let maxRemainingForContender = 0;
+          for (const pr of match.problems) {
+            const k = `${pr.contestId}-${pr.index}`;
+            if (!contender.solves[k]) {
+              const basePts = pr.points || 100;
+              // If already solved by someone, this contender can at most score 1/3
+              if (match.locks && match.locks[k]) {
+                maxRemainingForContender += Math.round(basePts / 3);
+              } else {
+                maxRemainingForContender += basePts;
+              }
+            }
+          }
+          if (contender.score + maxRemainingForContender >= leader.score) {
+            canAnyoneCatchUp = true;
+            break;
+          }
         }
-      }
 
-      // 1. All 9 tiles locked
-      if (allLocked) {
-        await concludeMatch(client, channel, match, participants, 'All lockout tiles have been locked!');
-        return;
-      }
-
-      // 2. Mathematical lock: Leader has more points than runner-up can possibly score
-      if (leader && leader.score > (runnerUp.score + remainingUnlockedPoints)) {
-        await concludeMatch(client, channel, match, participants, 'Decisive Lockout Victory! Leader secured an unbeatable point lead.');
-        return;
+        if (!canAnyoneCatchUp) {
+          await concludeMatch(client, channel, match, participants, 'Decisive Victory! Leader secured an unbeatable point lead.');
+          return;
+        }
       }
 
     } else {
@@ -260,18 +276,23 @@ async function processActiveMatch(client, match) {
 }
 
 /**
- * Generates an aligned ASCII table representing the 3x3 Lockout Grid.
+ * Generates an aligned ASCII table representing the 3x3 Battle Grid.
  */
-function renderGridAscii(match) {
+function renderGridAscii(match, participants = []) {
   const cells = [];
   for (let i = 0; i < 9; i++) {
     const prob = match.problems[i];
     const key = prob ? `${prob.contestId}-${prob.index}` : '';
     const lock = match.locks && match.locks[key];
     const pts = prob?.points || 100;
-    if (lock) {
-      const h = lock.cf_handle.slice(0, 5);
-      cells.push(`🔒${h}`);
+
+    const totalSolvers = participants.filter(pt => pt.solves && pt.solves[key]).length;
+
+    if (totalSolvers >= participants.length && participants.length > 1) {
+      cells.push(`✅Done`);
+    } else if (lock) {
+      const h = lock.cf_handle.slice(0, 4);
+      cells.push(`⚡${h}`);
     } else {
       cells.push(`${pts}pt`);
     }
@@ -302,6 +323,28 @@ function renderTugOfWarBar(score1, score2, totalBlocks = 14) {
 }
 
 /**
+ * Formats a problem row line for the grid embed.
+ */
+function formatGridProblemLine(p, idx, match, participants) {
+  const key = `${p.contestId}-${p.index}`;
+  const lock = match.locks && match.locks[key];
+  const link = `[${p.contestId}${p.index} - ${p.name}](${p.url})`;
+  const basePts = p.points || 100;
+  const droppedPts = Math.round(basePts / 3);
+
+  if (!lock) {
+    return `> \`[${idx + 1}]\` 🔓 **${basePts} pts** · ${link} — Open (${p.rating || 'N/A'})`;
+  }
+
+  const totalSolvers = participants.filter(pt => pt.solves && pt.solves[key]).length;
+  if (totalSolvers >= participants.length && participants.length > 1) {
+    return `> \`[${idx + 1}]\` ✅ **${basePts} pts** · ${link} — Solved by All Contenders`;
+  }
+
+  return `> \`[${idx + 1}]\` ⚡ **${basePts} pts** · ${link} — 1st AC: <@${lock.discord_id}> (+${basePts} pts) · 🟡 Rival Value: **${droppedPts} pts**`;
+}
+
+/**
  * Formats match Embed and Standings details.
  */
 function buildVSMatchEmbed(match, participants) {
@@ -311,49 +354,19 @@ function buildVSMatchEmbed(match, participants) {
 
   if (isGrid && match.problems && match.problems.length >= 9) {
     const totalBoardPoints = match.problems.reduce((sum, pr) => sum + (pr.points || 100), 0);
-    const lockedCount = Object.keys(match.locks || {}).length;
+    const firstBloodsTaken = Object.keys(match.locks || {}).length;
 
-    // Build 9-problem list grouped by rows
-    const row1Lines = match.problems.slice(0, 3).map((p, idx) => {
-      const key = `${p.contestId}-${p.index}`;
-      const lock = match.locks && match.locks[key];
-      const link = `[${p.contestId}${p.index} - ${p.name}](${p.url})`;
-      if (lock) {
-        return `> \`[${idx + 1}]\` 🔒 **${p.points} pts** · ${link} — Locked by <@${lock.discord_id}> (${Math.round(lock.elapsedMin)}m)`;
-      }
-      return `> \`[${idx + 1}]\` 🔓 **${p.points} pts** · ${link} — Open (${p.rating || 'N/A'})`;
-    }).join('\n');
-
-    const row2Lines = match.problems.slice(3, 6).map((p, idx) => {
-      const realIdx = idx + 3;
-      const key = `${p.contestId}-${p.index}`;
-      const lock = match.locks && match.locks[key];
-      const link = `[${p.contestId}${p.index} - ${p.name}](${p.url})`;
-      if (lock) {
-        return `> \`[${realIdx + 1}]\` 🔒 **${p.points} pts** · ${link} — Locked by <@${lock.discord_id}> (${Math.round(lock.elapsedMin)}m)`;
-      }
-      return `> \`[${realIdx + 1}]\` 🔓 **${p.points} pts** · ${link} — Open (${p.rating || 'N/A'})`;
-    }).join('\n');
-
-    const row3Lines = match.problems.slice(6, 9).map((p, idx) => {
-      const realIdx = idx + 6;
-      const key = `${p.contestId}-${p.index}`;
-      const lock = match.locks && match.locks[key];
-      const link = `[${p.contestId}${p.index} - ${p.name}](${p.url})`;
-      if (lock) {
-        return `> \`[${realIdx + 1}]\` 🔒 **${p.points} pts** · ${link} — Locked by <@${lock.discord_id}> (${Math.round(lock.elapsedMin)}m)`;
-      }
-      return `> \`[${realIdx + 1}]\` 🔓 **${p.points} pts** · ${link} — Open (${p.rating || 'N/A'})`;
-    }).join('\n');
+    const row1Lines = match.problems.slice(0, 3).map((p, idx) => formatGridProblemLine(p, idx, match, participants)).join('\n');
+    const row2Lines = match.problems.slice(3, 6).map((p, idx) => formatGridProblemLine(p, idx + 3, match, participants)).join('\n');
+    const row3Lines = match.problems.slice(6, 9).map((p, idx) => formatGridProblemLine(p, idx + 6, match, participants)).join('\n');
 
     // Standings text
     const standingsText = sorted.map((p, idx) => {
       const medal = ['🥇', '🥈', '🥉'][idx] ?? `\`#${idx + 1}\``;
-      const myLocks = Object.values(match.locks || {}).filter(l => l.discord_id === p.discord_id);
-      const tilesSummary = myLocks.length > 0
-        ? `(${myLocks.map(l => `P${l.gridIndex}`).join(', ')})`
-        : '*(0 tiles)*';
-      return `${medal} <@${p.discord_id}> (\`${p.cf_handle}\`): **${p.score} pts** · **${myLocks.length}** locked ${tilesSummary}`;
+      const mySolves = Object.keys(p.solves || {});
+      const myFirstBloods = Object.values(p.solves || {}).filter(s => s.isFirst).length;
+      const fbText = myFirstBloods > 0 ? ` · **${myFirstBloods}** ⚡ First Bloods` : '';
+      return `${medal} <@${p.discord_id}> (\`${p.cf_handle}\`): **${p.score} pts** (${mySolves.length}/${match.problems.length} solved${fbText})`;
     }).join('\n');
 
     let duelBar = '';
@@ -364,21 +377,22 @@ function buildVSMatchEmbed(match, participants) {
     return new EmbedBuilder()
       .setColor(0x7C4DFF)
       .setAuthor({
-        name: 'Codeforces Duel Arena · Lockout Grid',
+        name: 'Codeforces Duel Arena · Battle Grid',
         iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
       })
-      .setTitle(`⚔️ 3x3 Lockout Battle Active · ID \`${match.id}\``)
+      .setTitle(`⚔️ 3x3 Grid Battle Active · ID \`${match.id}\``)
       .setDescription([
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
         `> 🏅 **Target Rating:** **${match.rating}**`,
         `> ⏱️ **Time Left:** <t:${match.ends_at}:R> (ends <t:${match.ends_at}:t>)`,
-        `> 🔒 **Locked Tiles:** **${lockedCount}/9** claimed (${totalBoardPoints} pts total)`,
+        `> ⚡ **Scoring Rule:** 1st AC = **100% pts** · Later AC = **1/3 pts** (All tiles solvable)`,
+        `> 🎯 **First Bloods:** **${firstBloodsTaken}/9** claimed (${totalBoardPoints} max pts)`,
         match.tag ? `> 🏷️ **Tag Filter:** \`${match.tag}\`` : null,
         match.division ? `> 🏆 **Division:** \`${divLabels[match.division] ?? match.division}\`` : null,
         `> 🆔 **Match ID:** \`${match.id}\`${duelBar}`,
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-        `**Lockout Grid Overview:**`,
-        renderGridAscii(match)
+        `**3x3 Grid State:**`,
+        renderGridAscii(match, participants)
       ].filter(Boolean).join('\n'))
       .addFields(
         { name: '📋 Row 1 · 100–200 Points', value: row1Lines, inline: false },
@@ -386,7 +400,7 @@ function buildVSMatchEmbed(match, participants) {
         { name: '📋 Row 3 · 400–500 Points', value: row3Lines, inline: false },
         { name: '📊 Live Standings', value: standingsText, inline: false }
       )
-      .setFooter({ text: 'BigOof Lockout Battle · First to AC locks the problem tile!' })
+      .setFooter({ text: 'BigOof Grid Battle · 1st solve gets 100%, later gets 1/3 value!' })
       .setTimestamp();
   }
 
@@ -436,9 +450,9 @@ function buildVSMatchEmbed(match, participants) {
 
 /**
  * Builds interactive button rows for active matches.
- * In Lockout Grid mode: 3 rows of 3 clickable Link buttons + 1 row for actions.
+ * Features 3 rows of 3 clickable Link buttons + 1 row for actions.
  */
-function buildVSMatchComponents(match) {
+function buildVSMatchComponents(match, participants = []) {
   const rows = [];
   const isGrid = match.mode !== 'classic';
 
@@ -450,10 +464,18 @@ function buildVSMatchComponents(match) {
         const prob = match.problems[idx];
         if (!prob) continue;
         const key = `${prob.contestId}-${prob.index}`;
-        const isLocked = match.locks && match.locks[key];
-        const label = isLocked
-          ? `🔒 P${idx + 1}: ${isLocked.cf_handle.slice(0, 8)} (${prob.points})`
-          : `[P${idx + 1}] ${prob.points} pts`;
+        const lock = match.locks && match.locks[key];
+        const basePts = prob.points || 100;
+        const droppedPts = Math.round(basePts / 3);
+
+        const totalSolvers = participants.filter(pt => pt.solves && pt.solves[key]).length;
+
+        let label = `[P${idx + 1}] ${basePts} pts`;
+        if (totalSolvers >= participants.length && participants.length > 1) {
+          label = `✅ P${idx + 1}: Done`;
+        } else if (lock) {
+          label = `🟡 [P${idx + 1}] ${droppedPts} pts`;
+        }
 
         row.addComponents(
           new ButtonBuilder()
@@ -487,7 +509,7 @@ function buildVSMatchComponents(match) {
  */
 async function refreshMatchEmbed(client, channel, match, participants) {
   const embed = buildVSMatchEmbed(match, participants);
-  const components = buildVSMatchComponents(match);
+  const components = buildVSMatchComponents(match, participants);
 
   const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
   if (!messages) return;
@@ -520,7 +542,7 @@ async function concludeMatch(client, channel, match, participants, reason) {
     if (tied.length > 1) {
       winnersText = `🤝 **TIE MATCH!** Co-winners: ${tied.map(p => `<@${p.discord_id}>`).join(' & ')} with **${winner.score} pts**!`;
     } else {
-      winnersText = `👑 **WINNER**: <@${winner.discord_id}> (\`${winner.cf_handle}\`) won the lockout battle with **${winner.score} pts**! 🎉`;
+      winnersText = `👑 **WINNER**: <@${winner.discord_id}> (\`${winner.cf_handle}\`) won the grid battle with **${winner.score} pts**! 🎉`;
     }
   } else {
     winnersText = '🤷 **No winner** (no one solved any problems!).';
@@ -528,12 +550,12 @@ async function concludeMatch(client, channel, match, participants, reason) {
 
   const finalStandingsText = sorted.map((p, idx) => {
     const medal = ['🥇', '🥈', '🥉'][idx] ?? `\`#${idx + 1}\``;
+    const solveCount = Object.keys(p.solves || {}).length;
     if (isGrid) {
-      const myLocks = Object.values(match.locks || {}).filter(l => l.discord_id === p.discord_id);
-      const tilesStr = myLocks.length > 0 ? `(${myLocks.map(l => `P${l.gridIndex}`).join(', ')})` : '';
-      return `${medal} <@${p.discord_id}> (\`${p.cf_handle}\`): **${p.score} pts** · **${myLocks.length}** tiles locked ${tilesStr}`;
+      const myFirstBloods = Object.values(p.solves || {}).filter(s => s.isFirst).length;
+      const fbText = myFirstBloods > 0 ? ` · **${myFirstBloods}** ⚡ First Bloods` : '';
+      return `${medal} <@${p.discord_id}> (\`${p.cf_handle}\`): **${p.score} pts** (${solveCount}/${match.problems.length} solved${fbText})`;
     } else {
-      const solveCount = Object.keys(p.solves).length;
       return `${medal} <@${p.discord_id}>: **${p.score} pts** (${solveCount}/${match.problems.length} solved)`;
     }
   }).join('\n');
@@ -541,10 +563,10 @@ async function concludeMatch(client, channel, match, participants, reason) {
   const embed = new EmbedBuilder()
     .setColor(0xFFD700) // Championship Gold
     .setAuthor({
-      name: isGrid ? 'Codeforces Lockout Grid · Match Over' : 'Codeforces Duel Arena · Match Over',
+      name: isGrid ? 'Codeforces Battle Grid · Match Over' : 'Codeforces Duel Arena · Match Over',
       iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
     })
-    .setTitle(`🏆 Lockout Clash Concluded · ID \`${match.id}\``)
+    .setTitle(`🏆 Grid Battle Concluded · ID \`${match.id}\``)
     .setDescription([
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
       `> 🏁 **Resolution:** \`${reason}\``,
@@ -560,8 +582,8 @@ async function concludeMatch(client, channel, match, participants, reason) {
 
   if (isGrid && match.problems && match.problems.length >= 9) {
     embed.addFields({
-      name: '🗺️ Final Lockout Board State',
-      value: renderGridAscii(match),
+      name: '🗺️ Final Grid Board State',
+      value: renderGridAscii(match, participants),
       inline: false
     });
   }

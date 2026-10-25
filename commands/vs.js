@@ -27,7 +27,7 @@ module.exports = {
         .setDescription('Battle format: 3x3 Lockout Grid or Classic Race')
         .setRequired(false)
         .addChoices(
-          { name: '⚔️ 3x3 Lockout Grid (Default - first to AC locks tile)', value: 'grid' },
+          { name: '⚔️ 3x3 Battle Grid (Default - 1st AC: 100%, later: 1/3)', value: 'grid' },
           { name: '🏁 Classic Race (5 problems with time decay)', value: 'classic' }
         )
     )

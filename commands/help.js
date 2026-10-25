@@ -52,7 +52,7 @@ const CATEGORIES = {
     title: '⚔️ Duels & Virtual Contests',
     fields: [
       { name: '`/compare [user1] [user2]`', value: 'Head-to-head clash comparing two rivals, problem overlaps, and 1v1 record.' },
-      { name: '`/vs <rating> [mode] [duration] [tag]`', value: 'Start a 1v1 or multiplayer 3x3 Lockout Grid battle or classic race with live tile locking.' },
+      { name: '`/vs <rating> [mode] [duration] [tag]`', value: 'Start a 1v1 or multiplayer 3x3 Battle Grid (1st AC: 100%, later: 1/3) or classic race.' },
       { name: '`/vc start <difficulty> [duration]`', value: 'Start a simulated Virtual Contest round (individual or team mode).' },
       { name: '`/vc status`', value: 'Check remaining time, problem set, and standings of the active virtual contest.' },
       { name: '`/vc end`', value: 'Conclude an active virtual contest early and tally the final scores.' },

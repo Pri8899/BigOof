@@ -26,7 +26,7 @@
   - [🩸 Daily Challenges & First Blood Race](#-daily-challenges--first-blood-race)
   - [🌅 Contest Wrap-up & Upsolve Radar](#-contest-wrap-up--upsolve-radar)
   - [📅 Contest Radar & Countdown Pings](#-contest-radar--countdown-pings)
-  - [⚔️ 3x3 Lockout Grid Battles & Duels (`/vs`)](#️-3x3-lockout-grid-battles--duels-vs)
+  - [⚔️ 3x3 Battle Grid & Duels (`/vs`)](#️-3x3-battle-grid--duels-vs)
   - [🏁 Virtual Contests (`/vc`)](#-virtual-contests-vc)
   - [🤖 ICPC Team Builder & Skill Radar](#-icpc-team-builder--skill-radar)
   - [🐙 GitHub Developer Feed](#-github-developer-feed)
@@ -165,12 +165,13 @@ flowchart TD
 - Scrapes and aggregates upcoming contests across Codeforces, AtCoder, Toph, plus server-specific custom rounds.
 - Dispatches countdown notification pings **24 hours** and **1 hour** before each contest starts.
 
-### ⚔️ 3x3 Lockout Grid Battles & Duels (`/vs`)
-- **3x3 Lockout Grid (Default):** Generates a dynamic 9-problem board spanning 3 rating tiers with point values from 100 to 500 (2,500 total points).
-- **True Lockout Mechanics:** The first contender to get Accepted (`OK`) permanently locks that tile and scores the points. Rivals can no longer score locked problems!
-- **Interactive Discord Problem Buttons:** Features 3 rows of direct Link buttons on Discord. Contenders click a button to immediately open that Codeforces problem in their browser.
-- **Real-Time ASCII Grid & Scoreboard:** Polled every 15 seconds with live ASCII board status, lead tug-of-war ratio bar, and automatic lockout announcements.
-- **Decisive Early Victory:** Automatically detects mathematical locks (when the leader secures $> 1,250$ points or holds an insurmountable lead over remaining open tiles) and awards victory with a championship gold verdict card.
+### ⚔️ 3x3 Battle Grid & Duels (`/vs`)
+- **3x3 Battle Grid (Default):** Generates a dynamic 9-problem board spanning 3 rating tiers with point values from 100 to 500 (2,500 max points).
+- **1/3 Value Drop (No Locking Frustration):** Problems are **never completely locked**! The first contender to solve a tile captures the full **100% points** (First Blood). The tile is then downgraded to **1/3 value** for all other contenders (e.g. 300 pts → 100 pts), so your effort is never wasted.
+- **Rival Alert Pings:** The moment a contender claims 1st AC, opponents are immediately `@mentioned` in chat so they know the tile downgraded and can decide whether to finish for partial points or pivot to a full-value tile.
+- **Interactive Discord Problem Buttons:** Features 3 rows of direct Link buttons on Discord. Button labels update in real time (`[P1] 300 pts` → `🟡 [P1] 100 pts` → `✅ Done`), allowing 1-click access to each Codeforces problem.
+- **Real-Time ASCII Grid & Scoreboard:** Polled every 15 seconds with live ASCII board status, First Blood count, and lead tug-of-war ratio bar.
+- **Decisive Early Victory:** Detects mathematical locks when the leader is mathematically uncatchable even if rivals solve all remaining problems, awarding victory with a championship gold verdict card.
 - **Classic Race Mode:** Supports traditional 5-problem races with time-decay scoring via `/vs mode:Classic Race`.
 
 ### 🏁 Virtual Contests (`/vc`)
@@ -220,7 +221,7 @@ BigOof features **26 unified slash commands** with zero duplicates:
 
 | Command | Options | Description |
 |---|---|---|
-| `/vs` | `rating`, `mode` *(optional)*, `duration` *(optional)*, `problems` *(optional)*, `tag` *(optional)*, `division` *(optional)* | Starts a 1v1 or multiplayer **3x3 Lockout Grid** battle or **Classic Race** with interactive problem buttons and live tile locking. |
+| `/vs` | `rating`, `mode` *(optional)*, `duration` *(optional)*, `problems` *(optional)*, `tag` *(optional)*, `division` *(optional)* | Starts a 1v1 or multiplayer **3x3 Battle Grid** (1st AC: 100%, later AC: 1/3) or **Classic Race** with interactive problem buttons and real-time sync. |
 | `/vc start` | `duration`, `difficulty` | Launches a server-wide Virtual Contest round. |
 | `/vc status` | None | Displays the remaining time and standings for the active Virtual Contest. |
 | `/vc end` | None | Concludes the active Virtual Contest and calculates final standings. |
