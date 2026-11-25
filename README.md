@@ -99,13 +99,13 @@ flowchart TD
 ## ✨ Key Features
 
 - **⚡ Live Submission Tracker:** Polls Codeforces, AtCoder, and Toph every 60s (chained safely to prevent overlaps) and posts solved embeds permanently to your General/Feed channel with problem tags, difficulty, and Codeforces/AtCoder execution telemetry.
-- **📊 Dynamic Dashboard & Leaderboard:** Replaces the leaderboard embed with a fresh snapshot whenever ratings/solves change (plus 9:00 AM daily), alongside automatic **CP**, Codeforces Rank tier (`Newbie` → `Legendary Grandmaster`), and Streak milestone (`7d` / `15d` / `30d`) roles.
+- **📊 Dynamic Dashboard & Leaderboard:** Replaces the leaderboard embed with a fresh snapshot whenever ratings/solves change (plus 9:00 AM daily), alongside automatic **CP**, Codeforces Rank tier (`Newbie` → `Legendary Grandmaster`), and Streak milestone (`7d` → `2+ yr`) roles.
 - **🩸 Daily Challenges & First Blood:** Replaces yesterday's daily quest embed with 5 fresh progressive challenges at 9:00 PM local time, and posts First Blood / Daily Sweep celebrations permanently in your General channel.
 - **🌅 Contest Wrap-up & Upsolve Radar:** At 9:00 AM daily, recaps finished Codeforces rounds in your server's wrapup/general channel and identifies each contender's exact upsolve roadblock (e.g., `WA on test 4`, `TLE on test 2`). On-demand `/wrapup` also supported.
 - **📅 Contest Radar & 24h/1h Reminders:** Aggregates upcoming contests across Codeforces, AtCoder, Toph, and server custom contests (`/custom-contest`), replacing the old radar overview with a fresh embed every 12 hours and sending 24-hour and 1-hour alerts.
 - **⚔️ 3x3 Battle Grid & Duels (`/vs`):** Real-time 1v1 or multiplayer 9-problem Battle Grid (1st AC scores 100%, later solves score 1/3) or Classic time-decay race, synced every 15 seconds with lock protection.
 - **🏁 Persistent Virtual Contests (`/vc`):** Simulated individual or multi-team Codeforces rounds with restart recovery and contest-window timestamp verification.
-- **🐙 GitHub Stream:** Tracks public commits, PRs, releases, branches, and forks via `/github` (supports `GITHUB_TOKEN` for 5,000 req/hr).
+- **🐙 GitHub Stream:** Tracks public commits, PRs, releases, branches, and forks (link via `/link`, view developer cards & manual sync via `/github`, supports `GITHUB_TOKEN` for 5,000 req/hr).
 
 ---
 
@@ -120,7 +120,7 @@ flowchart TD
 | `/profile` | `member` *(optional)* | View a profile card with ratings, solves, rank badges, and streaks. |
 | `/compare` | `user1`, `user2`, `handle1`, `handle2` | Head-to-head comparison (rating, peak, solves, overlap, duel H2H). |
 | `/solved` | `member` *(optional)* | Breakdown of Codeforces solves by division (Div 1 through Div 4). |
-| `/github` | `link` / `profile` / `sync` / `unlink` | Manage GitHub linking, developer cards, and manual activity sync. |
+| `/github` | `profile` / `sync` | View GitHub developer cards and trigger manual activity sync (link/unlink via `/link` & `/unlink`). |
 
 ### 📈 Discovery & Problem Solving
 
@@ -150,7 +150,7 @@ flowchart TD
 |---|---|---|---|
 | `/set-channel` | `feature`, `channel` | Manage Server | Route feeds/dashboards to dedicated channels (or **All Features**). |
 | `/view-channels` | None | Manage Server | Inspect configured channels for the current server. |
-| `/setup-roles` | None | Manage Roles | Create and sync `CP`, CF Rank tiers, and Streak milestone roles. |
+| `/setup-roles` | None | Manage Roles | Create and sync `CP`, CF Rank tiers, and Streak milestone roles (`7d` through `2+ yr`). |
 | `/custom-contest` | `add` / `edit` / `delete` / `list` | Manage Channels | Manage custom server contests on the radar & reminder schedule. |
 | `/force-unlink` | `member`, `platform` *(optional)* | Manage Server | Forcefully unlink or purge a member's accounts. |
 | `/announce` | `channel` *(optional)* | Mention Everyone | Open an announcement modal and broadcast with `@everyone`. |

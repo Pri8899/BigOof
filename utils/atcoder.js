@@ -191,48 +191,37 @@ async function forEachACSubmissionPage(handle, onPage, timeout = 15000) {
 }
 
 /**
- * Fetches total distinct AC problems solved by an AtCoder handle (up to 50 pages / 25k subs).
+ * Computes solved count and (optionally) daily solving streak in a single submission scan.
  */
-async function getACSolvedCount(handle) {
+async function getACSubmissionMetrics(handle, { includeStreak = false } = {}) {
   const solvedProblems = new Set();
+  const timestamps = includeStreak ? [] : null;
   await forEachACSubmissionPage(handle, (page) => {
     for (const s of page) {
       if (s.result === 'AC') solvedProblems.add(s.problem_id);
+      if (timestamps && s.epoch_second) timestamps.push(s.epoch_second);
     }
   });
-  return solvedProblems.size;
-}
-
-/**
- * Computes current and max daily solving streak for an AtCoder handle.
- */
-async function calculateACStreak(handle) {
-  try {
-    const timestamps = [];
-    await forEachACSubmissionPage(handle, (page) => {
-      for (const s of page) {
-        if (s.epoch_second) timestamps.push(s.epoch_second);
-      }
-    }, 12000);
-    const { current, max } = calculateStreakFromTimestamps(timestamps);
-    return { current, max };
-  } catch (err) {
-    console.error(`[StreakCalc] AC streak error for ${handle}:`, err.message);
-    return { current: 0, max: 0 };
-  }
+  return {
+    solved: solvedProblems.size,
+    streak: timestamps ? calculateStreakFromTimestamps(timestamps) : null
+  };
 }
 
 /**
  * Fetches AtCoder rating, peak rating, rank title, solved count, and last contest.
  */
-async function getACUser(handle) {
+async function getACUser(handle, { includeStreak = false } = {}) {
   const encoded = encodeURIComponent(handle);
   let solved = null;
+  let streak = null;
   try {
     try {
-      solved = await getACSolvedCount(handle);
+      const metrics = await getACSubmissionMetrics(handle, { includeStreak });
+      solved = metrics.solved;
+      streak = metrics.streak ? { current: metrics.streak.current, max: metrics.streak.max } : null;
     } catch (solvedErr) {
-      console.warn(`[AC] Solved count lookup failed for ${handle}:`, solvedErr.message);
+      console.warn(`[AC] Submission metrics lookup failed for ${handle}:`, solvedErr.message);
     }
 
     const res = await axiosGetWithRetry(
@@ -273,7 +262,7 @@ async function getACUser(handle) {
       } catch (_) {}
     }
 
-    return {
+    const result = {
       rating,
       max_rating: maxRating,
       rank_title: getACRankTitle(rating),
@@ -281,6 +270,8 @@ async function getACUser(handle) {
       acceptance: 0,
       lastContest
     };
+    if (includeStreak && streak) result.streak = streak;
+    return result;
   } catch (err) {
     console.error(`[AC] User fetch error for ${handle}:`, err.message);
     return null;
@@ -331,7 +322,5 @@ module.exports = {
   getACUser,
   getACContests,
   getACContestName,
-  validateACHandle,
-  getACSolvedCount,
-  calculateACStreak
+  validateACHandle
 };

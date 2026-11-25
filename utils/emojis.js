@@ -3,6 +3,16 @@ const fs = require('fs');
 const path = require('path');
 
 const FALLBACK_EMOJIS = { cf: '🔵', ac: '🔴', toph: '🟣' };
+const PLATFORM_INFO = {
+  cf:     { name: 'Codeforces', choiceName: '🏆 Codeforces', fallbackEmoji: '🏆' },
+  ac:     { name: 'AtCoder',    choiceName: '🎯 AtCoder',    fallbackEmoji: '🎯' },
+  toph:   { name: 'Toph',       choiceName: '⚡ Toph',       fallbackEmoji: '⚡' },
+  github: { name: 'GitHub',     choiceName: '🐙 GitHub',     fallbackEmoji: '🐙' }
+};
+const ALL_PLATFORM_CHOICES = Object.entries(PLATFORM_INFO).map(([value, info]) => ({
+  name: info.choiceName,
+  value
+}));
 const emojiCache = new Map(); // guildId -> { value, expiresAt, complete }
 
 const PLATFORM_ASSETS = [
@@ -83,4 +93,4 @@ async function getPlatformEmojis(guild) {
   }
 }
 
-module.exports = { getPlatformEmojis };
+module.exports = { getPlatformEmojis, PLATFORM_INFO, ALL_PLATFORM_CHOICES };

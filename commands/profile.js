@@ -1,7 +1,7 @@
 // commands/profile.js — Show a member's CP profile card with ratings, solves, and streaks
 const { SlashCommandBuilder } = require('discord.js');
 const { getUser, getRatings, getAllStreaks, upsertUser } = require('../database/db');
-const { buildProfileEmbed, errorEmbed } = require('../utils/embeds');
+const { buildProfileEmbed, errorEmbed, resolveTargetMeta } = require('../utils/embeds');
 const { getPlatformEmojis } = require('../utils/emojis');
 
 module.exports = {
@@ -22,8 +22,7 @@ module.exports = {
       || interaction.member
       || interaction.user;
 
-    const userId = target.id;
-    const displayName = target.displayName || target.username || 'Member';
+    const { id: userId, displayName } = resolveTargetMeta(target);
 
     if (target.id === interaction.user.id) {
       upsertUser(userId, interaction.user.username);

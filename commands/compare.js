@@ -2,7 +2,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { getUser, getStreak, getHeadToHeadVersus } = require('../database/db');
 const { getCFUser } = require('../utils/codeforces');
-const { buildCompareEmbed, errorEmbed } = require('../utils/embeds');
+const { buildCompareEmbed, errorEmbed, resolveTargetMeta } = require('../utils/embeds');
 
 const CF_ICON = 'https://codeforces.org/s/0/images/codeforces-telegram-square.png';
 
@@ -44,15 +44,6 @@ module.exports = {
     let avatar1 = CF_ICON, avatar2 = CF_ICON;
     let discordId1 = null, discordId2 = null;
 
-    const resolveMemberMeta = (target) => {
-      const id = target.id;
-      const name = target.displayName || target.username || 'Member';
-      const avatar = typeof target.user?.displayAvatarURL === 'function'
-        ? target.user.displayAvatarURL({ dynamic: true })
-        : (typeof target.displayAvatarURL === 'function' ? target.displayAvatarURL({ dynamic: true }) : CF_ICON);
-      return { id, name, avatar };
-    };
-
     if (handle1Opt && handle2Opt) {
       cfHandle1 = handle1Opt;
       cfHandle2 = handle2Opt;
@@ -69,25 +60,25 @@ module.exports = {
           )]
         });
       }
-      const callerMeta = resolveMemberMeta(interaction.member || interaction.user);
+      const callerMeta = resolveTargetMeta(interaction.member || interaction.user, CF_ICON);
       discordId1 = callerMeta.id;
-      name1 = callerMeta.name;
-      avatar1 = callerMeta.avatar;
+      name1 = callerMeta.displayName;
+      avatar1 = callerMeta.avatarUrl;
       cfHandle1 = callerDb.cf_handle;
       cfHandle2 = handle1Opt || handle2Opt;
       name2 = cfHandle2;
     } else if ((u1 || u2) && (handle1Opt || handle2Opt)) {
       const target = u1 || u2;
-      const meta = resolveMemberMeta(target);
+      const meta = resolveTargetMeta(target, CF_ICON);
       const dbU = getUser(meta.id);
       if (!dbU?.cf_handle) {
         return interaction.editReply({
-          embeds: [errorEmbed('Unlinked Account', `**${meta.name}** has not linked a Codeforces account yet.`)]
+          embeds: [errorEmbed('Unlinked Account', `**${meta.displayName}** has not linked a Codeforces account yet.`)]
         });
       }
       discordId1 = meta.id;
-      name1 = meta.name;
-      avatar1 = meta.avatar;
+      name1 = meta.displayName;
+      avatar1 = meta.avatarUrl;
       cfHandle1 = dbU.cf_handle;
       cfHandle2 = handle1Opt || handle2Opt;
       name2 = cfHandle2;
@@ -95,28 +86,28 @@ module.exports = {
       const target1 = (u1 && u2) ? u1 : (interaction.member || interaction.user);
       const target2 = (u1 && u2) ? u2 : (u1 || u2);
 
-      const m1 = resolveMemberMeta(target1);
-      const m2 = resolveMemberMeta(target2);
+      const m1 = resolveTargetMeta(target1, CF_ICON);
+      const m2 = resolveTargetMeta(target2, CF_ICON);
       const user1 = getUser(m1.id);
       const user2 = getUser(m2.id);
 
       if (!user1?.cf_handle) {
         return interaction.editReply({
-          embeds: [errorEmbed('Unlinked Account', `**${m1.name}** has not linked a Codeforces account yet! Use \`/link\` first.`)]
+          embeds: [errorEmbed('Unlinked Account', `**${m1.displayName}** has not linked a Codeforces account yet! Use \`/link\` first.`)]
         });
       }
       if (!user2?.cf_handle) {
         return interaction.editReply({
-          embeds: [errorEmbed('Unlinked Account', `**${m2.name}** has not linked a Codeforces account yet! Use \`/link\` first.`)]
+          embeds: [errorEmbed('Unlinked Account', `**${m2.displayName}** has not linked a Codeforces account yet! Use \`/link\` first.`)]
         });
       }
 
       discordId1 = m1.id;
       discordId2 = m2.id;
-      name1 = m1.name;
-      name2 = m2.name;
-      avatar1 = m1.avatar;
-      avatar2 = m2.avatar;
+      name1 = m1.displayName;
+      name2 = m2.displayName;
+      avatar1 = m1.avatarUrl;
+      avatar2 = m2.avatarUrl;
       cfHandle1 = user1.cf_handle;
       cfHandle2 = user2.cf_handle;
     } else {

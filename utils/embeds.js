@@ -3,6 +3,31 @@ const { EmbedBuilder } = require('discord.js');
 const { chunkLines } = require('./envHelper');
 const { detectLanguage } = require('./github');
 
+const STREAK_ROLES = [
+  { name: '☄️ 2+ Year Streak',  min: 730, color: 0xFF0055, badge: '☄️' },
+  { name: '🏆 1+ Year Streak',  min: 365, color: 0x00F5D4, badge: '🏆' },
+  { name: '🔱 300+ Day Streak', min: 300, color: 0x9B5DE5, badge: '🔱' },
+  { name: '💎 200+ Day Streak', min: 200, color: 0x00BBF9, badge: '💎' },
+  { name: '💯 100+ Day Streak', min: 100, color: 0xF72585, badge: '💯' },
+  { name: '🚀 60+ Day Streak',  min: 60,  color: 0x7C4DFF, badge: '🚀' },
+  { name: '💫 30+ Day Streak',  min: 30,  color: 0xE0115F, badge: '💫' },
+  { name: '👑 15+ Day Streak',  min: 15,  color: 0xF1C40F, badge: '👑' },
+  { name: '🔥 7+ Day Streak',   min: 7,   color: 0xE67E22, badge: '🔥' }
+];
+
+const CF_ROLES = [
+  { name: 'Legendary Grandmaster',     min: 3000, color: 0xFF0000 },
+  { name: 'International Grandmaster', min: 2600, color: 0xFF0000 },
+  { name: 'Grandmaster',               min: 2400, color: 0xFF0000 },
+  { name: 'International Master',      min: 2300, color: 0xFF8C00 },
+  { name: 'Master',                    min: 2100, color: 0xFF8C00 },
+  { name: 'Candidate Master',          min: 1900, color: 0xAA00AA },
+  { name: 'Expert',                    min: 1600, color: 0x0000FF },
+  { name: 'Specialist',                min: 1400, color: 0x03A89E },
+  { name: 'Pupil',                     min: 1200, color: 0x008000 },
+  { name: 'Newbie',                    min: 0,    color: 0x808080 }
+];
+
 const COLORS = {
   Codeforces: 0x1F8DD6,
   AtCoder:    0x00BCD4,
@@ -52,13 +77,21 @@ function renderProgressBar(val1, val2, totalBlocks = 12) {
   return `\`[${'█'.repeat(ratio1)}${'░'.repeat(ratio2)}]\``;
 }
 
-function getStreakBadge(n) {
-  if (n === null || n === undefined) return '`N/A`';
-  if (n < 1) return '`0d`';
-  if (n >= 30) return `💫 **${n} Days**`;
-  if (n >= 15) return `👑 **${n} Days**`;
-  if (n >= 7)  return `🔥 **${n} Days**`;
-  return `⚡ **${n} Days**`;
+function getStreakBadge(n, compact = false) {
+  if (n === null || n === undefined) return compact ? '' : '`N/A`';
+  if (n < 1) return compact ? '' : '`0d`';
+  const tier = STREAK_ROLES.find(r => n >= r.min);
+  const icon = tier ? tier.badge : '⚡';
+  return compact ? `${icon} ${n}d` : `${icon} **${n} Days**`;
+}
+
+function resolveTargetMeta(target, fallbackIcon = undefined) {
+  const id = target?.id ?? null;
+  const displayName = target?.displayName || target?.username || 'Member';
+  const avatarUrl = typeof target?.user?.displayAvatarURL === 'function'
+    ? target.user.displayAvatarURL({ dynamic: true })
+    : (typeof target?.displayAvatarURL === 'function' ? target.displayAvatarURL({ dynamic: true }) : fallbackIcon);
+  return { id, displayName, avatarUrl };
 }
 
 function successEmbed(title, description) {
@@ -132,10 +165,7 @@ function buildProfileEmbed(target, user, ratings, emojis = { cf: '🔵', ac: '�
   const totalSolved = (cf?.solved || 0) + (ac?.solved || 0) + (toph?.solved || 0);
   const embedColor = getCFRankColor(cf?.rating || 0);
 
-  const displayName = target.displayName || target.username || 'Competitor';
-  const avatarUrl = typeof target.user?.displayAvatarURL === 'function'
-    ? target.user.displayAvatarURL({ dynamic: true })
-    : (typeof target.displayAvatarURL === 'function' ? target.displayAvatarURL({ dynamic: true }) : undefined);
+  const { displayName, avatarUrl } = resolveTargetMeta(target);
 
   const embed = new EmbedBuilder()
     .setColor(embedColor)
@@ -236,14 +266,6 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
     streakMap[s.discord_id][s.platform] = s.current_streak;
   }
 
-  function streakBadge(n) {
-    if (!n || n < 1) return '';
-    if (n >= 30) return `💫 ${n}d`;
-    if (n >= 15) return `👑 ${n}d`;
-    if (n >= 7)  return `🔥 ${n}d`;
-    return `⚡ ${n}d`;
-  }
-
   function cfRankLabel(rating) {
     if (!rating || rating === 0) return 'Unrated';
     if (rating >= 3000) return 'LGM';
@@ -285,7 +307,7 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
         const rating = row.cf_rating > 0 ? `⭐ **${row.cf_rating}** (${rank})` : '⭐ *Unrated*';
         const solves = `\`${(row.cf_solved || 0).toLocaleString()} solved\``;
         const cfStreak = streakMap[row.discord_id]?.cf ?? row.cf_streak ?? 0;
-        const streak = streakBadge(cfStreak);
+        const streak = getStreakBadge(cfStreak, true);
         return `${medal} **${name}** · ${rating} · ${solves}${streak ? ` · ${streak}` : ''}`;
       }
 
@@ -293,14 +315,14 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
         const name = (row.ac_handle || row.username || 'Coder').replace(/([_*~|`\\])/g, '\\$1');
         const rating = row.ac_rating > 0 ? `🎯 **${row.ac_rating}** (${row.ac_rank || 'AtCoder'})` : '🎯 *AtCoder Unrated*';
         const solves = `\`${(row.ac_solved || 0).toLocaleString()} solved\``;
-        const st = streakBadge(streakMap[row.discord_id]?.ac ?? row.ac_streak ?? 0);
+        const st = getStreakBadge(streakMap[row.discord_id]?.ac ?? row.ac_streak ?? 0, true);
         return `${medal} **${name}** · ${rating} · ${solves}${st ? ` · ${st}` : ''}`;
       }
 
       const name = (row.toph_handle || row.username || 'Coder').replace(/([_*~|`\\])/g, '\\$1');
       const rating = row.toph_rating > 0 ? `⚡ **${row.toph_rating}** (${row.toph_rank || 'Toph'})` : '⚡ *Toph Unrated*';
       const solves = `\`${(row.toph_solved || 0).toLocaleString()} solved\``;
-      const st = streakBadge(streakMap[row.discord_id]?.toph ?? row.toph_streak ?? 0);
+      const st = getStreakBadge(streakMap[row.discord_id]?.toph ?? row.toph_streak ?? 0, true);
       return `${medal} **${name}** · ${rating} · ${solves}${st ? ` · ${st}` : ''}`;
     });
 
@@ -754,8 +776,12 @@ module.exports = {
   buildGitHubActivityEmbed,
   buildCompareEmbed,
   getCFRankColor,
+  getStreakBadge,
+  resolveTargetMeta,
   renderProgressBar,
   isICPCProblem,
+  STREAK_ROLES,
+  CF_ROLES,
   COLORS,
   PLATFORM_ICONS
 };

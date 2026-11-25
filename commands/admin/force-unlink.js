@@ -2,6 +2,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { getUser, unlinkPlatform, purgeUser } = require('../../database/db');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
+const { ALL_PLATFORM_CHOICES } = require('../../utils/emojis');
 const { updateDashboard } = require('../../tasks/ratingSync');
 
 module.exports = {
@@ -21,10 +22,7 @@ module.exports = {
         .setRequired(false)
         .addChoices(
           { name: '🌐 All Platforms (Purge)', value: 'all' },
-          { name: '🏆 Codeforces', value: 'cf' },
-          { name: '🎯 AtCoder', value: 'ac' },
-          { name: '⚡ Toph', value: 'toph' },
-          { name: '🐙 GitHub', value: 'github' }
+          ...ALL_PLATFORM_CHOICES
         )
     ),
 

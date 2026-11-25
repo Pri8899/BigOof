@@ -63,10 +63,9 @@ const CATEGORIES = {
     emoji: '🐙',
     title: '🐙 GitHub Integration Suite',
     fields: [
-      { name: '`/github link <username>`', value: 'Link your GitHub account for automatic activity announcements.' },
       { name: '`/github profile [user]`', value: 'View a GitHub developer card with repositories and followers.' },
-      { name: '`/github sync`', value: 'Instantly scan and post unannounced GitHub activities to `#github`.' },
-      { name: '`/github unlink`', value: 'Unlink your GitHub account.' }
+      { name: '`/github sync`', value: 'Instantly scan and post unannounced GitHub activities to your GitHub channel.' },
+      { name: '`/link` & `/unlink`', value: 'Connect or disconnect your GitHub username under `platform:🐙 GitHub`.' }
     ]
   },
   admin: {
@@ -76,7 +75,7 @@ const CATEGORIES = {
     fields: [
       { name: '`/set-channel <feature> <channel>`', value: 'Route contest radar, dashboard, feeds, daily challenges, and alerts.' },
       { name: '`/view-channels`', value: 'Inspect all currently configured channels for this server.' },
-      { name: '`/setup-roles`', value: 'Create and assign base `CP`, CF Rank tiers, and Streak roles.' },
+      { name: '`/setup-roles`', value: 'Create and assign `CP`, CF Rank tiers, and Streak roles (`7d` to `2+ yr`).' },
       { name: '`/custom-contest <add|edit|delete|list>`', value: 'Schedule, edit, list, or delete custom server contests.' },
       { name: '`/force-unlink <member> [platform]`', value: 'Admin command to unlink or purge accounts for a member.' },
       { name: '`/announce [channel]`', value: 'Open an announcement modal and broadcast with `@everyone` mention.' },

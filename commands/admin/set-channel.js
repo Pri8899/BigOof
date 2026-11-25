@@ -1,20 +1,16 @@
 // commands/admin/set-channel.js — Unified multi-tenant channel configuration
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
 const { setConfig } = require('../../database/db');
-const { isBotOwner } = require('../../utils/envHelper');
+const { CHANNEL_DEFS, isBotOwner } = require('../../utils/envHelper');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
 
 const FEATURES = [
   { name: '🌐 All Features (One-Click Setup: route everything here)', value: 'all_features', label: 'All Bot Features' },
-  { name: '🏆 Contest Radar (Upcoming contests & reminders)', value: 'contest_channel_id', label: 'Contest Radar' },
-  { name: '📊 Leaderboard Dashboard (Auto-updating rankings)', value: 'dashboard_channel_id', label: 'Leaderboard Dashboard' },
-  { name: '📈 Rating Updates (Rating change & rank alerts)', value: 'rating_channel_id', label: 'Rating Updates' },
-  { name: '💡 Daily Challenges (Daily problem suggestions)', value: 'suggest_channel_id', label: 'Daily Challenges' },
-  { name: '⚡ Live Submissions Feed (Real-time accepted solves)', value: 'feed_channel_id', label: 'Live Submissions Feed' },
-  { name: '🌅 Contest Wrap-up (Next-day 9AM contest recap & upsolve)', value: 'wrapup_channel_id', label: 'Contest Wrap-up' },
-  { name: '🐙 GitHub Activity Feed (Commits, PRs, and repositories)', value: 'github_channel_id', label: 'GitHub Activity Feed' },
-  { name: '📢 Announcements (Broadcast channel for /announce)', value: 'announcement_channel_id', label: 'Announcements' },
-  { name: '💬 General Channel (Submissions, weekly digest, first blood & sweep)', value: 'general_channel_id', label: 'General Channel' },
+  ...CHANNEL_DEFS.map(def => ({
+    name: `${def.label} (${def.optionDesc})`,
+    value: def.key,
+    label: def.shortLabel
+  })),
   { name: '💾 Database Backups (Bot Host only)', value: 'backup_channel_id', label: 'Database Backups' }
 ];
 
@@ -67,19 +63,8 @@ module.exports = {
     }
 
     if (featureKey === 'all_features') {
-      const keys = [
-        'contest_channel_id',
-        'dashboard_channel_id',
-        'rating_channel_id',
-        'suggest_channel_id',
-        'feed_channel_id',
-        'wrapup_channel_id',
-        'github_channel_id',
-        'announcement_channel_id',
-        'general_channel_id'
-      ];
-      for (const k of keys) {
-        setConfig(k, channel.id, guildId);
+      for (const def of CHANNEL_DEFS) {
+        setConfig(def.key, channel.id, guildId);
       }
       setConfig('dashboard_message_id', '', guildId);
       setConfig('contest_summary_msg_id', '', guildId);

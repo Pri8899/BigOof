@@ -4,6 +4,7 @@ const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const {
   getAllUsers,
   getUser,
+  setConfig,
   upsertRating,
   getAllRatings,
   getRatings,
@@ -13,32 +14,13 @@ const {
   getWeeklySnapshot,
   setWeeklySnapshot
 } = require('../database/db');
-const { getCFUser, getCFStatus } = require('../utils/codeforces');
+const { getCFUser, calculateCFStreak } = require('../utils/codeforces');
 const { getTargetChannel, getGuildTargetChannels, replaceChannelBotMessage } = require('../utils/envHelper');
-const { getACUser, calculateACStreak } = require('../utils/atcoder');
+const { getACUser } = require('../utils/atcoder');
 const { getTophUser, calculateTophStreak } = require('../utils/toph');
-const { buildDashboardEmbed, PLATFORM_ICONS } = require('../utils/embeds');
+const { buildDashboardEmbed, PLATFORM_ICONS, STREAK_ROLES, CF_ROLES } = require('../utils/embeds');
 const { computeLeaderboard } = require('../commands/leaderboard');
-const { getTimeZone, getLocalParts, calculateStreakFromTimestamps } = require('../utils/time');
-
-const STREAK_ROLES = [
-  { name: '💫 30+ Day Streak', min: 30, color: 0xE0115F },
-  { name: '👑 15+ Day Streak', min: 15, color: 0xF1C40F },
-  { name: '🔥 7+ Day Streak',  min: 7,  color: 0xE67E22 }
-];
-
-const CF_ROLES = [
-  { name: 'Legendary Grandmaster',     min: 3000, color: 0xFF0000 },
-  { name: 'International Grandmaster', min: 2600, color: 0xFF0000 },
-  { name: 'Grandmaster',               min: 2400, color: 0xFF0000 },
-  { name: 'International Master',      min: 2300, color: 0xFF8C00 },
-  { name: 'Master',                    min: 2100, color: 0xFF8C00 },
-  { name: 'Candidate Master',          min: 1900, color: 0xAA00AA },
-  { name: 'Expert',                    min: 1600, color: 0x0000FF },
-  { name: 'Specialist',                min: 1400, color: 0x03A89E },
-  { name: 'Pupil',                     min: 1200, color: 0x008000 },
-  { name: 'Newbie',                    min: 0,    color: 0x808080 }
-];
+const { getTimeZone, getLocalParts } = require('../utils/time');
 
 function ensureInitialWeeklySnapshot(discordId, platform, stats) {
   if (!getWeeklySnapshot(discordId, platform)) {
@@ -48,88 +30,143 @@ function ensureInitialWeeklySnapshot(discordId, platform, stats) {
 }
 
 function canManageRole(guild, role = null) {
-  const me = guild.members.me;
+  const me = guild?.members?.me;
   if (!me || !me.permissions.has(PermissionFlagsBits.ManageRoles)) return false;
   if (!role) return true;
   return role.editable && role.position < me.roles.highest.position;
 }
 
-// ─── Auto-Rank Roles ─────────────────────────────────────────
-async function updateDiscordRole(client, discordId, rating) {
+function findGuildRole(guild, name, caseInsensitive = false) {
+  const target = caseInsensitive ? name.toLowerCase() : name;
+  return guild.roles.cache.find(r => (caseInsensitive ? r.name.toLowerCase() : r.name) === target) || null;
+}
+
+/**
+ * Ensures CP, CF Rank tier roles, and all Streak Milestone roles exist in the guild.
+ */
+async function ensureGuildRoles(guild) {
+  await guild.roles.fetch().catch(() => guild.roles.cache);
+  const me = guild.members.me;
+  let createdCount = 0;
+
+  let cpRole = findGuildRole(guild, 'CP');
+  if (!cpRole) {
+    cpRole = await guild.roles.create({
+      name: 'CP',
+      color: 0x5865F2,
+      reason: 'Created by BigOof (Base Member Role)',
+      mentionable: true
+    });
+    createdCount++;
+  }
+  setConfig('cp_role_id', cpRole.id, guild.id);
+
+  const roleGroups = [
+    { defs: CF_ROLES, reason: 'Created by BigOof (Rank Tier)', caseInsensitive: true },
+    { defs: STREAK_ROLES, reason: 'Created by BigOof (Streak Milestone)', caseInsensitive: false }
+  ];
+
+  for (const { defs, reason, caseInsensitive } of roleGroups) {
+    for (const def of defs) {
+      if (!findGuildRole(guild, def.name, caseInsensitive)) {
+        try {
+          await guild.roles.create({ name: def.name, color: def.color, reason });
+          createdCount++;
+        } catch (_) {}
+      }
+    }
+  }
+
+  return { createdCount, cpRole, me };
+}
+
+async function syncTierRole(guild, member, roleDefs, targetDef, { reason, caseInsensitive = false, autoCreate = true } = {}) {
+  if (targetDef) {
+    let targetRole = findGuildRole(guild, targetDef.name, caseInsensitive);
+    if (!targetRole && autoCreate) {
+      targetRole = await guild.roles.create({
+        name: targetDef.name,
+        color: targetDef.color,
+        reason
+      }).catch(() => null);
+    }
+    if (targetRole && canManageRole(guild, targetRole) && !member.roles.cache.has(targetRole.id)) {
+      await member.roles.add(targetRole).catch(() => {});
+    }
+  }
+
+  const targetKey = targetDef ? (caseInsensitive ? targetDef.name.toLowerCase() : targetDef.name) : null;
+  for (const def of roleDefs) {
+    const defKey = caseInsensitive ? def.name.toLowerCase() : def.name;
+    if (defKey !== targetKey) {
+      const stale = findGuildRole(guild, def.name, caseInsensitive);
+      if (stale && canManageRole(guild, stale) && member.roles.cache.has(stale.id)) {
+        await member.roles.remove(stale).catch(() => {});
+      }
+    }
+  }
+}
+
+/**
+ * Syncs CP, CF Rank tier, and Streak Milestone roles for a single guild member cleanly.
+ */
+async function syncMemberRolesInGuild(guild, member, { assignCP = false, cpRole = null, cfRating = null, bestStreak = null, autoCreate = true } = {}) {
+  if (!canManageRole(guild) || !member) return;
+
+  if (assignCP && !member.user?.bot) {
+    const baseRole = cpRole || findGuildRole(guild, 'CP');
+    if (baseRole && canManageRole(guild, baseRole) && !member.roles.cache.has(baseRole.id)) {
+      await member.roles.add(baseRole).catch(() => {});
+    }
+  }
+
+  if (cfRating !== null && cfRating !== undefined) {
+    const targetCFDef = CF_ROLES.find(r => cfRating >= r.min) || CF_ROLES[CF_ROLES.length - 1];
+    await syncTierRole(guild, member, CF_ROLES, targetCFDef, {
+      reason: 'Auto-created CF Rank Role',
+      caseInsensitive: true,
+      autoCreate
+    });
+  }
+
+  if (bestStreak !== null && bestStreak !== undefined) {
+    const targetStreakDef = STREAK_ROLES.find(s => bestStreak >= s.min) || null;
+    await syncTierRole(guild, member, STREAK_ROLES, targetStreakDef, {
+      reason: 'Auto-created Streak Role',
+      caseInsensitive: false,
+      autoCreate
+    });
+  }
+}
+
+function getUserBestStreak(discordId) {
+  return getAllStreaks()
+    .filter(s => s.discord_id === discordId)
+    .reduce((mx, s) => Math.max(mx, s.current_streak || 0), 0);
+}
+
+// ─── Auto-Rank & Streak Roles ────────────────────────────────
+async function syncUserGuildRoles(client, discordId, { cfRating = null, bestStreak = null } = {}) {
   if (!client) return;
-  const targetRoleData = CF_ROLES.find(r => rating >= r.min) || CF_ROLES[CF_ROLES.length - 1];
 
   for (const guild of client.guilds.cache.values()) {
     try {
       if (!canManageRole(guild)) continue;
       const member = guild.members.cache.get(discordId) || await guild.members.fetch(discordId).catch(() => null);
       if (!member) continue;
-
-      let targetRole = guild.roles.cache.find(r => r.name.toLowerCase() === targetRoleData.name.toLowerCase());
-      if (!targetRole) {
-        targetRole = await guild.roles.create({
-          name: targetRoleData.name,
-          color: targetRoleData.color,
-          reason: 'Auto-created CF Rank Role'
-        }).catch(() => null);
-      }
-
-      if (targetRole && canManageRole(guild, targetRole) && !member.roles.cache.has(targetRole.id)) {
-        await member.roles.add(targetRole).catch(() => {});
-      }
-
-      for (const roleDef of CF_ROLES) {
-        if (roleDef.name.toLowerCase() !== targetRoleData.name.toLowerCase()) {
-          const roleToRemove = guild.roles.cache.find(r => r.name.toLowerCase() === roleDef.name.toLowerCase());
-          if (roleToRemove && canManageRole(guild, roleToRemove) && member.roles.cache.has(roleToRemove.id)) {
-            await member.roles.remove(roleToRemove).catch(() => {});
-          }
-        }
-      }
+      await syncMemberRolesInGuild(guild, member, { cfRating, bestStreak, autoCreate: true });
     } catch (err) {
       console.error(`[RoleSync] Error for ${discordId}:`, err.message);
     }
   }
 }
 
+async function updateDiscordRole(client, discordId, rating) {
+  return syncUserGuildRoles(client, discordId, { cfRating: rating });
+}
+
 async function updateDiscordStreakRole(client, discordId, currentStreak) {
-  if (!client) return;
-  const targetRoleData = STREAK_ROLES.find(r => currentStreak >= r.min);
-
-  for (const guild of client.guilds.cache.values()) {
-    try {
-      if (!canManageRole(guild)) continue;
-      const member = guild.members.cache.get(discordId) || await guild.members.fetch(discordId).catch(() => null);
-      if (!member) continue;
-
-      let targetRole = null;
-      if (targetRoleData) {
-        targetRole = guild.roles.cache.find(r => r.name === targetRoleData.name);
-        if (!targetRole) {
-          targetRole = await guild.roles.create({
-            name: targetRoleData.name,
-            color: targetRoleData.color,
-            reason: 'Auto-created Streak Role'
-          }).catch(() => null);
-        }
-      }
-
-      if (targetRole && canManageRole(guild, targetRole) && !member.roles.cache.has(targetRole.id)) {
-        await member.roles.add(targetRole).catch(() => {});
-      }
-
-      for (const roleDef of STREAK_ROLES) {
-        if (!targetRoleData || roleDef.name !== targetRoleData.name) {
-          const roleToRemove = guild.roles.cache.find(r => r.name === roleDef.name);
-          if (roleToRemove && canManageRole(guild, roleToRemove) && member.roles.cache.has(roleToRemove.id)) {
-            await member.roles.remove(roleToRemove).catch(() => {});
-          }
-        }
-      }
-    } catch (err) {
-      console.error(`[StreakRoleSync] Error syncing roles for ${discordId}:`, err.message);
-    }
-  }
+  return syncUserGuildRoles(client, discordId, { bestStreak: currentStreak });
 }
 
 function formatContestLabel(lastContest) {
@@ -198,6 +235,37 @@ async function postRatingChange(client, discordId, username, platform, oldRating
 let lastStreakSyncTime = 0;
 let isGlobalSyncing = false;
 
+async function applyPlatformStats(client, user, platform, stats, existingMap, alertOnChange) {
+  if (!stats) return false;
+  const prev = existingMap[platform];
+  const hasExisting = prev !== undefined;
+  const oldRating = prev?.rating ?? 0;
+  const oldSolved = prev?.solved ?? 0;
+
+  if (stats.solved === null || stats.solved === undefined || (platform !== 'cf' && stats.solved < oldSolved)) {
+    stats.solved = oldSolved;
+  }
+  if (stats.rating === 0 && oldRating > 0) stats.rating = oldRating;
+
+  ensureInitialWeeklySnapshot(user.discord_id, platform, stats);
+  upsertRating(user.discord_id, platform, stats);
+  insertRatingHistory(user.discord_id, platform, stats.rating);
+
+  let changed = false;
+  if (client) {
+    if (platform === 'cf') {
+      await updateDiscordRole(client, user.discord_id, stats.rating);
+    }
+    if (alertOnChange && hasExisting && oldRating !== stats.rating) {
+      changed = true;
+      await postRatingChange(client, user.discord_id, user.username, platform, oldRating, stats.rating, stats.rank_title, stats.lastContest);
+    } else if (hasExisting && stats.solved > oldSolved) {
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 async function syncUserRecord(client, user, { forceStreaks = false, alertOnChange = true } = {}) {
   const existing = {};
   for (const r of getRatings(user.discord_id)) existing[r.platform] = r;
@@ -207,110 +275,41 @@ async function syncUserRecord(client, user, { forceStreaks = false, alertOnChang
 
   if (user.cf_handle) {
     try {
-      const stats = await getCFUser(user.cf_handle);
+      const stats = await getCFUser(user.cf_handle, { includeStreak: forceStreaks });
       if (stats) {
-        const hasExisting = existing.cf !== undefined;
-        const oldRating = existing.cf?.rating ?? 0;
-        const oldSolved = existing.cf?.solved ?? 0;
-
-        if (stats.solved === null || stats.solved === undefined) stats.solved = oldSolved;
-        if (stats.rating === 0 && oldRating > 0) stats.rating = oldRating;
-
-        ensureInitialWeeklySnapshot(user.discord_id, 'cf', stats);
-        upsertRating(user.discord_id, 'cf', stats);
-        insertRatingHistory(user.discord_id, 'cf', stats.rating);
-
-        if (client) {
-          await updateDiscordRole(client, user.discord_id, stats.rating);
-          if (alertOnChange && hasExisting && oldRating !== stats.rating) {
-            changed = true;
-            await postRatingChange(client, user.discord_id, user.username, 'cf', oldRating, stats.rating, stats.rank_title, stats.lastContest);
-          } else if (hasExisting && stats.solved > oldSolved) {
-            changed = true;
-          }
+        if (await applyPlatformStats(client, user, 'cf', stats, existing, alertOnChange)) changed = true;
+        if (forceStreaks && stats.streak) {
+          upsertStreak(user.discord_id, 'cf', stats.streak.current, stats.streak.max, isoToday);
         }
+      } else if (forceStreaks) {
+        const streakInfo = await calculateCFStreak(user.cf_handle);
+        upsertStreak(user.discord_id, 'cf', streakInfo.current, streakInfo.max, isoToday);
       }
     } catch (err) {
       console.error(`[RatingSync] CF error ${user.cf_handle}:`, err.message);
     }
-
     await new Promise(r => setTimeout(r, 1500));
-
-    if (forceStreaks) {
-      try {
-        const streakInfo = await calculateCFStreak(user.cf_handle);
-        upsertStreak(user.discord_id, 'cf', streakInfo.current, streakInfo.max, isoToday);
-      } catch (err) {
-        console.error(`[RatingSync] CF streak error for ${user.cf_handle}:`, err.message);
-      }
-      await new Promise(r => setTimeout(r, 1500));
-    }
   }
 
   if (user.ac_handle) {
-    if (forceStreaks) {
-      try {
-        const streakInfo = await calculateACStreak(user.ac_handle);
-        upsertStreak(user.discord_id, 'ac', streakInfo.current, streakInfo.max, isoToday);
-      } catch (err) {
-        console.error(`[RatingSync] AC streak error for ${user.ac_handle}:`, err.message);
-      }
-    }
-
     try {
-      const stats = await getACUser(user.ac_handle);
+      const stats = await getACUser(user.ac_handle, { includeStreak: forceStreaks });
       if (stats) {
-        const hasExisting = existing.ac !== undefined;
-        const oldRating = existing.ac?.rating ?? 0;
-        const oldSolved = existing.ac?.solved ?? 0;
-
-        if (!stats.solved || stats.solved < oldSolved) stats.solved = oldSolved;
-        if (stats.rating === 0 && oldRating > 0) stats.rating = oldRating;
-
-        ensureInitialWeeklySnapshot(user.discord_id, 'ac', stats);
-        upsertRating(user.discord_id, 'ac', stats);
-        insertRatingHistory(user.discord_id, 'ac', stats.rating);
-
-        if (client) {
-          if (alertOnChange && hasExisting && oldRating !== stats.rating) {
-            changed = true;
-            await postRatingChange(client, user.discord_id, user.username, 'ac', oldRating, stats.rating, stats.rank_title, stats.lastContest);
-          } else if (hasExisting && stats.solved > oldSolved) {
-            changed = true;
-          }
+        if (await applyPlatformStats(client, user, 'ac', stats, existing, alertOnChange)) changed = true;
+        if (forceStreaks && stats.streak) {
+          upsertStreak(user.discord_id, 'ac', stats.streak.current, stats.streak.max, isoToday);
         }
       }
     } catch (err) {
       console.error(`[RatingSync] AC error ${user.ac_handle}:`, err.message);
     }
-
     await new Promise(r => setTimeout(r, 1500));
   }
 
   if (user.toph_handle) {
     try {
       const stats = await getTophUser(user.toph_handle);
-      if (stats) {
-        const hasExisting = existing.toph !== undefined;
-        const oldRating = existing.toph?.rating ?? 0;
-        const oldSolved = existing.toph?.solved ?? 0;
-
-        if (!stats.solved || stats.solved < oldSolved) stats.solved = oldSolved;
-        if (stats.rating === 0 && oldRating > 0) stats.rating = oldRating;
-
-        ensureInitialWeeklySnapshot(user.discord_id, 'toph', stats);
-        upsertRating(user.discord_id, 'toph', stats);
-        insertRatingHistory(user.discord_id, 'toph', stats.rating);
-
-        if (client) {
-          if (alertOnChange && hasExisting && oldRating !== stats.rating) {
-            changed = true;
-            await postRatingChange(client, user.discord_id, user.username, 'toph', oldRating, stats.rating, stats.rank_title, null);
-          } else if (hasExisting && stats.solved > oldSolved) {
-            changed = true;
-          }
-        }
-      }
+      if (await applyPlatformStats(client, user, 'toph', stats, existing, alertOnChange)) changed = true;
     } catch (err) {
       console.error(`[RatingSync] Toph error ${user.toph_handle}:`, err.message);
     }
@@ -323,15 +322,11 @@ async function syncUserRecord(client, user, { forceStreaks = false, alertOnChang
         console.error(`[RatingSync] Toph streak error for ${user.toph_handle}:`, err.message);
       }
     }
-
     await new Promise(r => setTimeout(r, 800));
   }
 
   if (client && forceStreaks) {
-    const bestStreak = getAllStreaks()
-      .filter(s => s.discord_id === user.discord_id)
-      .reduce((mx, s) => Math.max(mx, s.current_streak || 0), 0);
-    await updateDiscordStreakRole(client, user.discord_id, bestStreak);
+    await updateDiscordStreakRole(client, user.discord_id, getUserBestStreak(user.discord_id));
   }
 
   return changed;
@@ -458,19 +453,17 @@ function startRatingSync(client) {
   console.log(`[RatingSync] Started: ratings polled every 5m, streaks every 1h (TZ: ${TZ}).`);
 }
 
-async function calculateCFStreak(handle) {
-  const subs = await getCFStatus(handle, 2000);
-  if (!subs) return { current: 0, max: 0 };
-  const timestamps = subs.filter(s => s.creationTimeSeconds).map(s => s.creationTimeSeconds);
-  const { current, max } = calculateStreakFromTimestamps(timestamps);
-  return { current, max };
-}
-
 module.exports = {
   startRatingSync,
   syncAllRatings,
   syncSingleUser,
+  syncUserRecord,
   updateDashboard,
+  ensureGuildRoles,
+  syncMemberRolesInGuild,
+  updateDiscordRole,
+  updateDiscordStreakRole,
+  getUserBestStreak,
   calculateCFStreak,
   postRatingChange,
   STREAK_ROLES,

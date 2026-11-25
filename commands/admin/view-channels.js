@@ -1,19 +1,7 @@
 // commands/admin/view-channels.js — View all configured channels for this server safely
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { getFullGuildConfig, getConfig } = require('../../database/db');
-const { isBotOwner, chunkLines } = require('../../utils/envHelper');
-
-const CHANNEL_DEFS = [
-  { key: 'contest_channel_id', label: '🏆 Contest Radar', desc: 'Upcoming contests & reminders' },
-  { key: 'dashboard_channel_id', label: '📊 Leaderboard Dashboard', desc: 'Live auto-updating member rankings' },
-  { key: 'rating_channel_id', label: '📈 Rating Updates', desc: 'Rating change & tier promotion alerts' },
-  { key: 'suggest_channel_id', label: '💡 Daily Challenges', desc: 'Daily algorithmic challenges' },
-  { key: 'feed_channel_id', label: '⚡ Live Submissions Feed', desc: 'Accepted solves posted as they happen' },
-  { key: 'wrapup_channel_id', label: '🌅 Contest Wrap-up', desc: 'Next-day 9AM recap & upsolve radar' },
-  { key: 'github_channel_id', label: '🐙 GitHub Activity Feed', desc: 'Commits, releases, PRs, and new repos' },
-  { key: 'announcement_channel_id', label: '📢 Announcements', desc: 'Channel used by /announce' },
-  { key: 'general_channel_id', label: '💬 General Channel', desc: 'Submissions, weekly digest, first blood & sweep alerts' }
-];
+const { CHANNEL_DEFS, isBotOwner, chunkLines } = require('../../utils/envHelper');
 
 module.exports = {
   guildOnly: true,
@@ -47,12 +35,12 @@ module.exports = {
     const totalCount = ownerViewing ? defsToRender.length + 1 : defsToRender.length;
 
     const coreLines = [];
-    for (const def of defsToRender.slice(0, 6)) {
+    for (const def of defsToRender.filter(d => d.group === 'core')) {
       coreLines.push(`**${def.label}**\n${await formatChannel(config[def.key], def.desc)}`);
     }
 
     const commLines = [];
-    for (const def of defsToRender.slice(6)) {
+    for (const def of defsToRender.filter(d => d.group === 'comm')) {
       commLines.push(`**${def.label}**\n${await formatChannel(config[def.key], def.desc)}`);
     }
 

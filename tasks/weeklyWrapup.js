@@ -12,95 +12,65 @@ const { buildWeeklyWrapupEmbed } = require('../utils/embeds');
 const { resolveChannelChain } = require('../utils/envHelper');
 const { getTimeZone, getLocalParts } = require('../utils/time');
 
+const WEEKLY_PLATFORMS = ['cf', 'ac', 'toph'];
+
 function computeStats(userList) {
   const allSolved = [];
   const allRatingGains = [];
 
   for (const user of userList) {
     const ratings = getRatings(user.discord_id);
+    const perPlat = {};
     let userTotalSolved = 0;
-    let cfStart = 0, cfEnd = 0, cfGain = 0, cfSolved = 0;
-    let acStart = 0, acEnd = 0, acGain = 0, acSolved = 0;
-    let tophStart = 0, tophEnd = 0, tophGain = 0, tophSolved = 0;
 
-    if (user.cf_handle) {
-      const dbRating = ratings.find(r => r.platform === 'cf');
-      const snap = getWeeklySnapshot(user.discord_id, 'cf');
-      if (dbRating && snap) {
-        cfSolved = Math.max(0, dbRating.solved - snap.solved);
-        cfGain = dbRating.rating - snap.rating;
-        cfStart = snap.rating;
-        cfEnd = dbRating.rating;
-      } else if (dbRating) {
-        cfStart = dbRating.rating;
-        cfEnd = dbRating.rating;
+    for (const plat of WEEKLY_PLATFORMS) {
+      let solvedDelta = 0, gain = 0, start = 0, end = 0;
+      if (user[`${plat}_handle`]) {
+        const dbRating = ratings.find(r => r.platform === plat);
+        const snap = getWeeklySnapshot(user.discord_id, plat);
+        if (dbRating && snap) {
+          solvedDelta = Math.max(0, dbRating.solved - snap.solved);
+          gain = dbRating.rating - snap.rating;
+          start = snap.rating;
+          end = dbRating.rating;
+        } else if (dbRating) {
+          start = dbRating.rating;
+          end = dbRating.rating;
+        }
+        userTotalSolved += solvedDelta;
       }
-      userTotalSolved += cfSolved;
-    }
-
-    if (user.ac_handle) {
-      const dbRating = ratings.find(r => r.platform === 'ac');
-      const snap = getWeeklySnapshot(user.discord_id, 'ac');
-      if (dbRating && snap) {
-        acSolved = Math.max(0, dbRating.solved - snap.solved);
-        acGain = dbRating.rating - snap.rating;
-        acStart = snap.rating;
-        acEnd = dbRating.rating;
-      } else if (dbRating) {
-        acStart = dbRating.rating;
-        acEnd = dbRating.rating;
-      }
-      userTotalSolved += acSolved;
-    }
-
-    if (user.toph_handle) {
-      const dbRating = ratings.find(r => r.platform === 'toph');
-      const snap = getWeeklySnapshot(user.discord_id, 'toph');
-      if (dbRating && snap) {
-        tophSolved = Math.max(0, dbRating.solved - snap.solved);
-        tophGain = dbRating.rating - snap.rating;
-        tophStart = snap.rating;
-        tophEnd = dbRating.rating;
-      } else if (dbRating) {
-        tophStart = dbRating.rating;
-        tophEnd = dbRating.rating;
-      }
-      userTotalSolved += tophSolved;
+      perPlat[plat] = { solvedDelta, gain, start, end };
     }
 
     // Highlight primary platform rating gain (CF first, otherwise AC or Toph) without mixing platform scales
-    let primaryStart = cfStart, primaryEnd = cfEnd, primaryGain = cfGain;
-    if (cfGain <= 0) {
-      if (acGain > primaryGain && acGain > 0) {
-        primaryStart = acStart;
-        primaryEnd = acEnd;
-        primaryGain = acGain;
-      } else if (tophGain > primaryGain && tophGain > 0) {
-        primaryStart = tophStart;
-        primaryEnd = tophEnd;
-        primaryGain = tophGain;
+    let primary = perPlat.cf;
+    if (primary.gain <= 0) {
+      if (perPlat.ac.gain > primary.gain && perPlat.ac.gain > 0) {
+        primary = perPlat.ac;
+      } else if (perPlat.toph.gain > primary.gain && perPlat.toph.gain > 0) {
+        primary = perPlat.toph;
       }
     }
 
     allSolved.push({
       discord_id: user.discord_id,
       username: user.username,
-      cf_solved: cfSolved,
-      ac_solved: acSolved,
-      toph_solved: tophSolved,
+      cf_solved: perPlat.cf.solvedDelta,
+      ac_solved: perPlat.ac.solvedDelta,
+      toph_solved: perPlat.toph.solvedDelta,
       solved_this_week: userTotalSolved
     });
 
     allRatingGains.push({
       discord_id: user.discord_id,
       username: user.username,
-      gain: Math.max(0, primaryGain),
-      rating_gained: Math.max(0, primaryGain),
-      start: primaryStart,
-      end: primaryEnd,
-      cf_gain: Math.max(0, cfGain), cf_start: cfStart, cf_end: cfEnd, cf_linked: Boolean(user.cf_handle),
-      ac_gain: Math.max(0, acGain), ac_start: acStart, ac_end: acEnd, ac_linked: Boolean(user.ac_handle),
-      toph_gain: Math.max(0, tophGain), toph_start: tophStart, toph_end: tophEnd, toph_linked: Boolean(user.toph_handle)
+      gain: Math.max(0, primary.gain),
+      rating_gained: Math.max(0, primary.gain),
+      start: primary.start,
+      end: primary.end,
+      cf_gain: Math.max(0, perPlat.cf.gain), cf_start: perPlat.cf.start, cf_end: perPlat.cf.end, cf_linked: Boolean(user.cf_handle),
+      ac_gain: Math.max(0, perPlat.ac.gain), ac_start: perPlat.ac.start, ac_end: perPlat.ac.end, ac_linked: Boolean(user.ac_handle),
+      toph_gain: Math.max(0, perPlat.toph.gain), toph_start: perPlat.toph.start, toph_end: perPlat.toph.end, toph_linked: Boolean(user.toph_handle)
     });
   }
 

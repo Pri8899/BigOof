@@ -356,7 +356,7 @@ function reloadDatabase(dataBuffer) {
 }
 
 // ─── Allowlists for dynamic column names ──────────────────────
-const ALLOWED_PLATFORMS = new Set(['cf', 'ac', 'toph', 'github', 'lc']);
+const ALLOWED_PLATFORMS = new Set(['cf', 'ac', 'toph', 'github']);
 const ALLOWED_CONTEST_NOTIFY_FIELDS = new Set(['notified_24h', 'notified_1h']);
 const ALLOWED_FIRST_BLOOD_FIELDS = new Set([
   'first_blood_1', 'first_blood_2', 'first_blood_3', 'first_blood_4', 'first_blood_5'
@@ -457,10 +457,6 @@ function getAllRatings() {
 }
 
 // ─── Contest Helpers ──────────────────────────────────────────
-function contestExists(contestId) {
-  return Boolean(db.prepare('SELECT 1 FROM notified_contests WHERE contest_id = ?').get(contestId));
-}
-
 function upsertContest(contestId, platform, name, startTime, durationSec, url) {
   const existing = db.prepare('SELECT start_time FROM notified_contests WHERE contest_id = ?').get(contestId);
 
@@ -709,10 +705,6 @@ function setWeeklySnapshot(discordId, platform, rating, solved, dateStr) {
   `).run(discordId, platform, rating, solved, dateStr);
 }
 
-function getAllWeeklySnapshots() {
-  return db.prepare('SELECT * FROM weekly_snapshots').all();
-}
-
 function getCachedContestName(contestId) {
   const row = db.prepare('SELECT name FROM cf_contest_cache WHERE contest_id = ?').get(String(contestId));
   return row ? row.name : null;
@@ -856,7 +848,6 @@ module.exports = {
   upsertRating,
   getRatings,
   getAllRatings,
-  contestExists,
   upsertContest,
   getUpcomingContests,
   getContestsNeedingReminders,
@@ -887,7 +878,6 @@ module.exports = {
   setLastSubmission,
   getWeeklySnapshot,
   setWeeklySnapshot,
-  getAllWeeklySnapshots,
   getCachedContestName,
   cacheContestName,
   isContestWrappedUp,

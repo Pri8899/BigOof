@@ -11,15 +11,12 @@ const {
   cacheContestName,
   db
 } = require('../database/db');
-const { cfGet, getCFStatus, getCFUser } = require('../utils/codeforces');
-const { axiosGetWithRetry, KENKOOOO_HEADERS, getACUser, getACContestName, calculateACStreak } = require('../utils/atcoder');
+const { cfGet, getCFStatus, getCFUser, calculateCFStreak, ensureContestCache } = require('../utils/codeforces');
+const { axiosGetWithRetry, KENKOOOO_HEADERS, getACUser, getACContestName } = require('../utils/atcoder');
 const { fetchTophSubmissions, getTophUser, calculateTophStreak } = require('../utils/toph');
 const { buildSubmissionEmbed } = require('../utils/embeds');
 const { resolveChannelChain } = require('../utils/envHelper');
 const { getTimeZone, getLocalParts } = require('../utils/time');
-
-let contestListCache = null;
-let lastContestListFetchTime = 0;
 
 function extractACIndex(problemId) {
   const parts = String(problemId || '').split('_');
@@ -51,25 +48,10 @@ async function getOrFetchContestName(contestId) {
   const cached = getCachedContestName(contestId);
   if (cached) return cached;
 
-  const now = Date.now();
-  if (!contestListCache || (now - lastContestListFetchTime > 3600000)) {
-    try {
-      const res = await cfGet('/contest.list?gym=false', 12000);
-      if (res.data?.status === 'OK') {
-        contestListCache = res.data.result;
-        lastContestListFetchTime = now;
-      }
-    } catch (err) {
-      console.error('[SubmissionFeed] Failed fetching contest list:', err.message);
-    }
-  }
-
-  if (contestListCache) {
-    const contest = contestListCache.find(c => c.id === Number(contestId));
-    if (contest) {
-      cacheContestName(contestId, contest.name);
-      return contest.name;
-    }
+  const contestMap = await ensureContestCache(false).catch(() => null);
+  if (contestMap && contestMap[contestId]) {
+    cacheContestName(contestId, contestMap[contestId]);
+    return contestMap[contestId];
   }
 
   if (Number(contestId) >= 100000) {
@@ -258,10 +240,46 @@ async function publishSubmissions(client, user, subs, platform) {
   }
 }
 
+async function refreshPlatformAfterAC(client, user, platform, isoToday) {
+  try {
+    const handle = user[`${platform}_handle`];
+    const prev = getRatings(user.discord_id).find(r => r.platform === platform);
+
+    let stats = null;
+    let streakInfo = null;
+
+    if (platform === 'cf') {
+      stats = await getCFUser(handle, { includeStreak: true });
+      streakInfo = stats?.streak || await calculateCFStreak(handle);
+    } else if (platform === 'ac') {
+      stats = await getACUser(handle, { includeStreak: true });
+      streakInfo = stats?.streak || null;
+    } else if (platform === 'toph') {
+      stats = await getTophUser(handle);
+      streakInfo = await calculateTophStreak(handle);
+    }
+
+    if (stats) {
+      if (stats.solved === null || stats.solved === undefined) stats.solved = prev?.solved ?? 0;
+      if (stats.rating === 0 && (prev?.rating ?? 0) > 0) stats.rating = prev.rating;
+      upsertRating(user.discord_id, platform, stats);
+    }
+
+    if (streakInfo) {
+      upsertStreak(user.discord_id, platform, streakInfo.current, streakInfo.max, isoToday);
+    }
+    return true;
+  } catch (err) {
+    console.error(`[SubmissionFeed] ${platform.toUpperCase()} stat update failed for ${user[`${platform}_handle`]}:`, err.message);
+    return false;
+  }
+}
+
 async function runSubmissionFeed(client) {
   const users = getAllUsers();
   let shouldUpdateDashboard = false;
   const isoToday = getLocalParts(new Date(), getTimeZone()).isoDate;
+  const { updateDashboard, updateDiscordStreakRole, getUserBestStreak } = require('./ratingSync');
 
   for (const user of users) {
     const { newAc: cfNew, highestId } = await fetchCFSubmissions(user);
@@ -276,50 +294,14 @@ async function runSubmissionFeed(client) {
 
     await publishSubmissions(client, user, tophNew, 'toph');
 
-    if (cfNew.length > 0) {
-      try {
-        const cfStats = await getCFUser(user.cf_handle);
-        if (cfStats) {
-          const prevCf = getRatings(user.discord_id).find(r => r.platform === 'cf');
-          if (cfStats.solved === null) cfStats.solved = prevCf?.solved ?? 0;
-          if (cfStats.rating === 0 && (prevCf?.rating ?? 0) > 0) cfStats.rating = prevCf.rating;
-          upsertRating(user.discord_id, 'cf', cfStats);
-        }
-        const { calculateCFStreak } = require('./ratingSync');
-        const streakInfo = await calculateCFStreak(user.cf_handle);
-        upsertStreak(user.discord_id, 'cf', streakInfo.current, streakInfo.max, isoToday);
-        shouldUpdateDashboard = true;
-      } catch (err) {
-        console.error(`[SubmissionFeed] CF stat update failed for ${user.cf_handle}:`, err.message);
-      }
-    }
+    let userUpdated = false;
+    if (cfNew.length > 0 && await refreshPlatformAfterAC(client, user, 'cf', isoToday)) userUpdated = true;
+    if (acNew.length > 0 && await refreshPlatformAfterAC(client, user, 'ac', isoToday)) userUpdated = true;
+    if (tophNew.length > 0 && await refreshPlatformAfterAC(client, user, 'toph', isoToday)) userUpdated = true;
 
-    if (acNew.length > 0) {
-      try {
-        const acStats = await getACUser(user.ac_handle);
-        if (acStats) {
-          const prevAc = getRatings(user.discord_id).find(r => r.platform === 'ac');
-          if (acStats.rating === 0 && (prevAc?.rating ?? 0) > 0) acStats.rating = prevAc.rating;
-          upsertRating(user.discord_id, 'ac', acStats);
-        }
-        const streakInfo = await calculateACStreak(user.ac_handle);
-        upsertStreak(user.discord_id, 'ac', streakInfo.current, streakInfo.max, isoToday);
-        shouldUpdateDashboard = true;
-      } catch (err) {
-        console.error(`[SubmissionFeed] AC stat update failed for ${user.ac_handle}:`, err.message);
-      }
-    }
-
-    if (tophNew.length > 0) {
-      try {
-        const tophStats = await getTophUser(user.toph_handle);
-        if (tophStats) upsertRating(user.discord_id, 'toph', tophStats);
-        const streakInfo = await calculateTophStreak(user.toph_handle);
-        upsertStreak(user.discord_id, 'toph', streakInfo.current, streakInfo.max, isoToday);
-        shouldUpdateDashboard = true;
-      } catch (err) {
-        console.error(`[SubmissionFeed] Toph stat update failed for ${user.toph_handle}:`, err.message);
-      }
+    if (userUpdated) {
+      shouldUpdateDashboard = true;
+      await updateDiscordStreakRole(client, user.discord_id, getUserBestStreak(user.discord_id)).catch(() => {});
     }
 
     if (user.cf_handle) await new Promise(r => setTimeout(r, 2000));
@@ -327,7 +309,6 @@ async function runSubmissionFeed(client) {
   }
 
   if (shouldUpdateDashboard) {
-    const { updateDashboard } = require('./ratingSync');
     await updateDashboard(client).catch(err => console.error('[SubmissionFeed] Dashboard update failed:', err.message));
   }
 }

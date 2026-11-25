@@ -1,5 +1,17 @@
-// utils/envHelper.js — Environment validation, owner checks, and guild-isolated channel routing
+// utils/envHelper.js — Environment validation, owner checks, shared channel defs, and guild-isolated routing
 const { getConfig, setConfig } = require('../database/db');
+
+const CHANNEL_DEFS = [
+  { key: 'contest_channel_id',      label: '🏆 Contest Radar',        shortLabel: 'Contest Radar',        desc: 'Upcoming contests & reminders',                        optionDesc: 'Upcoming contests & reminders',             group: 'core' },
+  { key: 'dashboard_channel_id',    label: '📊 Leaderboard Dashboard', shortLabel: 'Leaderboard Dashboard', desc: 'Live auto-updating member rankings',                   optionDesc: 'Auto-updating rankings',                    group: 'core' },
+  { key: 'rating_channel_id',       label: '📈 Rating Updates',        shortLabel: 'Rating Updates',        desc: 'Rating change & tier promotion alerts',                optionDesc: 'Rating change & rank alerts',               group: 'core' },
+  { key: 'suggest_channel_id',      label: '💡 Daily Challenges',      shortLabel: 'Daily Challenges',      desc: 'Daily algorithmic challenges',                         optionDesc: 'Daily problem suggestions',                 group: 'core' },
+  { key: 'feed_channel_id',         label: '⚡ Live Submissions Feed', shortLabel: 'Live Submissions Feed', desc: 'Accepted solves posted as they happen',                optionDesc: 'Real-time accepted solves',                 group: 'core' },
+  { key: 'wrapup_channel_id',       label: '🌅 Contest Wrap-up',       shortLabel: 'Contest Wrap-up',       desc: 'Next-day 9AM recap & upsolve radar',                   optionDesc: 'Next-day 9AM contest recap & upsolve',      group: 'core' },
+  { key: 'github_channel_id',       label: '🐙 GitHub Activity Feed',  shortLabel: 'GitHub Activity Feed',  desc: 'Commits, releases, PRs, and new repos',                optionDesc: 'Commits, PRs, and repositories',            group: 'comm' },
+  { key: 'announcement_channel_id', label: '📢 Announcements',         shortLabel: 'Announcements',         desc: 'Channel used by /announce',                            optionDesc: 'Broadcast channel for /announce',           group: 'comm' },
+  { key: 'general_channel_id',      label: '💬 General Channel',       shortLabel: 'General Channel',       desc: 'Submissions, weekly digest, first blood & sweep alerts', optionDesc: 'Submissions, weekly digest, first blood & sweep', group: 'comm' }
+];
 
 function getValidId(val, fallback = null) {
   if (val && typeof val === 'string' && !val.includes('your_') && /^\d+$/.test(val.trim())) {
@@ -184,6 +196,7 @@ function chunkLines(lines, maxLen = 1000, separator = '\n') {
 }
 
 module.exports = {
+  CHANNEL_DEFS,
   getValidId,
   isBotOwner,
   getTargetChannel,

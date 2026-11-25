@@ -3,7 +3,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getUser, getRatings } = require('../database/db');
 const { getCFDivisionBreakdown } = require('../utils/codeforces');
 const { getPlatformEmojis } = require('../utils/emojis');
-const { getCFRankColor, errorEmbed } = require('../utils/embeds');
+const { getCFRankColor, errorEmbed, resolveTargetMeta } = require('../utils/embeds');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -21,10 +21,7 @@ module.exports = {
       || interaction.member
       || interaction.user;
 
-    const displayName = target.displayName || target.username || 'Member';
-    const avatarUrl = typeof target.user?.displayAvatarURL === 'function'
-      ? target.user.displayAvatarURL({ dynamic: true })
-      : (typeof target.displayAvatarURL === 'function' ? target.displayAvatarURL({ dynamic: true }) : undefined);
+    const { displayName, avatarUrl } = resolveTargetMeta(target);
 
     const user = getUser(target.id);
     if (!user || !user.cf_handle) {

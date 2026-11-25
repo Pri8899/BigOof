@@ -1,8 +1,8 @@
 // tasks/githubFeed.js — Live feed for GitHub commits, PRs, releases, and repositories
 const cron = require('node-cron');
-const { getAllUsers, db } = require('../database/db');
+const { getAllUsers, getUser, db } = require('../database/db');
 const { getUserRecentEvents, getCommitDetails } = require('../utils/github');
-const { buildGitHubActivityEmbed } = require('../utils/embeds');
+const { buildGitHubActivityEmbed, successEmbed, errorEmbed } = require('../utils/embeds');
 const { getTargetChannel } = require('../utils/envHelper');
 const { getTimeZone } = require('../utils/time');
 
@@ -158,4 +158,42 @@ function startGitHubFeed(client) {
   console.log('[GitHubFeed] Live feed task scheduled (every 2 minutes).');
 }
 
-module.exports = { startGitHubFeed, runGitHubFeed };
+/**
+ * Shared handler for `/github sync` and the interactive `github_sync_btn` button.
+ */
+async function handleGitHubSyncInteraction(interaction, client = interaction.client) {
+  await interaction.deferReply({ flags: 64 });
+  const dbUser = getUser(interaction.user.id);
+
+  if (!dbUser || !dbUser.github_handle) {
+    return interaction.editReply({
+      embeds: [errorEmbed('Not Linked', '🐙 Please link your GitHub account first using `/link platform:🐙 GitHub`.')]
+    });
+  }
+
+  const result = await runGitHubFeed(client, interaction.user.id);
+  if (!result.success && result.reason) {
+    return interaction.editReply({
+      embeds: [errorEmbed('Sync Failed', result.reason)]
+    });
+  }
+
+  const profileLink = `[${dbUser.github_handle}](https://github.com/${encodeURIComponent(dbUser.github_handle)})`;
+  if (result.count > 0) {
+    return interaction.editReply({
+      embeds: [successEmbed(
+        'GitHub Activity Synced! 🚀',
+        `Scanned **${profileLink}** and posted **${result.count}** new activities to your GitHub channel!`
+      )]
+    });
+  }
+
+  return interaction.editReply({
+    embeds: [successEmbed(
+      'Everything Up-to-Date! 🟢',
+      `Scanned **${profileLink}**. All recent activities are already posted!`
+    )]
+  });
+}
+
+module.exports = { startGitHubFeed, runGitHubFeed, handleGitHubSyncInteraction };

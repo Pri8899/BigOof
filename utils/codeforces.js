@@ -1,5 +1,6 @@
 // utils/codeforces.js — Codeforces REST API wrapper with shared headers, caching, and retries
 const axios = require('axios');
+const { calculateStreakFromTimestamps } = require('./time');
 
 const CF_BASE = 'https://codeforces.com/api';
 const CF_HEADERS = {
@@ -86,9 +87,41 @@ async function getCFStatus(handle, count = 2000, from = 1) {
 }
 
 /**
- * Fetch user info, solved count, and last rated contest from Codeforces.
+ * Computes { current, max } CF daily streak, paginating deeper only when a continuous streak hits page boundaries.
  */
-async function getCFUser(handle, { includeSolvedSet = false } = {}) {
+async function calculateCFStreak(handle, prefetchedSubs = null) {
+  let subs = prefetchedSubs ?? await getCFStatus(handle, 10000, 1);
+  if (!subs) return { current: 0, max: 0 };
+
+  let combinedSubs = [...subs];
+  let nextFrom = combinedSubs.length + 1;
+
+  // Paginate up to 30k submissions if an active 1+ / 2+ year streak reaches the oldest fetched submission day
+  for (let page = 1; page < 3 && subs.length >= 10000; page++) {
+    const timestamps = combinedSubs.filter(s => s.creationTimeSeconds).map(s => s.creationTimeSeconds);
+    const { current } = calculateStreakFromTimestamps(timestamps);
+    const oldestTs = timestamps.length > 0 ? Math.min(...timestamps) : 0;
+    const daysCovered = oldestTs > 0
+      ? Math.floor((Date.now() - oldestTs * 1000) / 86400000)
+      : 0;
+    if (current < Math.max(0, daysCovered - 1)) break;
+
+    const olderPage = await getCFStatus(handle, 10000, nextFrom);
+    if (!olderPage || olderPage.length === 0) break;
+    combinedSubs = combinedSubs.concat(olderPage);
+    subs = olderPage;
+    nextFrom += olderPage.length;
+  }
+
+  const timestamps = combinedSubs.filter(s => s.creationTimeSeconds).map(s => s.creationTimeSeconds);
+  const { current, max } = calculateStreakFromTimestamps(timestamps);
+  return { current, max };
+}
+
+/**
+ * Fetch user info, solved count, last rated contest, and optionally solvedSet/streak in a single pass.
+ */
+async function getCFUser(handle, { includeSolvedSet = false, includeStreak = false } = {}) {
   try {
     const infoRes = await cfGet(`/user.info?handles=${encodeURIComponent(handle)}`, 8000);
     if (infoRes.data?.status !== 'OK' || !Array.isArray(infoRes.data.result) || !infoRes.data.result[0]) {
@@ -130,6 +163,7 @@ async function getCFUser(handle, { includeSolvedSet = false } = {}) {
       lastContest
     };
     if (includeSolvedSet) result.solvedSet = seen;
+    if (includeStreak) result.streak = await calculateCFStreak(handle, subs);
     return result;
   } catch (err) {
     console.error(`[CF] Error fetching ${handle}:`, err.message);
@@ -506,10 +540,12 @@ module.exports = {
   cfGet,
   getCFStatus,
   getCFUser,
+  calculateCFStreak,
   getCFContests,
   validateCFHandle,
   getCFProblems,
   getProblemsetCache,
+  ensureContestCache,
   checkCFSolved,
   initializeProblemCache,
   getCFDivisionBreakdown,

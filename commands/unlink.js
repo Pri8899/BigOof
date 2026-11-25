@@ -1,7 +1,7 @@
 // commands/unlink.js — Unlink a connected CP or GitHub platform account safely
 const { SlashCommandBuilder } = require('discord.js');
 const { getUser, unlinkPlatform } = require('../database/db');
-const { getPlatformEmojis } = require('../utils/emojis');
+const { getPlatformEmojis, PLATFORM_INFO, ALL_PLATFORM_CHOICES } = require('../utils/emojis');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
 
 module.exports = {
@@ -12,12 +12,7 @@ module.exports = {
       opt.setName('platform')
         .setDescription('Platform to unlink')
         .setRequired(true)
-        .addChoices(
-          { name: '🏆 Codeforces', value: 'cf' },
-          { name: '🎯 AtCoder',    value: 'ac' },
-          { name: '⚡ Toph',       value: 'toph' },
-          { name: '🐙 GitHub',     value: 'github' }
-        )
+        .addChoices(...ALL_PLATFORM_CHOICES)
     ),
 
   async execute(interaction) {
@@ -25,14 +20,14 @@ module.exports = {
 
     const platform = interaction.options.getString('platform');
     const userId = interaction.user.id;
-    const names = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph', github: 'GitHub' };
+    const info = PLATFORM_INFO[platform];
     const guildEmojis = await getPlatformEmojis(interaction.guild);
-    const platformEmoji = guildEmojis[platform] || (platform === 'cf' ? '🏆' : platform === 'ac' ? '🎯' : platform === 'toph' ? '⚡' : '🐙');
+    const platformEmoji = guildEmojis[platform] || info.fallbackEmoji;
 
     const user = getUser(userId);
     if (!user || !user[`${platform}_handle`]) {
       return interaction.editReply({
-        embeds: [errorEmbed('Not Linked', `${platformEmoji} You don't have a **${names[platform]}** account linked.`)]
+        embeds: [errorEmbed('Not Linked', `${platformEmoji} You don't have a **${info.name}** account linked.`)]
       });
     }
 
@@ -44,7 +39,7 @@ module.exports = {
     }
 
     return interaction.editReply({
-      embeds: [successEmbed('Account Unlinked', `${platformEmoji} Your **${names[platform]}** account has been removed.`)]
+      embeds: [successEmbed('Account Unlinked', `${platformEmoji} Your **${info.name}** account has been removed.`)]
     });
   }
 };

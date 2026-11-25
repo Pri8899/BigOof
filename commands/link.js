@@ -5,7 +5,7 @@ const { validateCFHandle, getCFUser } = require('../utils/codeforces');
 const { validateACHandle, getACUser } = require('../utils/atcoder');
 const { validateTophHandle, getTophUser } = require('../utils/toph');
 const { validateGitHubUser } = require('../utils/github');
-const { getPlatformEmojis } = require('../utils/emojis');
+const { getPlatformEmojis, PLATFORM_INFO, ALL_PLATFORM_CHOICES } = require('../utils/emojis');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
 
 module.exports = {
@@ -16,12 +16,7 @@ module.exports = {
       opt.setName('platform')
         .setDescription('Platform to link')
         .setRequired(true)
-        .addChoices(
-          { name: '🏆 Codeforces', value: 'cf' },
-          { name: '🎯 AtCoder',    value: 'ac' },
-          { name: '⚡ Toph',       value: 'toph' },
-          { name: '🐙 GitHub',     value: 'github' }
-        )
+        .addChoices(...ALL_PLATFORM_CHOICES)
     )
     .addStringOption(opt =>
       opt.setName('handle')
@@ -39,9 +34,9 @@ module.exports = {
 
     upsertUser(userId, username);
 
-    const platformNames = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph', github: 'GitHub' };
+    const info = PLATFORM_INFO[platform];
     const emojis = await getPlatformEmojis(interaction.guild);
-    const platformEmoji = emojis[platform] || (platform === 'cf' ? '🏆' : platform === 'ac' ? '🎯' : platform === 'toph' ? '⚡' : '🐙');
+    const platformEmoji = emojis[platform] || info.fallbackEmoji;
 
     let valid = false;
     if (platform === 'cf') valid = await validateCFHandle(handle);
@@ -53,17 +48,21 @@ module.exports = {
       return interaction.editReply({
         embeds: [errorEmbed(
           'Invalid Handle',
-          `${platformEmoji} Could not find **${handle}** on **${platformNames[platform]}**.\nPlease verify your username and try again.`
+          `${platformEmoji} Could not find **${handle}** on **${info.name}**.\nPlease verify your username and try again.`
         )]
       });
     }
 
     linkPlatform(userId, platform, handle);
 
+    const syncNote = platform === 'github'
+      ? "Scanning your recent GitHub activity now... commits, PRs, and releases will post to your GitHub channel shortly."
+      : "Fetching your stats now... they'll appear on your profile and leaderboard shortly.";
+
     await interaction.editReply({
       embeds: [successEmbed(
         'Account Linked!',
-        `${platformEmoji} Your **${platformNames[platform]}** account \`${handle}\` has been linked! 🎉\n\nFetching your stats now... they'll appear on your profile and leaderboard shortly.`
+        `${platformEmoji} Your **${info.name}** account \`${handle}\` has been linked! 🎉\n\n${syncNote}`
       )]
     });
 

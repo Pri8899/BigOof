@@ -1,10 +1,9 @@
 // commands/graph.js — Rating history graph via QuickChart.io using latest chronological history
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getUser, getRatingHistory } = require('../database/db');
-const { errorEmbed } = require('../utils/embeds');
-const { getPlatformEmojis } = require('../utils/emojis');
+const { errorEmbed, resolveTargetMeta } = require('../utils/embeds');
+const { getPlatformEmojis, PLATFORM_INFO } = require('../utils/emojis');
 
-const PLATFORM_NAMES = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
 const PLATFORM_COLORS = { cf: '#1F8DD6', ac: '#E74C3C', toph: '#7B2FBE' };
 
 module.exports = {
@@ -36,18 +35,15 @@ module.exports = {
       || interaction.member
       || interaction.user;
 
-    const userId = target.id;
-    const displayName = target.displayName || target.username || 'Member';
-    const avatarUrl = typeof target.user?.displayAvatarURL === 'function'
-      ? target.user.displayAvatarURL({ dynamic: true })
-      : (typeof target.displayAvatarURL === 'function' ? target.displayAvatarURL({ dynamic: true }) : undefined);
+    const { id: userId, displayName, avatarUrl } = resolveTargetMeta(target);
+    const platName = PLATFORM_INFO[platform].name;
 
     const user = getUser(userId);
     const history = getRatingHistory(userId, platform, 30);
 
     if (!user || !user[`${platform}_handle`]) {
       return interaction.editReply({
-        embeds: [errorEmbed('No Account Linked', `${displayName} hasn't linked a ${PLATFORM_NAMES[platform]} account.`)]
+        embeds: [errorEmbed('No Account Linked', `${displayName} hasn't linked a ${platName} account.`)]
       });
     }
 
@@ -68,7 +64,7 @@ module.exports = {
       data: {
         labels,
         datasets: [{
-          label: `${PLATFORM_NAMES[platform]} Rating`,
+          label: `${platName} Rating`,
           data: ratings,
           borderColor: PLATFORM_COLORS[platform],
           backgroundColor: `${PLATFORM_COLORS[platform]}33`,
@@ -113,13 +109,13 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(embedColor)
       .setAuthor({
-        name: `${PLATFORM_NAMES[platform]} Career Rating Trajectory`,
+        name: `${platName} Career Rating Trajectory`,
         iconURL: avatarUrl
       })
       .setDescription([
         '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
         `> 👤 **Member:** <@${userId}> (\`${displayName}\`)`,
-        `> 🌐 **Platform:** ${platformEmoji} **${PLATFORM_NAMES[platform]}**`,
+        `> 🌐 **Platform:** ${platformEmoji} **${platName}**`,
         `> 🏆 **Peak (Window):** **${maxR}**`,
         `> 📈 **Net Change:** **${sign}** (\`${ratings[0]}\` ➔ \`${lastR}\`)`,
         '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'

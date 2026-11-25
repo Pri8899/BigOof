@@ -6,8 +6,7 @@
   "scripts": {
     "start": "node deploy-commands.js && node index.js",
     "deploy": "node deploy-commands.js",
-    "dev": "node --watch index.js",
-    "set-avatar": "node scripts/set-bot-avatar.js"
+    "dev": "node --watch index.js"
   },
   "engines": {
     "node": ">=18.0.0"
