@@ -12,7 +12,7 @@ const {
   db
 } = require('../database/db');
 const { cfGet, getCFStatus, getCFUser } = require('../utils/codeforces');
-const { axiosGetWithRetry, KENKOOOO_HEADERS, getACUser, calculateACStreak } = require('../utils/atcoder');
+const { axiosGetWithRetry, KENKOOOO_HEADERS, getACUser, getACContestName, calculateACStreak } = require('../utils/atcoder');
 const { fetchTophSubmissions, getTophUser, calculateTophStreak } = require('../utils/toph');
 const { buildSubmissionEmbed } = require('../utils/embeds');
 const { resolveChannelChain } = require('../utils/envHelper');
@@ -121,8 +121,12 @@ async function fetchCFSubmissions(user) {
         const alreadySeen = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(dedupKey);
         if (alreadySeen) continue;
 
-        const contestName = await getOrFetchContestName(sub.problem.contestId);
         const isGym = Number(sub.problem.contestId) >= 100000;
+        const contestName = (await getOrFetchContestName(sub.problem.contestId))
+          || (isGym ? `Codeforces Gym #${sub.problem.contestId}` : `Codeforces Round #${sub.problem.contestId}`);
+        const contestUrl = isGym
+          ? `https://codeforces.com/gym/${sub.problem.contestId}`
+          : `https://codeforces.com/contest/${sub.problem.contestId}`;
         const problemUrl = isGym
           ? `https://codeforces.com/gym/${sub.problem.contestId}/problem/${sub.problem.index}`
           : `https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`;
@@ -137,6 +141,7 @@ async function fetchCFSubmissions(user) {
           memoryMb: sub.memoryConsumedBytes !== undefined ? (sub.memoryConsumedBytes / 1048576).toFixed(1) : undefined,
           contestId: sub.problem.contestId,
           contestName,
+          contestUrl,
           id: sub.id,
           timestamp: sub.creationTimeSeconds,
           dedupKey
@@ -179,7 +184,10 @@ async function fetchACSubmissions(user) {
         if (alreadySeen) continue;
 
         const index = extractACIndex(sub.problem_id);
-        const title = await getACProblemTitle(sub.problem_id, sub.contest_id).catch(() => null);
+        const [title, contestName] = await Promise.all([
+          getACProblemTitle(sub.problem_id, sub.contest_id).catch(() => null),
+          getACContestName(sub.contest_id)
+        ]);
 
         newAc.push({
           name: title || sub.problem_id,
@@ -191,6 +199,8 @@ async function fetchACSubmissions(user) {
             ? (sub.execution_time / 1000).toFixed(2)
             : undefined,
           contestId: sub.contest_id,
+          contestName,
+          contestUrl: `https://atcoder.jp/contests/${sub.contest_id}`,
           id: sub.id,
           timestamp: sub.epoch_second,
           dedupKey
@@ -239,6 +249,15 @@ async function broadcastSubmission(client, user, sub, platform) {
   return sentAny;
 }
 
+async function publishSubmissions(client, user, subs, platform) {
+  for (const sub of subs) {
+    await broadcastSubmission(client, user, sub, platform);
+    if (sub.dedupKey) {
+      db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
+    }
+  }
+}
+
 async function runSubmissionFeed(client) {
   const users = getAllUsers();
   let shouldUpdateDashboard = false;
@@ -249,28 +268,13 @@ async function runSubmissionFeed(client) {
     const { newAc: acNew, highestTime } = await fetchACSubmissions(user);
     const tophNew = await fetchTophSubmissions(user);
 
-    for (const sub of cfNew) {
-      await broadcastSubmission(client, user, sub, 'cf');
-      if (sub.dedupKey) {
-        db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
-      }
-    }
+    await publishSubmissions(client, user, cfNew, 'cf');
     if (highestId !== null) setLastSubmission(user.discord_id, 'cf', highestId);
 
-    for (const sub of acNew) {
-      await broadcastSubmission(client, user, sub, 'ac');
-      if (sub.dedupKey) {
-        db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
-      }
-    }
+    await publishSubmissions(client, user, acNew, 'ac');
     if (highestTime !== null) setLastSubmission(user.discord_id, 'ac', highestTime);
 
-    for (const sub of tophNew) {
-      await broadcastSubmission(client, user, sub, 'toph');
-      if (sub.dedupKey) {
-        db.prepare('INSERT OR IGNORE INTO processed_submissions (id, timestamp) VALUES (?, ?)').run(sub.dedupKey, sub.timestamp);
-      }
-    }
+    await publishSubmissions(client, user, tophNew, 'toph');
 
     if (cfNew.length > 0) {
       try {

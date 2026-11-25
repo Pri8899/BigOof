@@ -36,18 +36,48 @@ const KENKOOOO_HEADERS = {
   'Referer': 'https://kenkoooo.com/atcoder/'
 };
 
+const CONTEST_CACHE_TTL = 6 * 3600 * 1000;
+let acContestsCache = null;
+let acContestsFetchedAt = 0;
+
+async function ensureACContestCache() {
+  const now = Date.now();
+  if (acContestsCache && (now - acContestsFetchedAt <= CONTEST_CACHE_TTL)) {
+    return acContestsCache;
+  }
+  const res = await axiosGetWithRetry(
+    'https://kenkoooo.com/atcoder/resources/contests.json',
+    { timeout: 10000, headers: KENKOOOO_HEADERS }
+  );
+  if (Array.isArray(res.data)) {
+    acContestsCache = res.data;
+    acContestsFetchedAt = now;
+  }
+  return acContestsCache;
+}
+
+/**
+ * Resolves an AtCoder contest ID (e.g. `abc380`) to its full title using Kenkoooo cache.
+ */
+async function getACContestName(contestId) {
+  if (!contestId) return 'AtCoder Practice';
+  try {
+    const list = await ensureACContestCache();
+    const match = Array.isArray(list) ? list.find(c => c.id === contestId) : null;
+    if (match?.title) return match.title;
+  } catch (_) {}
+  return String(contestId).toUpperCase();
+}
+
 /**
  * Fetch upcoming contests from Kenkoooo (sorted chronologically) or atcoder.jp fallback.
  */
 async function getACContests() {
   try {
-    const res = await axiosGetWithRetry(
-      'https://kenkoooo.com/atcoder/resources/contests.json',
-      { timeout: 10000, headers: KENKOOOO_HEADERS }
-    );
-    if (Array.isArray(res.data)) {
+    const list = await ensureACContestCache();
+    if (Array.isArray(list)) {
       const now = Math.floor(Date.now() / 1000);
-      const upcoming = res.data
+      const upcoming = list
         .filter(c => c.start_epoch_second > now)
         .sort((a, b) => a.start_epoch_second - b.start_epoch_second)
         .slice(0, 20)
@@ -300,6 +330,7 @@ module.exports = {
   KENKOOOO_HEADERS,
   getACUser,
   getACContests,
+  getACContestName,
   validateACHandle,
   getACSolvedCount,
   calculateACStreak

@@ -17,7 +17,7 @@ const { getCFUser, getCFStatus } = require('../utils/codeforces');
 const { getTargetChannel, getGuildTargetChannels, replaceChannelBotMessage } = require('../utils/envHelper');
 const { getACUser, calculateACStreak } = require('../utils/atcoder');
 const { getTophUser, calculateTophStreak } = require('../utils/toph');
-const { buildDashboardEmbed } = require('../utils/embeds');
+const { buildDashboardEmbed, PLATFORM_ICONS } = require('../utils/embeds');
 const { computeLeaderboard } = require('../commands/leaderboard');
 const { getTimeZone, getLocalParts, calculateStreakFromTimestamps } = require('../utils/time');
 
@@ -159,11 +159,7 @@ async function postRatingChange(client, discordId, username, platform, oldRating
 
   const platName = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' }[platform] ?? platform;
   const contestLabel = formatContestLabel(lastContest);
-  const platIcon = platform === 'cf'
-    ? 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
-    : platform === 'ac'
-      ? 'https://img.atcoder.jp/assets/logo.png'
-      : 'https://toph.co/images/appleicon.png';
+  const platIcon = PLATFORM_ICONS[platform] || PLATFORM_ICONS.toph;
 
   for (const guild of client.guilds.cache.values()) {
     const member = guild.members.cache.get(discordId) || await guild.members.fetch(discordId).catch(() => null);

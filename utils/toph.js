@@ -144,27 +144,29 @@ async function getTophUser(handle) {
   }
 }
 
+async function fetchTophActivities(handle) {
+  const res = await tophGet(`https://toph.co/u/${encodeURIComponent(handle)}`);
+  const html = String(res.data || '');
+  const activitiesPanelMatch = html.match(/\bActivities\b[\s\S]*?<div class=flow-sm>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/);
+  if (!activitiesPanelMatch) return [];
+
+  const activitiesHtml = activitiesPanelMatch[1];
+  const itemRegex = /<div class="fg-1 fs-1 fb-0">([\s\S]*?)<\/div>\s*<div[^>]*>\s*<span[^>]*data-timestamp=(\d+)[^>]*>/g;
+  const items = [];
+  let m;
+  while ((m = itemRegex.exec(activitiesHtml)) !== null) {
+    const inner = m[1].trim();
+    const timestamp = parseInt(m[2], 10);
+    if (!inner.startsWith('Solved ') || !timestamp || Number.isNaN(timestamp)) continue;
+    items.push({ inner, timestamp });
+  }
+  return items;
+}
+
 async function calculateTophStreak(handle) {
   try {
-    const res = await tophGet(`https://toph.co/u/${encodeURIComponent(handle)}`);
-    const html = String(res.data || '');
-
-    const activitiesPanelMatch = html.match(/\bActivities\b[\s\S]*?<div class=flow-sm>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/);
-    if (!activitiesPanelMatch) return { current: 0, max: 0 };
-
-    const activitiesHtml = activitiesPanelMatch[1];
-    const itemRegex = /<div class="fg-1 fs-1 fb-0">([\s\S]*?)<\/div>\s*<div[^>]*>\s*<span[^>]*data-timestamp=(\d+)[^>]*>/g;
-    const timestamps = [];
-    let m;
-    while ((m = itemRegex.exec(activitiesHtml)) !== null) {
-      const inner = m[1].trim();
-      const timestamp = parseInt(m[2], 10);
-      if (!inner.startsWith('Solved ')) continue;
-      if (!timestamp || Number.isNaN(timestamp)) continue;
-      timestamps.push(timestamp);
-    }
-
-    const { current, max } = calculateStreakFromTimestamps(timestamps);
+    const items = await fetchTophActivities(handle);
+    const { current, max } = calculateStreakFromTimestamps(items.map(i => i.timestamp));
     console.log(`[Toph Streak] ${handle}: current=${current}, max=${max}`);
     return { current, max };
   } catch (err) {
@@ -178,7 +180,7 @@ const _problemDetailsCache = new Map();
 async function getTophProblemDetails(slug, hintContestName = null) {
   if (_problemDetailsCache.has(slug)) return _problemDetailsCache.get(slug);
 
-  const result = { difficulty: 0, tags: [], contestName: hintContestName || 'Practice' };
+  const result = { difficulty: 0, tags: [], contestName: hintContestName || 'Practice', contestUrl: null };
   try {
     const res = await tophGet(`https://toph.co/p/${encodeURIComponent(slug)}`);
     const html = String(res.data || '');
@@ -198,11 +200,10 @@ async function getTophProblemDetails(slug, hintContestName = null) {
     }
     result.tags = result.tags.slice(0, 5);
 
-    if (!hintContestName) {
-      const contestMatch = html.match(/href=["']?\/c\/([a-z0-9_-]+)["']?[^>]*>([^<]{2,80})<\/a>/i);
-      if (contestMatch) {
-        result.contestName = contestMatch[2].trim();
-      }
+    const contestMatch = html.match(/href=["']?\/c\/([a-z0-9_-]+)["']?[^>]*>([^<]{2,80})<\/a>/i);
+    if (contestMatch) {
+      if (!hintContestName) result.contestName = contestMatch[2].trim();
+      result.contestUrl = `https://toph.co/c/${contestMatch[1].trim()}`;
     }
 
     _problemDetailsCache.set(slug, result);
@@ -217,24 +218,12 @@ async function fetchTophSubmissions(user) {
   const { db } = require('../database/db');
   try {
     const encoded = encodeURIComponent(user.toph_handle);
-    const res = await tophGet(`https://toph.co/u/${encoded}`);
-    const html = String(res.data || '');
-
-    const activitiesPanelMatch = html.match(/\bActivities\b[\s\S]*?<div class=flow-sm>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/);
-    if (!activitiesPanelMatch) return [];
-    const activitiesHtml = activitiesPanelMatch[1];
-
-    const itemRegex = /<div class="fg-1 fs-1 fb-0">([\s\S]*?)<\/div>\s*<div[^>]*>\s*<span[^>]*data-timestamp=(\d+)[^>]*>/g;
-    let m;
+    const items = await fetchTophActivities(user.toph_handle);
     const newSubs = [];
     const now = Math.floor(Date.now() / 1000);
 
-    while ((m = itemRegex.exec(activitiesHtml)) !== null) {
-      const inner = m[1].trim();
-      const timestamp = parseInt(m[2], 10);
-
-      if (!inner.startsWith('Solved ')) continue;
-      if (!timestamp || timestamp < now - 10800) continue;
+    for (const { inner, timestamp } of items) {
+      if (timestamp < now - 10800) continue;
 
       let slug, name, url;
       const linkMatch = inner.match(/Solved\s+<a\s+href=["']?\/(?:problems|p)\/([^"'\s>]+)["']?[^>]*>([^<]+)<\/a>/);
@@ -257,25 +246,28 @@ async function fetchTophSubmissions(user) {
       const existing = db.prepare('SELECT 1 FROM processed_submissions WHERE id = ?').get(uniqueId);
       if (!existing) {
         let activityContestName = null;
-        const contestInMatch = inner.match(/\bin\s+<a[^>]*>([^<]{2,120})<\/a>/i);
-        if (contestInMatch) activityContestName = contestInMatch[1].trim();
+        let activityContestUrl = null;
+        const contestInMatch = inner.match(/\bin\s+<a(?:\s+href=["']?\/c\/([^"'\s>]+)["']?)?[^>]*>([^<]{2,120})<\/a>/i);
+        if (contestInMatch) {
+          if (contestInMatch[1]) activityContestUrl = `https://toph.co/c/${contestInMatch[1].trim()}`;
+          activityContestName = contestInMatch[2].trim();
+        }
 
         let difficulty = 0;
         let tags = [];
         let contestName = activityContestName || 'Practice';
+        let contestUrl = activityContestUrl;
         if (slug && !slug.startsWith('private_')) {
           try {
             const details = await getTophProblemDetails(slug, activityContestName);
             difficulty = details.difficulty;
             tags = details.tags;
             contestName = details.contestName;
+            contestUrl = contestUrl || details.contestUrl;
           } catch (_) {}
         }
-        if (slug.startsWith('private_') && activityContestName) {
-          contestName = activityContestName;
-        }
 
-        newSubs.push({ id: uniqueId, name, url, difficulty, tags, contestName, timestamp, dedupKey: uniqueId });
+        newSubs.push({ id: uniqueId, name, url, difficulty, tags, contestName, contestUrl, timestamp, dedupKey: uniqueId });
       }
     }
 

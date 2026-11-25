@@ -404,11 +404,20 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
 
 // ── 5. Live Submission Celebrations ──────────────────────────────
 
+function isICPCProblem(problem) {
+  const contestName = String(problem?.contestName || '');
+  if (problem?.isICPC) return true;
+  if (/\bicpc\b/i.test(contestName)) return true;
+  if (Array.isArray(problem?.tags) && problem.tags.some(t => /\bicpc\b/i.test(String(t)))) return true;
+  return false;
+}
+
 function buildSubmissionEmbed(user, problem, platform) {
   const isCF = platform === 'cf';
   const isAC = platform === 'ac';
   const platName = isCF ? 'Codeforces' : isAC ? 'AtCoder' : 'Toph';
   const platIcon = PLATFORM_ICONS[platform] || PLATFORM_ICONS.cf;
+  const isICPC = isICPCProblem(problem);
 
   const diffVal = problem.rating || problem.difficulty;
   let diffBadge = '⭐ Standard';
@@ -422,26 +431,54 @@ function buildSubmissionEmbed(user, problem, platform) {
     ? problem.tags.slice(0, 4).map(t => `\`${t}\``).join(' • ')
     : '`General`';
 
+  const rawContestName = problem.contestName || (problem.contestId ? `Round #${problem.contestId}` : 'Practice');
+  let contestUrl = problem.contestUrl || null;
+  if (!contestUrl && problem.contestId) {
+    if (isCF) {
+      contestUrl = Number(problem.contestId) >= 100000
+        ? `https://codeforces.com/gym/${problem.contestId}`
+        : `https://codeforces.com/contest/${problem.contestId}`;
+    } else if (isAC) {
+      contestUrl = `https://atcoder.jp/contests/${problem.contestId}`;
+    }
+  }
+  const contestLine = contestUrl ? `[${rawContestName}](${contestUrl})` : rawContestName;
+
   const execParts = [];
   if (problem.timeSec !== undefined && problem.timeSec !== null) execParts.push(`\`${problem.timeSec}s\``);
   if (problem.memoryMb !== undefined && problem.memoryMb !== null) execParts.push(`\`${problem.memoryMb} MB\``);
   const execLine = execParts.length > 0 ? `**Execution:** ${execParts.join(' · ')} · \`Accepted\`\n` : '';
 
+  const authorTitle = isICPC
+    ? `🏆 Accepted ICPC Solution! · ${platName}`
+    : `Accepted Solution! · ${platName}`;
+  const headline = isICPC
+    ? `🥇 ${user.username || 'Competitor'} conquered an ICPC problem!`
+    : `🎉 ${user.username || 'Competitor'} just conquered a problem!`;
+  const intro = isICPC
+    ? `**<@${user.discord_id}>** submitted an **Accepted ICPC** solution! 🏆`
+    : `**<@${user.discord_id}>** submitted an **Accepted** solution!`;
+
   return new EmbedBuilder()
-    .setColor(0x00E676)
-    .setAuthor({ name: `Accepted Solution! · ${platName}`, iconURL: platIcon })
-    .setTitle(`🎉 ${user.username || 'Competitor'} just conquered a problem!`.slice(0, 256))
+    .setColor(isICPC ? COLORS.Custom : COLORS.Success)
+    .setAuthor({ name: authorTitle, iconURL: platIcon })
+    .setTitle(headline.slice(0, 256))
     .setDescription(
-      `**<@${user.discord_id}>** submitted an **Accepted** solution!\n\n` +
+      `${intro}\n\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `**Problem:** [**${problem.index ? `${problem.index}. ` : ''}${problem.name}**](${problem.url})\n` +
+      `**Contest:** ${contestLine}\n` +
       `**Difficulty:** ${diffBadge}\n` +
       execLine +
       `**Topic Tags:** ${tags}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     )
     .setThumbnail(platIcon)
-    .setFooter({ text: 'BigOof Live Submission Feed · Keep the streak alive! 🔥' })
+    .setFooter({
+      text: isICPC
+        ? 'BigOof Live Submission Feed · ICPC Glory! 🏆'
+        : 'BigOof Live Submission Feed · Keep the streak alive! 🔥'
+    })
     .setTimestamp();
 }
 
@@ -718,5 +755,7 @@ module.exports = {
   buildCompareEmbed,
   getCFRankColor,
   renderProgressBar,
-  COLORS
+  isICPCProblem,
+  COLORS,
+  PLATFORM_ICONS
 };
