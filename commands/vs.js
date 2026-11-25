@@ -1,7 +1,6 @@
+// commands/vs.js — Create a 1v1 or multiplayer Codeforces Battle Grid or Classic Race
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const {
-  getUser, createVSMatch, joinVSMatch, getVSParticipants, db, getRatings
-} = require('../database/db');
+const { getUser, createVSMatch, joinVSMatch, getVSParticipants, db, getRatings } = require('../database/db');
 const { buildLobbyEmbed } = require('../utils/vsHandlers');
 
 const CF_TAGS = [
@@ -11,6 +10,7 @@ const CF_TAGS = [
 ];
 
 module.exports = {
+  guildOnly: true,
   data: new SlashCommandBuilder()
     .setName('vs')
     .setDescription('Start a 1v1 or multiplayer versus CP match on Codeforces')
@@ -24,11 +24,11 @@ module.exports = {
     )
     .addStringOption(opt =>
       opt.setName('mode')
-        .setDescription('Battle format: 3x3 Lockout Grid or Classic Race')
+        .setDescription('Battle format: 3x3 Battle Grid or Classic Race')
         .setRequired(false)
         .addChoices(
           { name: '⚔️ 3x3 Battle Grid (Default - 1st AC: 100%, later: 1/3)', value: 'grid' },
-          { name: '🏁 Classic Race (5 problems with time decay)', value: 'classic' }
+          { name: '🏁 Classic Race (time decay scoring)', value: 'classic' }
         )
     )
     .addStringOption(opt =>
@@ -46,7 +46,7 @@ module.exports = {
     )
     .addIntegerOption(opt =>
       opt.setName('problems')
-        .setDescription('Number of problems (default: 9 for grid, 5 for classic)')
+        .setDescription('Number of problems for Classic Race (default: 5; Grid is always 3x3 = 9)')
         .setRequired(false)
         .setMinValue(1)
         .setMaxValue(10)
@@ -65,97 +65,69 @@ module.exports = {
 
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
-    const userId = interaction.user.id;
     let cfRating = 1200;
     try {
-      const ratings = getRatings(userId);
-      cfRating = ratings.find(r => r.platform === 'cf')?.rating ?? 1200;
-    } catch (err) {
-      console.error('[VS Autocomplete] Database query failed:', err);
-    }
+      cfRating = getRatings(interaction.user.id).find(r => r.platform === 'cf')?.rating ?? 1200;
+    } catch (_) {}
 
     const allRatings = [];
-    for (let r = 800; r <= 3500; r += 100) {
-      allRatings.push(r);
-    }
+    for (let r = 800; r <= 3500; r += 100) allRatings.push(r);
 
     let choices = [];
     if (focusedValue) {
-      const filtered = allRatings
+      choices = allRatings
         .map(r => r.toString())
-        .filter(choice => choice.startsWith(focusedValue))
-        .slice(0, 25);
-      choices = filtered.map(choice => ({ name: choice, value: parseInt(choice, 10) }));
+        .filter(c => c.startsWith(focusedValue))
+        .slice(0, 25)
+        .map(c => ({ name: c, value: parseInt(c, 10) }));
     } else {
-      const roundedRating = Math.round(cfRating / 100) * 100;
-      const targetRating = Math.max(800, Math.min(3500, roundedRating));
+      const targetRating = Math.max(800, Math.min(3500, Math.round(cfRating / 100) * 100));
       const targetIndex = allRatings.indexOf(targetRating);
-
-      let startIndex = targetIndex - 12;
-      let endIndex = targetIndex + 12;
-
-      if (startIndex < 0) {
-        startIndex = 0;
-        endIndex = Math.min(allRatings.length - 1, 24);
-      }
-      if (endIndex >= allRatings.length) {
-        endIndex = allRatings.length - 1;
-        startIndex = Math.max(0, endIndex - 24);
-      }
-
-      const windowRatings = allRatings.slice(startIndex, endIndex + 1);
-      choices = windowRatings.map(r => ({ name: r.toString(), value: r }));
+      let startIndex = Math.max(0, targetIndex - 12);
+      const endIndex = Math.min(allRatings.length - 1, startIndex + 24);
+      startIndex = Math.max(0, endIndex - 24);
+      choices = allRatings.slice(startIndex, endIndex + 1).map(r => ({ name: r.toString(), value: r }));
     }
 
     await interaction.respond(choices).catch(() => {});
   },
 
   async execute(interaction) {
-    const rating    = interaction.options.getInteger('rating');
-    const mode      = interaction.options.getString('mode') || 'grid';
-    const tag       = interaction.options.getString('tag')?.toLowerCase().trim() || null;
+    const rating = interaction.options.getInteger('rating');
+    const mode = interaction.options.getString('mode') || 'grid';
+    const tag = interaction.options.getString('tag')?.toLowerCase().trim() || null;
     const defaultDuration = mode === 'grid' ? 45 : 30;
-    const defaultProblems = mode === 'grid' ? 9 : 5;
-    const duration  = interaction.options.getInteger('duration') ?? defaultDuration;
-    const problems  = interaction.options.getInteger('problems') ?? defaultProblems;
-    const division  = interaction.options.getString('division') || null;
+    const duration = interaction.options.getInteger('duration') ?? defaultDuration;
+    const problems = mode === 'grid' ? 9 : (interaction.options.getInteger('problems') ?? 5);
+    const division = interaction.options.getString('division') || null;
     const creatorId = interaction.user.id;
 
-    // 1. Verify Codeforces linkage
     const user = getUser(creatorId);
     if (!user || !user.cf_handle) {
       return interaction.reply({
-        content: '⚠️ You must link your Codeforces account using \`/link\` before hosting a versus match!',
-        ephemeral: true
+        content: '⚠️ You must link your Codeforces account using `/link` before hosting a versus match!',
+        flags: 64
       });
     }
 
-    // 2. Check if already in an active match
-    const activeMatch = db.prepare(`
-      SELECT m.id FROM vs_matches m
+    const existingMatch = db.prepare(`
+      SELECT m.id, m.status FROM vs_matches m
       JOIN vs_participants p ON m.id = p.match_id
-      WHERE p.discord_id = ? AND m.status = 'active'
+      WHERE p.discord_id = ? AND m.status IN ('lobby', 'active')
     `).get(creatorId);
 
-    if (activeMatch) {
+    if (existingMatch) {
       return interaction.reply({
-        content: '⚠️ You are already in an active versus match! Complete or abort it before starting a new one.',
-        ephemeral: true
+        content: `⚠️ You are already in an open ${existingMatch.status} match (\`${existingMatch.id}\`). Finish or cancel it first.`,
+        flags: 64
       });
     }
 
-    // 3. Create a unique Match ID
     const matchId = `vs-${Math.random().toString(36).substring(2, 8)}`;
-    const channelId = interaction.channelId;
-    const guildId = interaction.guildId;
-
-    // 4. Save match and insert creator as first participant
-    createVSMatch(matchId, channelId, guildId, creatorId, rating, tag, division, duration, problems, mode);
+    createVSMatch(matchId, interaction.channelId, interaction.guildId, creatorId, rating, tag, division, duration, problems, mode);
     joinVSMatch(matchId, creatorId, user.cf_handle);
 
     const participants = getVSParticipants(matchId);
-
-    // 5. Build lobby embed and components
     const embed = buildLobbyEmbed({
       id: matchId,
       creator_id: creatorId,
@@ -168,18 +140,9 @@ module.exports = {
     }, participants);
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`vs-join_${matchId}`)
-        .setLabel('⚔️ Join Match')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`vs-start_${matchId}`)
-        .setLabel('🚀 Start Match')
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(`vs-cancel_${matchId}`)
-        .setLabel('❌ Cancel Lobby')
-        .setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(`vs-join_${matchId}`).setLabel('⚔️ Join Match').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`vs-start_${matchId}`).setLabel('🚀 Start Match').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`vs-cancel_${matchId}`).setLabel('❌ Cancel Lobby').setStyle(ButtonStyle.Danger)
     );
 
     return interaction.reply({ embeds: [embed], components: [row] });

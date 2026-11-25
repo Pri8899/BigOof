@@ -1,21 +1,31 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
-const { getConfig }            = require('../../database/db');
+// commands/admin/announce.js — Broadcast a formatted announcement with permission checks
+const {
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  ChannelType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder,
+  EmbedBuilder
+} = require('discord.js');
+const { getConfig } = require('../../database/db');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
 
 module.exports = {
+  guildOnly: true,
   data: new SlashCommandBuilder()
     .setName('announce')
     .setDescription('Broadcast a formatted announcement with @everyone ping (Admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.MentionEveryone)
     .addChannelOption(opt =>
       opt.setName('channel')
-        .setDescription('Channel to post in (leave empty to use configured announcement channel or this channel)')
+        .setDescription('Channel to post in (defaults to configured announcement channel or current channel)')
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(false)
     ),
 
   async execute(interaction) {
-    // 1. Resolve target channel
     let targetChannel = interaction.options.getChannel('channel');
 
     if (!targetChannel) {
@@ -29,42 +39,47 @@ module.exports = {
       targetChannel = interaction.channel;
     }
 
-    // 2. Build the Modal
+    const me = interaction.guild.members.me;
+    const perms = me && targetChannel?.permissionsFor(me);
+    if (!perms || !perms.has(PermissionFlagsBits.ViewChannel) || !perms.has(PermissionFlagsBits.SendMessages) || !perms.has(PermissionFlagsBits.EmbedLinks)) {
+      return interaction.reply({
+        embeds: [errorEmbed(
+          'Missing Channel Permissions',
+          `I need **View Channel**, **Send Messages**, and **Embed Links** permissions in ${targetChannel || 'that channel'}.`
+        )],
+        flags: 64
+      });
+    }
+
+    const modalId = `announcementModal_${interaction.id}`;
     const modal = new ModalBuilder()
-      .setCustomId('announcementModal')
+      .setCustomId(modalId)
       .setTitle('Broadcast Announcement');
 
     const messageInput = new TextInputBuilder()
       .setCustomId('announcementMessage')
-      .setLabel("Announcement Content")
+      .setLabel('Announcement Content')
       .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Paste or type your formatted message here... (Markdown, links, and newlines are fully supported)')
+      .setMaxLength(3900)
+      .setPlaceholder('Paste or type your formatted message here... (Markdown & links supported)')
       .setRequired(true);
 
-    const actionRow = new ActionRowBuilder().addComponents(messageInput);
-    modal.addComponents(actionRow);
-
-    // 3. Show the Modal
+    modal.addComponents(new ActionRowBuilder().addComponents(messageInput));
     await interaction.showModal(modal);
 
-    // 4. Wait for the submission (timeout: 5 minutes)
     const submitted = await interaction.awaitModalSubmit({
       time: 300000,
-      filter: i => i.user.id === interaction.user.id && i.customId === 'announcementModal'
+      filter: i => i.user.id === interaction.user.id && i.customId === modalId
     }).catch(() => null);
 
-    if (!submitted) {
-      return; // Timed out or cancelled
-    }
-
+    if (!submitted) return;
     await submitted.deferReply({ flags: 64 });
 
     const messageContent = submitted.fields.getTextInputValue('announcementMessage').trim();
 
     try {
-      // 5. Build modern announcement embed & send with @everyone to target channel
       const announcementEmbed = new EmbedBuilder()
-        .setColor(0x5865F2) // Discord Blurple
+        .setColor(0x5865F2)
         .setAuthor({
           name: `${interaction.guild.name} · Official Announcement`,
           iconURL: interaction.guild.iconURL({ dynamic: true }) || interaction.client.user.displayAvatarURL()
@@ -81,23 +96,24 @@ module.exports = {
         })
         .setTimestamp();
 
+      const canPingEveryone = perms.has(PermissionFlagsBits.MentionEveryone);
       await targetChannel.send({
-        content: '@everyone',
+        content: canPingEveryone ? '@everyone' : undefined,
         embeds: [announcementEmbed]
       });
 
-      await submitted.editReply({
+      return submitted.editReply({
         embeds: [successEmbed(
           'Announcement Sent!',
-          `Your announcement has been broadcast to ${targetChannel} with an \`@everyone\` mention! 🎉`
+          `Your announcement has been broadcast to ${targetChannel}${canPingEveryone ? ' with an `@everyone` mention' : ' (without `@everyone` — bot lacks Mention Everyone permission)'}! 🎉`
         )]
       });
     } catch (err) {
       console.error('[announce] Failed to send message:', err.message);
-      await submitted.editReply({
+      return submitted.editReply({
         embeds: [errorEmbed(
           'Failed to Send',
-          `Could not send announcement to ${targetChannel}.\nPlease ensure the bot has **Send Messages** and **Mention Everyone** permissions in that channel.`
+          `Could not send announcement to ${targetChannel}: ${err.message}`
         )]
       });
     }

@@ -1,149 +1,122 @@
-// tasks/dailyChallenge.js — Daily suggestions post at 9pm
-// Posts CF details to configured suggest channels and tracks First Blood
+// tasks/dailyChallenge.js — Daily problem suggestions at 9 PM & 5-min First Blood / Sweep tracker
 const cron = require('node-cron');
-const axios = require('axios');
 const { EmbedBuilder } = require('discord.js');
-const { getConfig, setDailyProblems, getDailyProblems, setFirstBlood, getAllUsers, setSweepAnnounced, getRatings, getAllGuildConfigs } = require('../database/db');
-const { getCFProblems }       = require('../utils/codeforces');
-const { getValidId, getTargetChannel } = require('../utils/envHelper');
+const {
+  getConfig,
+  setConfig,
+  setDailyProblems,
+  getDailyProblems,
+  tryClaimFirstBlood,
+  tryMarkSweepAnnounced,
+  getAllUsers,
+  getRatings
+} = require('../database/db');
+const { getCFProblems, getCFStatus, getProblemsetCache } = require('../utils/codeforces');
+const { getTargetChannel, resolveChannelChain } = require('../utils/envHelper');
+const { getTimeZone, getLocalParts, zonedDateTimeToUnix } = require('../utils/time');
 
-const TIMEZONE = process.env.TIMEZONE || 'UTC';
+let isFirstBloodRunning = false;
 
+function getActiveCycleDate(now = new Date(), tz = getTimeZone()) {
+  const { hour } = getLocalParts(now, tz);
+  if (hour < 21) {
+    return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  }
+  return now;
+}
 
-// CF tiers as requested
-// Removed CF_TIERS global array to calculate tiers dynamically based on user ratings
+function getActiveCycleWindow(activeDate, tz = getTimeZone()) {
+  const { year, month, day } = getLocalParts(activeDate, tz);
+  const startTimeUtc = zonedDateTimeToUnix(year, month, day, 21, 0, 0, tz);
+  return { startTimeUtc, endTimeUtc: startTimeUtc + 24 * 60 * 60 };
+}
 
-// Helper to fetch solved problems from Codeforces for all server members
 async function getMergedSolvedSet() {
   const users = getAllUsers().filter(u => u.cf_handle);
   const solvedSet = new Set();
 
   for (const user of users) {
-    try {
-      console.log(`[Daily] Fetching solved history for ${user.cf_handle} to filter recommendations...`);
-      // Fetch up to 2000 submissions to be comprehensive
-      const res = await axios.get(`https://codeforces.com/api/user.status?handle=${user.cf_handle}&from=1&count=2000`, { timeout: 8000 });
-      if (res.data.status === 'OK') {
-        for (const sub of res.data.result) {
-          if (sub.verdict === 'OK' && sub.problem) {
-            const pId = `${sub.problem.contestId}${sub.problem.index}`;
-            solvedSet.add(pId);
-          }
+    const subs = await getCFStatus(user.cf_handle, 2000);
+    if (subs) {
+      for (const sub of subs) {
+        if (sub.verdict === 'OK' && sub.problem) {
+          solvedSet.add(`${sub.problem.contestId}${sub.problem.index}`);
         }
       }
-    } catch (err) {
-      console.warn(`[Daily] Failed to fetch solves for ${user.cf_handle}:`, err.message);
     }
-    // Respect Codeforces 1 request / 2 seconds limit
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 2000));
   }
   return solvedSet;
 }
 
-// ─── Post Daily Problem Recommendations ──────────────────────
+/**
+ * Generates or re-posts today's 5 progressive daily challenges. Returns true if posted.
+ */
 async function postDailySuggestions(client, targetDate = null) {
-  let activeDate = targetDate;
-  if (!activeDate) {
-    const now = new Date();
-    const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: 'numeric', hour12: false });
-    const currentHour = parseInt(formatterHour.format(now), 10);
-    activeDate = now;
-    if (currentHour < 21) {
-      activeDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    }
-  }
+  const TZ = getTimeZone();
+  const activeDate = targetDate || getActiveCycleDate(new Date(), TZ);
+  const { dateStr: todayDateStr } = getLocalParts(activeDate, TZ);
 
-  const today = activeDate.toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', timeZone: TIMEZONE
+  const todayDisplay = activeDate.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', timeZone: TZ
   });
 
-  const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
-  const todayDateStr = formatterDate.format(activeDate);
-
-  // Check if suggestions are already generated in the database
   const existingDaily = getDailyProblems(todayDateStr);
-  
-  let p1 = null;
-  let p2 = null;
-  let p3 = null;
-  let p4 = null;
-  let p5 = null;
+  let p1 = null, p2 = null, p3 = null, p4 = null, p5 = null;
 
   if (existingDaily) {
-    console.log(`[Suggest] Today's suggestions already exist in DB. Re-using original problems...`);
-    try {
-      const res = await axios.get('https://codeforces.com/api/problemset.problems', { timeout: 10000 });
-      if (res && res.data && res.data.status === 'OK') {
-        const problems = res.data.result.problems;
-        const findProb = (id) => {
-          if (!id) return null;
-          const p = problems.find(prob => `${prob.contestId}${prob.index}` === id);
-          if (!p) return null;
-          return {
-            id,
-            name: p.name,
-            rating: p.rating ?? '?',
-            tags: (p.tags ?? []).slice(0, 4),
-            url: `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`
-          };
+    console.log(`[Daily] Reusing stored challenges for ${todayDateStr}...`);
+    const cachedSet = await getProblemsetCache();
+    if (Array.isArray(cachedSet)) {
+      const findProb = (id) => {
+        if (!id) return null;
+        const p = cachedSet.find(prob => `${prob.contestId}${prob.index}` === id);
+        if (!p) return null;
+        return {
+          id,
+          name: p.name,
+          rating: p.rating ?? '?',
+          tags: (p.tags ?? []).slice(0, 4),
+          url: `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`
         };
-        p1 = findProb(existingDaily.p1_id);
-        p2 = findProb(existingDaily.p2_id);
-        p3 = findProb(existingDaily.p3_id);
-        p4 = findProb(existingDaily.p4_id);
-        p5 = findProb(existingDaily.p5_id);
-      }
-    } catch (err) {
-      console.error('[Suggest] Failed to fetch existing problem details from Codeforces:', err.message);
+      };
+      p1 = findProb(existingDaily.p1_id);
+      p2 = findProb(existingDaily.p2_id);
+      p3 = findProb(existingDaily.p3_id);
+      p4 = findProb(existingDaily.p4_id);
+      p5 = findProb(existingDaily.p5_id);
     }
   }
 
-  // If they don't exist in DB (or if CF API failed to fetch details), generate new ones!
   if (!p1 && !p2 && !p3 && !p4 && !p5) {
-    console.log(`[Suggest] Generating new daily recommendations...`);
-    const solvedSet = await getMergedSolvedSet();
+    console.log('[Daily] Generating 5 new tiered recommendations...');
+    const excludeSet = await getMergedSolvedSet();
 
-    // Determine dynamic ratings based on linked users' ratings
     let baseRating = 1200;
     const users = getAllUsers().filter(u => u.cf_handle);
     const ratedUsers = [];
     for (const u of users) {
-      const userRatings = getRatings(u.discord_id);
-      const cf = userRatings.find(r => r.platform === 'cf');
-      if (cf && cf.rating > 0) {
-        ratedUsers.push(cf.rating);
-      }
+      const cf = getRatings(u.discord_id).find(r => r.platform === 'cf');
+      if (cf && cf.rating > 0) ratedUsers.push(cf.rating);
     }
     if (ratedUsers.length > 0) {
       const avgRating = ratedUsers.reduce((sum, r) => sum + r, 0) / ratedUsers.length;
       baseRating = Math.round(avgRating / 100) * 100;
     }
 
-    // 5 Tiers: From 800 to potentially 3500
-    let r1 = 800;
-    let r2 = Math.min(3500, Math.max(900, baseRating));
-    let r3 = Math.min(3500, Math.max(1100, baseRating + 200));
-    let r4 = Math.min(3500, Math.max(1400, baseRating + 500));
-    let r5 = Math.min(3500, Math.max(1800, baseRating + 900));
+    const r1 = 800;
+    const r2 = Math.min(3500, Math.max(r1 + 100, baseRating));
+    const r3 = Math.min(3500, Math.max(r2 + 200, baseRating + 200));
+    const r4 = Math.min(3500, Math.max(r3 + 300, baseRating + 500));
+    const r5 = Math.min(3500, Math.max(r4 + 400, baseRating + 900));
 
-    // Space them out at least
-    if (r2 <= r1) r2 = r1 + 100;
-    if (r3 <= r2) r3 = r2 + 200;
-    if (r4 <= r3) r4 = r3 + 300;
-    if (r5 <= r4) r5 = r4 + 400;
-
-    r1 = Math.min(r1, 3500);
-    r2 = Math.min(r2, 3500);
-    r3 = Math.min(r3, 3500);
-    r4 = Math.min(r4, 3500);
-    r5 = Math.min(r5, 3500);
-
-    const usedTags = new Set();
+    let prevPrimaryTag = new Set();
     const fetchTier = async (rating) => {
-      const res = await getCFProblems(rating, rating, null, 1, solvedSet, null, usedTags);
+      const res = await getCFProblems(rating, rating, null, 1, excludeSet, null, prevPrimaryTag);
       const prob = res?.length > 0 ? res[0] : null;
       if (prob) {
-        prob.tags.forEach(t => usedTags.add(t.toLowerCase()));
+        excludeSet.add(prob.id);
+        prevPrimaryTag = prob.tags?.[0] ? new Set([prob.tags[0].toLowerCase()]) : new Set();
       }
       return prob;
     };
@@ -153,37 +126,34 @@ async function postDailySuggestions(client, targetDate = null) {
     p3 = await fetchTier(r3);
     p4 = await fetchTier(r4);
     p5 = await fetchTier(r5);
-    
-    // Save to DB
+
+    if (!p1 && !p2 && !p3 && !p4 && !p5) {
+      console.error('[Daily] CF API failed and no problems were generated. Skipping DB save & post.');
+      return false;
+    }
+
     setDailyProblems(todayDateStr, p1?.id || null, p2?.id || null, p3?.id || null, p4?.id || null, p5?.id || null);
   }
 
-  if (!p1 && !p2 && !p3 && !p4 && !p5) {
-    console.error('[Suggest] CF API failed and no problems generated. Skipping daily suggestions for today.');
-    return;
-  }
-
-  // ── Codeforces Section ──
-  // ── Codeforces Section ──
   const cfEmbed = new EmbedBuilder()
     .setColor(0x7C4DFF)
     .setAuthor({
       name: 'Codeforces Daily Arena',
       iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
     })
-    .setTitle(`🗓️ Daily Coding Quests — ${today}`)
+    .setTitle(`🗓️ Daily Coding Quests — ${todayDisplay}`)
     .setDescription(
-      `> 🎯 **Sharpen your algorithms with 5 tiered challenges for today!**\n` +
-      `> 🩸 **First Blood**: Be the very first coder in the server to solve any level!\n` +
-      `> 🏆 **Daily Sweep**: Solve all 5 to claim the daily champion crown!\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+      '> 🎯 **Sharpen your algorithms with 5 tiered challenges for today!**\n' +
+      '> 🩸 **First Blood**: Be the very first coder in the server to solve any level!\n' +
+      '> 🏆 **Daily Sweep**: Solve all 5 to claim the daily champion crown!\n\n' +
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
     )
     .setFooter({ text: 'BigOof Daily Arena · Verified automatically every 5m', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
     .setTimestamp();
 
   const formatProbField = (label, icon, p) => {
     if (!p) return null;
-    const tagStr = p.tags && p.tags.length > 0 ? p.tags.slice(0, 3).join(' • ') : 'Implementation';
+    const tagStr = p.tags?.length > 0 ? p.tags.slice(0, 3).join(' • ') : 'Implementation';
     return {
       name: `${icon} ${label} · ⭐ ${p.rating || 'Standard'}`,
       value: `**[${p.name}](${p.url})**\n\`🏷️ ${tagStr}\``,
@@ -197,97 +167,95 @@ async function postDailySuggestions(client, targetDate = null) {
   if (p4) cfEmbed.addFields(formatProbField('Level 4 (Expert)', '⚡', p4));
   if (p5) cfEmbed.addFields(formatProbField('Level 5 (Master)', '👑', p5));
 
-  // Collect target channels across all guilds
   const targetChannels = [];
-  const guildConfigs = getAllGuildConfigs('suggest_channel_id');
-  for (const row of guildConfigs) {
-    if (row.guild_id && row.guild_id !== 'global' && row.value) {
-      const ch = await client.channels.fetch(row.value).catch(() => null);
-      if (ch && !targetChannels.some(c => c.id === ch.id)) {
-        targetChannels.push(ch);
-      }
+  const seenChannelIds = new Set();
+  for (const guild of client.guilds.cache.values()) {
+    const ch = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID', guild.id);
+    if (ch && !seenChannelIds.has(ch.id)) {
+      seenChannelIds.add(ch.id);
+      targetChannels.push(ch);
     }
   }
 
-  // Fallback check (global config or env)
   if (targetChannels.length === 0) {
-    const fallbackChannel = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID');
-    if (fallbackChannel) targetChannels.push(fallbackChannel);
+    const globalFallback = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID');
+    if (globalFallback) targetChannels.push(globalFallback);
   }
 
   if (targetChannels.length === 0) {
-    console.log('[Suggest] No suggest channels configured across any guilds.');
-    return;
+    console.log('[Daily] No suggest channels configured across guilds.');
+    return false;
   }
 
+  let postedAny = false;
   for (const channel of targetChannels) {
-    // Clean up old suggestion messages
     try {
       const messages = await channel.messages.fetch({ limit: 50 });
-      const oldMessages = [...messages.values()].filter(m => 
-        m.author.id === client.user.id && 
-        m.embeds.length > 0 && 
-        ((m.embeds[0].title && m.embeds[0].title.includes('Daily Problem Suggestions')) ||
-         (m.embeds[0].description && m.embeds[0].description.includes('Daily Problem Suggestions')))
+      const oldMessages = [...messages.values()].filter(m =>
+        m.author.id === client.user.id &&
+        m.embeds.length > 0 &&
+        (m.embeds[0].title?.includes('Daily Coding Quests') ||
+         m.embeds[0].title?.includes('Daily Problem Suggestions') ||
+         m.embeds[0].description?.includes('Daily Problem Suggestions'))
       );
       for (const msg of oldMessages) {
         await msg.delete().catch(() => {});
       }
     } catch (err) {
-      console.warn(`[Suggest] Failed to clean up old messages in #${channel.name}:`, err.message);
+      console.warn(`[Daily] Old message cleanup warning in #${channel.name}:`, err.message);
     }
 
-    await channel.send({ content: '@everyone', embeds: [cfEmbed] }).catch(err => {
-      console.warn(`[Suggest] Failed to send with @everyone in #${channel.name}, retrying without mention:`, err.message);
-      return channel.send({ embeds: [cfEmbed] }).catch(() => {});
-    });
+    const sent = await channel.send({ content: '@everyone', embeds: [cfEmbed] }).catch(() =>
+      channel.send({ embeds: [cfEmbed] }).catch(() => null)
+    );
+    if (sent) postedAny = true;
   }
 
-  console.log(`[Suggest] Posted daily suggestions to ${targetChannels.length} channel(s).`);
+  if (postedAny) {
+    console.log(`[Daily] Posted daily challenges to ${targetChannels.length} channel(s).`);
+  }
+  return postedAny;
 }
 
-// Calculate active cycle window (21:00 local time on activeDate to 21:00 next day)
-function getActiveCycleWindow(activeDate) {
-  const formatterYMD = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
-  const parts = formatterYMD.formatToParts(activeDate);
-  const partMap = {};
-  for (const p of parts) partMap[p.type] = p.value;
+async function broadcastToUserGuilds(client, discordId, payloadBuilder) {
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      const member = guild.members.cache.get(discordId) || await guild.members.fetch(discordId).catch(() => null);
+      if (!member) continue;
 
-  const approx = new Date(Date.UTC(parseInt(partMap.year, 10), parseInt(partMap.month, 10) - 1, parseInt(partMap.day, 10), 21, 0, 0));
-  const getLocalHour = (d) => {
-    const f = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: 'numeric', minute: 'numeric', hour12: false });
-    const pList = f.formatToParts(d);
-    const h = parseInt(pList.find(p => p.type === 'hour').value, 10);
-    const m = parseInt(pList.find(p => p.type === 'minute').value, 10);
-    return h * 60 + m;
-  };
-  const diffMinutes = (21 * 60) - getLocalHour(approx);
-  const startTimeUtc = Math.floor((approx.getTime() + diffMinutes * 60 * 1000) / 1000);
-  const endTimeUtc = startTimeUtc + 24 * 60 * 60;
-  return { startTimeUtc, endTimeUtc };
+      const targetChannel = await resolveChannelChain(
+        client,
+        [
+          { key: 'suggest_channel_id', env: 'SUGGEST_CHANNEL_ID' },
+          { key: 'feed_channel_id', env: 'FEED_CHANNEL_ID' }
+        ],
+        guild.id
+      );
+
+      if (targetChannel) {
+        await targetChannel.send(payloadBuilder()).catch(() => {});
+      }
+    } catch (_) {}
+  }
 }
 
-// ─── First Blood Checker ─────────────────────────────────────
+// ─── First Blood & Sweep Checker ──────────────────────────────
 async function checkFirstBloods(client) {
+  if (isFirstBloodRunning) return;
+  isFirstBloodRunning = true;
+
   try {
-    const now = new Date();
-    const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: 'numeric', hour12: false });
-    const currentHour = parseInt(formatterHour.format(now), 10);
-    
-    let activeDate = now;
-    if (currentHour < 21) {
-      activeDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    }
-    
-    const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
-    const activeDateStr = formatterDate.format(activeDate);
-    
+    const TZ = getTimeZone();
+    const activeDate = getActiveCycleDate(new Date(), TZ);
+    const { dateStr: activeDateStr } = getLocalParts(activeDate, TZ);
+
     const daily = getDailyProblems(activeDateStr);
-    if (!daily) return; // No problems posted for active date
+    if (!daily) return;
 
-    const { startTimeUtc, endTimeUtc } = getActiveCycleWindow(activeDate);
-
+    const { startTimeUtc, endTimeUtc } = getActiveCycleWindow(activeDate, TZ);
     const users = getAllUsers().filter(u => u.cf_handle);
+    if (users.length === 0) return;
+
     const problemsToCheck = [
       { id: daily.p1_id, bloodField: 'first_blood_1', currentBlood: daily.first_blood_1, label: '🌱 Level 1' },
       { id: daily.p2_id, bloodField: 'first_blood_2', currentBlood: daily.first_blood_2, label: '⚔️ Level 2' },
@@ -300,208 +268,162 @@ async function checkFirstBloods(client) {
 
     for (const user of users) {
       try {
-        const res = await axios.get(`https://codeforces.com/api/user.status?handle=${user.cf_handle}&from=1&count=100`, { timeout: 8000 });
-        if (res.data.status !== 'OK') continue;
+        const subs = await getCFStatus(user.cf_handle, 100);
+        if (!subs) continue;
 
         const solvedInWindow = new Set();
 
-        for (const sub of res.data.result) {
-          if (sub.verdict === 'OK' && sub.problem) {
-            const pId = `${sub.problem.contestId}${sub.problem.index}`;
-            
-            // Validate that submission is within active window
-            if (sub.creationTimeSeconds >= startTimeUtc && sub.creationTimeSeconds < endTimeUtc) {
-              if (pId === daily.p1_id || pId === daily.p2_id || pId === daily.p3_id || pId === daily.p4_id || pId === daily.p5_id) {
-                solvedInWindow.add(pId);
-                if (!problemDetails[pId]) {
-                  problemDetails[pId] = {
-                    name: sub.problem.name,
-                    url: `https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`
-                  };
-                }
+        for (const sub of subs) {
+          if (sub.verdict !== 'OK' || !sub.problem) continue;
+          if (sub.creationTimeSeconds < startTimeUtc || sub.creationTimeSeconds >= endTimeUtc) continue;
+
+          const pId = `${sub.problem.contestId}${sub.problem.index}`;
+          const isDailyProb = problemsToCheck.some(p => p.id === pId);
+          if (!isDailyProb) continue;
+
+          solvedInWindow.add(pId);
+          if (!problemDetails[pId]) {
+            problemDetails[pId] = {
+              name: sub.problem.name,
+              url: `https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`
+            };
+          }
+
+          for (const p of problemsToCheck) {
+            if (p.id === pId && !p.currentBlood) {
+              // Claim atomically in DB before sending messages
+              const claimed = tryClaimFirstBlood(activeDateStr, p.bloodField, user.discord_id);
+              if (!claimed) {
+                p.currentBlood = 'claimed';
+                continue;
               }
+              p.currentBlood = user.discord_id;
 
-              // Check First Blood
-              for (const p of problemsToCheck) {
-                if (p.id === pId && !p.currentBlood) {
-                  // FIRST BLOOD!
-                  setFirstBlood(activeDateStr, p.bloodField, user.discord_id);
-                  p.currentBlood = user.discord_id;
+              const timeSec = sub.timeConsumedMillis / 1000;
+              const memMb = (sub.memoryConsumedBytes / 1048576).toFixed(2);
+              const embed = new EmbedBuilder()
+                .setColor(0xFF1744)
+                .setAuthor({
+                  name: 'FIRST BLOOD CLAIMED! 🩸',
+                  iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
+                })
+                .setTitle(`⚡ ${p.label} Solved First by @${user.cf_handle}!`)
+                .setURL(`https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`)
+                .setDescription(
+                  `🔥 **<@${user.discord_id}>** was the **absolute first person** in the server to conquer the **${p.label}** daily challenge!\n\n` +
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                  `**Problem:** [**${sub.problem.name}**](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})\n` +
+                  `**Runtime:** \`${timeSec}s\` · **Memory:** \`${memMb} MB\`\n` +
+                  `**Verdict:** \`Accepted (AC)\` 🩸\n` +
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+                )
+                .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
+                .setFooter({ text: 'BigOof First Blood Tracker · Speed & Accuracy Honor', iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' })
+                .setTimestamp();
 
-                  const timeSec = sub.timeConsumedMillis / 1000;
-                  const memMb = (sub.memoryConsumedBytes / 1048576).toFixed(2);
-                  
-                  const embed = new EmbedBuilder()
-                    .setColor(0xFF1744) // Vivid Crimson
-                    .setAuthor({
-                      name: 'FIRST BLOOD CLAIMED! 🩸',
-                      iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
-                    })
-                    .setTitle(`⚡ ${p.label} Solved First by @${user.cf_handle}!`)
-                    .setURL(`https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index}`)
-                    .setDescription(
-                      `🔥 **<@${user.discord_id}>** was the **absolute first person** in the server to conquer the **${p.label}** daily challenge!\n\n` +
-                      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                      `**Problem:** [**${sub.problem.name}**](https://codeforces.com/problemset/problem/${sub.problem.contestId}/${sub.problem.index})\n` +
-                      `**Runtime:** \`${timeSec}s\` · **Memory:** \`${memMb} MB\`\n` +
-                      `**Verdict:** \`Accepted (AC)\` 🩸\n` +
-                      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
-                    )
-                    .setThumbnail('https://cdn-icons-png.flaticon.com/512/3112/3112946.png')
-                    .setFooter({ text: 'BigOof First Blood Tracker · Speed & Accuracy Honor', iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' })
-                    .setTimestamp();
-
-                  // Broadcast First Blood across user's mutual guilds
-                  for (const guild of client.guilds.cache.values()) {
-                    try {
-                      const member = await guild.members.fetch(user.discord_id).catch(() => null);
-                      if (!member) continue;
-
-                      const targetChannel = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID', guild.id)
-                        || await getTargetChannel(client, 'feed_channel_id', 'FEED_CHANNEL_ID', guild.id)
-                        || await getTargetChannel(client, 'general_channel_id', 'GENERAL_CHANNEL_ID', guild.id);
-
-                      if (targetChannel) {
-                        await targetChannel.send({ content: `<@${user.discord_id}>`, embeds: [embed] }).catch(() => {});
-                      }
-                    } catch (_) {}
-                  }
-
-                  console.log(`[FirstBlood] Announced ${user.cf_handle} for problem ${pId}`);
-                }
-              }
+              await broadcastToUserGuilds(client, user.discord_id, () => ({
+                content: `<@${user.discord_id}>`,
+                embeds: [embed]
+              }));
+              console.log(`[FirstBlood] Announced ${user.cf_handle} for ${pId}`);
             }
           }
         }
 
-        // Check if user solved all suggested problems
-        const suggestedProblemIds = [daily.p1_id, daily.p2_id, daily.p3_id, daily.p4_id, daily.p5_id].filter(Boolean);
-        if (suggestedProblemIds.length > 0 && suggestedProblemIds.every(id => solvedInWindow.has(id))) {
-          let sweepAnnounced = [];
-          try {
-            sweepAnnounced = JSON.parse(daily.sweep_announced || '[]');
-          } catch (_) {}
-
-          if (!sweepAnnounced.includes(user.discord_id)) {
-            sweepAnnounced.push(user.discord_id);
-            const updatedJson = JSON.stringify(sweepAnnounced);
-            setSweepAnnounced(activeDateStr, updatedJson);
-            daily.sweep_announced = updatedJson; // update cache
-
+        const suggestedIds = [daily.p1_id, daily.p2_id, daily.p3_id, daily.p4_id, daily.p5_id].filter(Boolean);
+        if (suggestedIds.length > 0 && suggestedIds.every(id => solvedInWindow.has(id))) {
+          const claimedSweep = tryMarkSweepAnnounced(activeDateStr, user.discord_id);
+          if (claimedSweep) {
             const getProbLink = (id, defaultLabel) => {
-              if (problemDetails[id]) {
-                return `**[${problemDetails[id].name}](${problemDetails[id].url})**`;
-              }
+              if (problemDetails[id]) return `**[${problemDetails[id].name}](${problemDetails[id].url})**`;
               const match = id.match(/^(\d+)(.+)$/);
-              if (match) {
-                return `**[Problem ${match[1]}${match[2]}](https://codeforces.com/problemset/problem/${match[1]}/${match[2]})**`;
-              }
-              return `**[${defaultLabel}](https://codeforces.com/problemset/problem)**`;
+              return match
+                ? `**[Problem ${match[1]}${match[2]}](https://codeforces.com/problemset/problem/${match[1]}/${match[2]})**`
+                : `**[${defaultLabel}](https://codeforces.com/problemset/problem)**`;
             };
 
             const sweepEmbed = new EmbedBuilder()
-              .setColor(0xFFD700) // Championship Gold
+              .setColor(0xFFD700)
               .setAuthor({
                 name: '🏆 ULTIMATE DAILY SWEEP ACHIEVED! 🏆',
                 iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
               })
               .setTitle(`👑 Grand Slam Solver — @${user.cf_handle}!`)
               .setDescription(
-                `> 🌟 **Unstoppable Performance!**\n` +
-                `> <@${user.discord_id}> has conquered **all 5 progressive daily challenges** for **${activeDateStr}**!\n\n` +
-                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-              )
-              .addFields(
-                { name: `🌱 Level 1 (Novice)`,     value: `✅ ${getProbLink(daily.p1_id, 'Problem')}`, inline: false },
-                { name: `⚔️ Level 2 (Pupil)`,      value: `✅ ${getProbLink(daily.p2_id, 'Problem')}`, inline: false },
-                { name: `🔥 Level 3 (Specialist)`, value: `✅ ${getProbLink(daily.p3_id, 'Problem')}`, inline: false },
-                { name: `⚡ Level 4 (Expert)`,     value: `✅ ${getProbLink(daily.p4_id, 'Problem')}`, inline: false },
-                { name: `👑 Level 5 (Master)`,     value: `✅ ${getProbLink(daily.p5_id, 'Problem')}`, inline: false }
+                '> 🌟 **Unstoppable Performance!**\n' +
+                `> <@${user.discord_id}> has conquered **all ${suggestedIds.length} daily challenges** for **${activeDateStr}**!\n\n` +
+                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
               )
               .setImage('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3ZhcHhqMmxzbHoxMWh6dmd3NXl1OG1lMnNweWhkZWxobDcwcmJ5ZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26n6WvwCRGC16EqyQ/giphy.gif')
               .setFooter({ text: 'BigOof Hall of Fame · Pure Algorithmic Mastery', iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png' })
               .setTimestamp();
 
-            // Broadcast sweep across user's mutual guilds
-            for (const guild of client.guilds.cache.values()) {
-              try {
-                const member = await guild.members.fetch(user.discord_id).catch(() => null);
-                if (!member) continue;
+            [
+              { id: daily.p1_id, name: '🌱 Level 1 (Novice)' },
+              { id: daily.p2_id, name: '⚔️ Level 2 (Pupil)' },
+              { id: daily.p3_id, name: '🔥 Level 3 (Specialist)' },
+              { id: daily.p4_id, name: '⚡ Level 4 (Expert)' },
+              { id: daily.p5_id, name: '👑 Level 5 (Master)' }
+            ].forEach(lvl => {
+              if (lvl.id) sweepEmbed.addFields({ name: lvl.name, value: `✅ ${getProbLink(lvl.id, 'Problem')}`, inline: false });
+            });
 
-                const targetChannel = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID', guild.id)
-                  || await getTargetChannel(client, 'feed_channel_id', 'FEED_CHANNEL_ID', guild.id)
-                  || await getTargetChannel(client, 'general_channel_id', 'GENERAL_CHANNEL_ID', guild.id);
-
-                if (targetChannel) {
-                  await targetChannel.send({ content: `**<@${user.discord_id}> just swept the daily challenges!** 🔥`, embeds: [sweepEmbed] }).catch(() => {});
-                }
-              } catch (_) {}
-            }
-
-            console.log(`[Sweep] Announced ${user.cf_handle} for daily sweep of date ${activeDateStr}`);
+            await broadcastToUserGuilds(client, user.discord_id, () => ({
+              content: `**<@${user.discord_id}> just swept the daily challenges!** 🔥`,
+              embeds: [sweepEmbed]
+            }));
+            console.log(`[Sweep] Announced ${user.cf_handle} for daily sweep of ${activeDateStr}`);
           }
         }
       } catch (e) {
-        console.warn(`[FirstBlood] Error checking handle ${user.cf_handle}:`, e.message);
+        console.warn(`[FirstBlood] Error checking ${user.cf_handle}:`, e.message);
       }
-      // slight delay to prevent rate limiting CF API (respecting 1 request / 2 seconds limit)
-      await new Promise(r => setTimeout(r, 2500));
+      await new Promise(r => setTimeout(r, 2000));
     }
   } catch (err) {
     console.error('[FirstBlood Error]', err.message);
+  } finally {
+    isFirstBloodRunning = false;
   }
 }
 
-// One-time startup resets (no-op now)
-async function runOneTimeStartupReset(client) {}
-
-// ─── Scheduler ───────────────────────────────────────────────
 function startDailyChallenge(client) {
-  // 9:00 PM (21:00) every day in configured timezone
+  const TZ = getTimeZone();
+
   cron.schedule('0 21 * * *', async () => {
     try {
-      console.log(`[Daily] Scheduled 9 PM daily suggestions trigger (${TIMEZONE}). Posting...`);
-      await postDailySuggestions(client);
-      
-      const { setConfig } = require('../database/db');
-      const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
-      setConfig('last_suggest_post_date', formatterDate.format(new Date()), 'global');
+      console.log(`[Daily] Scheduled 9:00 PM trigger (${TZ}). Posting...`);
+      const posted = await postDailySuggestions(client);
+      if (posted) {
+        setConfig('last_suggest_post_date', getLocalParts(new Date(), TZ).dateStr, 'global');
+      }
     } catch (err) {
       console.error('[Daily Scheduler Error]', err);
     }
-  }, { timezone: TIMEZONE });
+  }, { timezone: TZ, noOverlap: true });
 
-  // Run immediately on boot with a 10s delay to perform catch-up if needed
   setTimeout(async () => {
     try {
-      // 1. Run one-time startup reset first
-      await runOneTimeStartupReset(client);
-
-      // 2. Then perform the catch-up check
-      const formatterDate = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
-      const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: 'numeric', hour12: false });
-      
-      const todayDateStr = formatterDate.format(new Date());
-      const currentHour = parseInt(formatterHour.format(new Date()), 10);
-      const { getConfig, setConfig } = require('../database/db');
+      const { hour, dateStr: todayDateStr } = getLocalParts(new Date(), TZ);
       const lastPostDate = getConfig('last_suggest_post_date', 'global');
-      
-      if (currentHour >= 21 && lastPostDate !== todayDateStr) {
-        console.log(`[Daily] Startup catch-up check: past 9:00 PM (${TIMEZONE}) and not posted today. Posting...`);
-        await postDailySuggestions(client);
-        setConfig('last_suggest_post_date', todayDateStr, 'global');
+
+      if (hour >= 21 && lastPostDate !== todayDateStr) {
+        console.log(`[Daily] Startup catch-up: past 9:00 PM (${TZ}). Posting today's quests...`);
+        const posted = await postDailySuggestions(client);
+        if (posted) {
+          setConfig('last_suggest_post_date', todayDateStr, 'global');
+        }
       }
     } catch (err) {
       console.error('[Daily Startup Catch-up Error]', err);
     }
   }, 10000);
 
-  // First Blood Checker: Runs every 5 minutes
   cron.schedule('*/5 * * * *', async () => {
     await checkFirstBloods(client);
-  });
+  }, { timezone: TZ, noOverlap: true });
 
-  console.log(`[Daily] Daily cron scheduler (${TIMEZONE}) & 5-min First Blood checker started.`);
+  console.log(`[Daily] Daily cron (${TZ}) & 5-min First Blood tracker started.`);
 }
 
 module.exports = { startDailyChallenge, postDailySuggestions, checkFirstBloods };

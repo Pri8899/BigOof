@@ -1,10 +1,11 @@
-// commands/graph.js — Rating history graph via QuickChart.io
+// commands/graph.js — Rating history graph via QuickChart.io using latest chronological history
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { getUser, getRatingHistory }          = require('../database/db');
-const { errorEmbed }                         = require('../utils/embeds');
+const { getUser, getRatingHistory } = require('../database/db');
+const { errorEmbed } = require('../utils/embeds');
+const { getPlatformEmojis } = require('../utils/emojis');
 
-const PLATFORM_NAMES  = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
-const PLATFORM_COLORS = { cf: '#1F8DD6',    ac: '#E74C3C', toph: '#7B2FBE' };
+const PLATFORM_NAMES = { cf: 'Codeforces', ac: 'AtCoder', toph: 'Toph' };
+const PLATFORM_COLORS = { cf: '#1F8DD6', ac: '#E74C3C', toph: '#7B2FBE' };
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -16,38 +17,47 @@ module.exports = {
         .setRequired(true)
         .addChoices(
           { name: '🏆 Codeforces', value: 'cf' },
-          { name: '🎯 AtCoder',    value: 'ac' },
-          { name: '⚡ Toph',       value: 'toph' }
-        ))
+          { name: '🎯 AtCoder', value: 'ac' },
+          { name: '⚡ Toph', value: 'toph' }
+        )
+    )
     .addUserOption(opt =>
       opt.setName('member')
         .setDescription('Member to view (default: yourself)')
-        .setRequired(false)),
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
     await interaction.deferReply();
 
     const platform = interaction.options.getString('platform');
-    const target   = interaction.options.getMember('member') ?? interaction.member;
-    const userId   = target.id;
+    const target = interaction.options.getMember('member')
+      || interaction.options.getUser('member')
+      || interaction.member
+      || interaction.user;
 
-    const user    = getUser(userId);
-    const history = getRatingHistory(userId, platform, 40);
+    const userId = target.id;
+    const displayName = target.displayName || target.username || 'Member';
+    const avatarUrl = typeof target.user?.displayAvatarURL === 'function'
+      ? target.user.displayAvatarURL({ dynamic: true })
+      : (typeof target.displayAvatarURL === 'function' ? target.displayAvatarURL({ dynamic: true }) : undefined);
+
+    const user = getUser(userId);
+    const history = getRatingHistory(userId, platform, 30);
 
     if (!user || !user[`${platform}_handle`]) {
       return interaction.editReply({
-        embeds: [errorEmbed('No Account Linked', `${target.displayName} hasn't linked a ${PLATFORM_NAMES[platform]} account.`)]
+        embeds: [errorEmbed('No Account Linked', `${displayName} hasn't linked a ${PLATFORM_NAMES[platform]} account.`)]
       });
     }
 
     if (history.length < 2) {
       return interaction.editReply({
-        embeds: [errorEmbed('Not Enough Data', `Need at least 2 data points for a graph. Rating history builds up over time as the bot syncs hourly.`)]
+        embeds: [errorEmbed('Not Enough Data', 'Need at least 2 recorded rating points for a graph. Rating changes accumulate automatically over time.')]
       });
     }
 
-    // Build chart using QuickChart.io (free, no API key)
-    const labels  = history.map(h => {
+    const labels = history.map(h => {
       const d = new Date(h.recorded_at * 1000);
       return `${d.getMonth() + 1}/${d.getDate()}`;
     });
@@ -58,20 +68,18 @@ module.exports = {
       data: {
         labels,
         datasets: [{
-          label:           `${PLATFORM_NAMES[platform]} Rating`,
-          data:            ratings,
-          borderColor:     PLATFORM_COLORS[platform],
-          backgroundColor: PLATFORM_COLORS[platform] + '33',
-          borderWidth:     2,
-          pointRadius:     3,
-          tension:         0.3,
-          fill:            true
+          label: `${PLATFORM_NAMES[platform]} Rating`,
+          data: ratings,
+          borderColor: PLATFORM_COLORS[platform],
+          backgroundColor: `${PLATFORM_COLORS[platform]}33`,
+          borderWidth: 2,
+          pointRadius: 3,
+          tension: 0.3,
+          fill: true
         }]
       },
       options: {
-        plugins: {
-          legend: { labels: { color: '#ffffff', font: { size: 14 } } }
-        },
+        plugins: { legend: { labels: { color: '#ffffff', font: { size: 14 } } } },
         scales: {
           x: { ticks: { color: '#aaaaaa' }, grid: { color: '#333333' } },
           y: { ticks: { color: '#aaaaaa' }, grid: { color: '#333333' } }
@@ -79,42 +87,52 @@ module.exports = {
       }
     };
 
-    const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&w=800&h=400&bkg=%231a1a2e`;
+    let chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&w=800&h=400&bkg=%231a1a2e`;
+    if (chartUrl.length > 2000) {
+      // Trim older points if URL ever gets close to Discord's 2048-char image URL limit
+      const compactConfig = {
+        ...chartConfig,
+        data: {
+          labels: labels.slice(-20),
+          datasets: [{ ...chartConfig.data.datasets[0], data: ratings.slice(-20) }]
+        }
+      };
+      chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(compactConfig))}&w=800&h=400&bkg=%231a1a2e`;
+    }
 
-    const minR  = Math.min(...ratings);
-    const maxR  = Math.max(...ratings);
+    const minR = Math.min(...ratings);
+    const maxR = Math.max(...ratings);
     const lastR = ratings[ratings.length - 1];
-    const diff  = lastR - ratings[0];
-    const sign  = diff >= 0 ? `+${diff}` : `${diff}`;
+    const diff = lastR - ratings[0];
+    const sign = diff >= 0 ? `+${diff}` : `${diff}`;
 
     const embedColor = parseInt(PLATFORM_COLORS[platform].replace('#', ''), 16);
-    const { getPlatformEmojis } = require('../utils/emojis');
     const emojis = await getPlatformEmojis(interaction.guild);
-    const platformEmoji = platform === 'cf' ? emojis.cf : platform === 'ac' ? emojis.ac : emojis.toph || '🟣';
+    const platformEmoji = platform === 'cf' ? emojis.cf : platform === 'ac' ? emojis.ac : (emojis.toph || '🟣');
 
     const embed = new EmbedBuilder()
       .setColor(embedColor)
       .setAuthor({
         name: `${PLATFORM_NAMES[platform]} Career Rating Trajectory`,
-        iconURL: target.user.displayAvatarURL({ dynamic: true })
+        iconURL: avatarUrl
       })
       .setDescription([
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-        `> 👤 **Member:** <@${target.id}> (\`${target.displayName}\`)`,
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        `> 👤 **Member:** <@${userId}> (\`${displayName}\`)`,
         `> 🌐 **Platform:** ${platformEmoji} **${PLATFORM_NAMES[platform]}**`,
-        `> 🏆 **Peak Rating:** **${maxR}**`,
-        `> 📈 **All-Time Net:** **${sign}** (\`${ratings[0]}\` ➔ \`${lastR}\`)`,
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        `> 🏆 **Peak (Window):** **${maxR}**`,
+        `> 📈 **Net Change:** **${sign}** (\`${ratings[0]}\` ➔ \`${lastR}\`)`,
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
       ].join('\n'))
       .setImage(chartUrl)
       .addFields(
-        { name: '📊 Current',  value: `\`${lastR}\``,  inline: true },
-        { name: '🔺 Peak',     value: `\`${maxR}\``,   inline: true },
-        { name: '🔻 Floor',    value: `\`${minR}\``,   inline: true },
+        { name: '📊 Current', value: `\`${lastR}\``, inline: true },
+        { name: '🔺 Peak', value: `\`${maxR}\``, inline: true },
+        { name: '🔻 Floor', value: `\`${minR}\``, inline: true },
         { name: '📈 Net Shift', value: `\`${sign}\``, inline: true },
-        { name: '📋 Contests Recorded', value: `\`${history.length}\``, inline: true }
+        { name: '📋 Points Plotted', value: `\`${history.length}\``, inline: true }
       )
-      .setFooter({ text: 'BigOof Rating Analytics · History synched hourly' })
+      .setFooter({ text: 'BigOof Rating Analytics · Syncs every 5 min' })
       .setTimestamp();
 
     return interaction.editReply({ embeds: [embed] });

@@ -1,23 +1,25 @@
-// commands/admin/set-channel.js — Unified channel configuration for server features
+// commands/admin/set-channel.js — Unified multi-tenant channel configuration
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
 const { setConfig } = require('../../database/db');
+const { isBotOwner } = require('../../utils/envHelper');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
 
 const FEATURES = [
   { name: '🌐 All Features (One-Click Setup: route everything here)', value: 'all_features', label: 'All Bot Features' },
-  { name: '🏆 Contest Radar (Upcoming contests overview)', value: 'contest_channel_id', label: 'Contest Radar' },
+  { name: '🏆 Contest Radar (Upcoming contests & reminders)', value: 'contest_channel_id', label: 'Contest Radar' },
   { name: '📊 Leaderboard Dashboard (Auto-updating rankings)', value: 'dashboard_channel_id', label: 'Leaderboard Dashboard' },
-  { name: '📈 Rating Updates (Rating change & rank up alerts)', value: 'rating_channel_id', label: 'Rating Updates' },
+  { name: '📈 Rating Updates (Rating change & rank alerts)', value: 'rating_channel_id', label: 'Rating Updates' },
   { name: '💡 Daily Challenges (Daily problem suggestions & first blood)', value: 'suggest_channel_id', label: 'Daily Challenges' },
   { name: '⚡ Live Submissions Feed (Real-time accepted solves)', value: 'feed_channel_id', label: 'Live Submissions Feed' },
   { name: '🌅 Contest Wrap-up (Next-day 9AM contest recap & upsolve)', value: 'wrapup_channel_id', label: 'Contest Wrap-up' },
   { name: '🐙 GitHub Activity Feed (Commits, PRs, and repositories)', value: 'github_channel_id', label: 'GitHub Activity Feed' },
   { name: '📢 Announcements (Broadcast channel for /announce)', value: 'announcement_channel_id', label: 'Announcements' },
-  { name: '💬 General Channel (General alerts, first blood & auto-wrapup)', value: 'general_channel_id', label: 'General Channel' },
+  { name: '💬 General Channel (General fallback alerts & wrap-ups)', value: 'general_channel_id', label: 'General Channel' },
   { name: '💾 Database Backups (Bot Host only)', value: 'backup_channel_id', label: 'Database Backups' }
 ];
 
 module.exports = {
+  guildOnly: true,
   data: new SlashCommandBuilder()
     .setName('set-channel')
     .setDescription('Configure which channels receive specific bot feeds and alerts (Admin only)')
@@ -26,9 +28,7 @@ module.exports = {
       opt.setName('feature')
         .setDescription('The feature/feed to configure')
         .setRequired(true)
-        .addChoices(
-          ...FEATURES.map(f => ({ name: f.name, value: f.value }))
-        )
+        .addChoices(...FEATURES.map(f => ({ name: f.name, value: f.value })))
     )
     .addChannelOption(opt =>
       opt.setName('channel')
@@ -42,21 +42,28 @@ module.exports = {
     const channel = interaction.options.getChannel('channel');
     const guildId = interaction.guildId;
 
-    // Restrict backup channel to bot owner
-    if (featureKey === 'backup_channel_id') {
-      const isOwner = interaction.user.id === process.env.OWNER_ID ||
-        (interaction.client.application && interaction.client.application.owner &&
-         (interaction.client.application.owner.id === interaction.user.id ||
-          (interaction.client.application.owner.members && interaction.client.application.owner.members.has(interaction.user.id))));
+    const me = interaction.guild.members.me;
+    const perms = me && channel.permissionsFor(me);
+    const permWarning = (!perms || !perms.has(PermissionFlagsBits.ViewChannel) || !perms.has(PermissionFlagsBits.SendMessages) || !perms.has(PermissionFlagsBits.EmbedLinks))
+      ? '\n\n⚠️ *Warning: I am currently missing View Channel, Send Messages, or Embed Links permissions in that channel.*'
+      : '';
 
-      if (!isOwner) {
+    if (featureKey === 'backup_channel_id') {
+      if (!isBotOwner(interaction)) {
         return interaction.reply({
           embeds: [errorEmbed('Permission Denied', 'Configuring the database backup channel is restricted to the Bot Owner.')],
-          ephemeral: true
+          flags: 64
         });
       }
-      // Also save backup channel to global config
+
       setConfig('backup_channel_id', channel.id, 'global');
+      return interaction.reply({
+        embeds: [successEmbed(
+          'Backup Channel Configured',
+          `**Database Backups** will now be archived to ${channel} (Global Host Setting).${permWarning}`
+        )],
+        flags: 64
+      });
     }
 
     if (featureKey === 'all_features') {
@@ -80,33 +87,25 @@ module.exports = {
       return interaction.reply({
         embeds: [successEmbed(
           'All Features Configured',
-          `🎉 **All bot feeds and alerts** will now post to ${channel}!\n\n*(You can still override individual features to different channels at any time).*`
+          `🎉 **All server feeds and alerts** will now post to ${channel}!\n\n*(You can still override individual features anytime).*${permWarning}`
         )],
-        ephemeral: true
+        flags: 64
       });
     }
 
     const featureObj = FEATURES.find(f => f.value === featureKey);
     const featureLabel = featureObj ? featureObj.label : featureKey;
 
-    // Save to multi-tenant guild config
     setConfig(featureKey, channel.id, guildId);
-
-    // If setting dashboard, reset cached message ID so a fresh dashboard is posted
-    if (featureKey === 'dashboard_channel_id') {
-      setConfig('dashboard_message_id', '', guildId);
-    }
-    // If setting contest radar, reset cached message ID
-    if (featureKey === 'contest_channel_id') {
-      setConfig('contest_summary_msg_id', '', guildId);
-    }
+    if (featureKey === 'dashboard_channel_id') setConfig('dashboard_message_id', '', guildId);
+    if (featureKey === 'contest_channel_id') setConfig('contest_summary_msg_id', '', guildId);
 
     return interaction.reply({
       embeds: [successEmbed(
         'Channel Configured',
-        `**${featureLabel}** will now post to ${channel}.\n\nUse \`/view-channels\` anytime to inspect your server's configuration.`
+        `**${featureLabel}** will now post to ${channel}.\n\nUse \`/view-channels\` anytime to inspect your server's routing.${permWarning}`
       )],
-      ephemeral: true
+      flags: 64
     });
   }
 };

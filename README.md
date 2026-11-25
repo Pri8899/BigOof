@@ -5,7 +5,7 @@
   <i>Because every O(n²) solution ends in a Big Oof 💀</i></p>
 
   <p>
-    <a href="https://discord.js.org/"><img src="https://img.shields.io/badge/discord.js-v14.16-blue?logo=discord&logoColor=white" alt="Discord.js" /></a>
+    <a href="https://discord.js.org/"><img src="https://img.shields.io/badge/discord.js-v14.26-blue?logo=discord&logoColor=white" alt="Discord.js" /></a>
     <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node->=18.0.0-green?logo=node.js&logoColor=white" alt="Node.js" /></a>
     <a href="https://github.com/WiseLibs/better-sqlite3"><img src="https://img.shields.io/badge/sqlite-better--sqlite3-003B57?logo=sqlite&logoColor=white" alt="SQLite" /></a>
     <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker" /></a>
@@ -18,67 +18,25 @@
 ## 📖 Table of Contents
 
 - [💡 What is BigOof?](#-what-is-bigoof)
-- [🤔 How Does It Work for You or Other Users?](#-how-does-it-work-for-you-or-other-users)
 - [🏛 System Architecture](#-system-architecture)
 - [✨ Key Features](#-key-features)
-  - [⚡ 60s Live Submission Tracker](#-60s-live-submission-tracker)
-  - [📊 Dynamic Dashboard & Leaderboard](#-dynamic-dashboard--leaderboard)
-  - [🩸 Daily Challenges & First Blood Race](#-daily-challenges--first-blood-race)
-  - [🌅 Contest Wrap-up & Upsolve Radar](#-contest-wrap-up--upsolve-radar)
-  - [📅 Contest Radar & Countdown Pings](#-contest-radar--countdown-pings)
-  - [⚔️ 3x3 Battle Grid & Duels (`/vs`)](#️-3x3-battle-grid--duels-vs)
-  - [🏁 Virtual Contests (`/vc`)](#-virtual-contests-vc)
-  - [🤖 ICPC Team Builder & Skill Radar](#-icpc-team-builder--skill-radar)
-  - [🐙 GitHub Developer Feed](#-github-developer-feed)
-- [📚 Command Reference (27 Slash Commands)](#-command-reference)
-  - [👤 Profile & Account Management](#-profile--account-management)
-  - [📈 Discovery & Problem Solving](#-discovery--problem-solving)
-  - [🎮 Duels & Competitions](#-duels--competitions)
-  - [⚙️ Server Administration](#️-server-administration)
-  - [🔒 Bot Owner Operations](#-bot-owner-operations)
-- [🚀 Complete Setup & Installation Guide (Windows, macOS & Linux)](#-complete-setup--installation-guide-windows-macos--linux)
-  - [Prerequisites (Windows, macOS, Linux)](#prerequisites)
-  - [Step 1: Create Your Bot Application on Discord Portal](#step-1-create-your-bot-application-on-discord-portal)
-  - [Step 2: Clone the Repository & Install Dependencies](#step-2-clone-the-repository--install-dependencies)
-  - [Step 3: Configure Your Environment (`.env`)](#step-3-configure-your-environment-env)
-  - [Step 4: Register Slash Commands & Launch](#step-4-register-slash-commands--launch)
-  - [Step 5: Initial In-Discord Server Setup (Important!)](#step-5-initial-in-discord-server-setup-important)
+- [📚 Command Reference (27 Slash Commands)](#-command-reference-27-slash-commands)
+- [🚀 Complete Setup & Installation Guide](#-complete-setup--installation-guide)
 - [☁️ 24/7 Production Deployment](#️-247-production-deployment)
-  - [Option A: Docker & Docker Compose (Windows, macOS, Linux)](#option-a-docker--docker-compose-windows-macos-linux)
-  - [Option B: Windows 24/7 Background Service (PM2 / Task Scheduler)](#option-b-windows-247-background-service-pm2--task-scheduler)
-  - [Option C: Linux VPS with PM2 (Ubuntu, Debian, CentOS)](#option-c-linux-vps-with-pm2-ubuntu-debian-centos)
-  - [Option D: Windows Subsystem for Linux (WSL2)](#option-d-windows-subsystem-for-linux-wsl2)
 - [🗄 Database Architecture](#-database-architecture)
-- [❓ Frequently Asked Questions & Troubleshooting (Including Windows)](#-frequently-asked-questions--troubleshooting-including-windows)
-- [🤝 Contributing](#-contributing)
+- [❓ Frequently Asked Questions & Troubleshooting](#-frequently-asked-questions--troubleshooting)
 - [📜 License](#-license)
 
 ---
 
 ## 💡 What is BigOof?
 
-Every competitive programmer knows the feeling:
+**BigOof** is a self-hostable, multi-tenant Competitive Programming Discord bot built for university coding clubs and ICPC teams. It tracks **Codeforces**, **AtCoder**, **Toph**, and **GitHub** activity autonomously with zero spreadsheets required:
 
-> *You spend 45 minutes coding a solution during a contest.*  
-> *You submit.*  
-> *"Running on test 2..."*  
-> **Verdict: Time Limit Exceeded on Test 2 (1001 ms).**  
-**BigOof** is a modern, production-grade Competitive Programming Discord bot built for university coding clubs and algorithmic communities. It provides automated contest countdowns and reminders across major platforms (Codeforces, AtCoder, LeetCode), live rating change alerts, server-wide Accepted (AC) submission feeds, solving streaks, and automated role progression.
-
-Designed from the ground up for university clubs, ICPC teams, and coding communities, BigOof tracks your members' problem-solving journeys across **Codeforces**, **AtCoder**, **Toph**, and **GitHub** completely autonomously with zero manual spreadsheets or checks required.
-
----
-
-## 🤔 How Does It Work for You or Other Users?
-
-If anyone in the world wants to use **BigOof** for their Discord server, what do they do?
-
-Because BigOof is an **open-source self-hostable bot**, anyone can run their own instance in just 5 minutes:
-1. **Clone the Code:** They clone this GitHub repository (`git clone https://github.com/Pri8899/BigOof.git`).
-2. **Create a Free Bot Application:** They create a bot in the [Discord Developer Portal](https://discord.com/developers/applications) and copy their bot token.
-3. **Paste Credentials into `.env`:** They put their token and ID into `.env`.
-4. **Run `npm start` (or Docker):** The bot connects to Discord and comes online in their server!
-5. **Multi-Tenant Magic:** BigOof automatically isolates every server. If 10 different servers use the same bot, each server configures its own channels, rank roles, and feeds without any cross-server data leaks!
+- Live Accepted (`AC`) submission feed, rating shift alerts, solving streaks, and automated Discord rank/streak roles.
+- Autonomous contest schedules with 24h / 1h countdown alerts and daily 9:00 AM post-contest upsolve wrap-ups.
+- Interactive in-Discord duels (`/vs` 3x3 Battle Grid & Classic Race), simulated Virtual Contests (`/vc`), skill trees (`/skills`), and ICPC squad matchmaking (`/build-teams`).
+- Strict per-guild channel isolation (`guild_config`) so multiple Discord servers running one bot instance stay cleanly separated.
 
 ---
 
@@ -93,31 +51,32 @@ flowchart TD
 
     subgraph BigOofCore ["BigOof Core Engine"]
         Gateway["Discord.js v14 Gateway Client"]
-        CmdRouter["Slash Command Router (25 Commands)"]
-        
-        subgraph Schedulers ["Autonomous Cron Scheduler"]
-            FeedTask["Submission Feed (Every 60s)"]
-            ContestTask["Contest Radar (Hourly)"]
-            DailyTask["Daily Challenges & First Blood (5m / 21:00)"]
-            RatingTask["Rating & Rank Sync (09:00 local)"]
+        CmdRouter["Slash Command Router (27 Commands)"]
+
+        subgraph Schedulers ["Autonomous Schedulers"]
+            FeedTask["Submission Feed (Chained 60s)"]
+            ContestTask["Contest Radar (12h Refresh + 10m Reminders)"]
+            DailyTask["Daily Challenges & First Blood (21:00 / 5m)"]
+            RatingTask["Rating Sync & Dashboard (5m / 1h Streaks / 09:00)"]
+            WrapupTask["Morning Contest & Weekly Wrap-Ups"]
             GitHubTask["GitHub Stream (Every 2 min)"]
-            BackupTask["Automated DB Backups (Hourly)"]
+            BackupTask["Automated WAL-Safe DB Backups (Hourly)"]
         end
-        
-        EmbedEngine["Dynamic Embed & Radar Chart Engine"]
+
+        EmbedEngine["Dynamic Embed & QuickChart Engine"]
     end
 
     subgraph DataStore ["Persistence Layer"]
         DB[("SQLite Database (WAL Mode)")]
         GuildConfig["guild_config (Multi-Tenant Key-Value)"]
         Users["users & ratings & streaks"]
-        Contests["custom_contests & notified_contests"]
+        Contests["notified_contests & wrapups"]
     end
 
     subgraph PlatformAPIs ["Supported Platform APIs"]
         CF["Codeforces API"]
-        AC["AtCoder Problems API"]
-        Toph["Toph Platform"]
+        AC["AtCoder / Kenkoooo API"]
+        Toph["Toph Scraper"]
         GH["GitHub REST API"]
     end
 
@@ -129,7 +88,7 @@ flowchart TD
     Schedulers <--> PlatformAPIs
     Schedulers <--> DB
     Schedulers --> EmbedEngine
-    EmbedEngine -->|Real-time Announcements & Feeds| Guild
+    EmbedEngine -->|Announcements & Feeds| Guild
     DB --- GuildConfig
     DB --- Users
     DB --- Contests
@@ -139,464 +98,155 @@ flowchart TD
 
 ## ✨ Key Features
 
-### ⚡ 60s Live Submission Tracker
-- Automatically polls Codeforces, AtCoder, and Toph for Accepted (`AC`) verdicts every 60 seconds.
-- Posts a celebratory feed embed featuring problem tags, runtime, memory consumption, and difficulty rating.
-- Automatically increments solving streaks and updates rank tier roles.
-
-### 📊 Dynamic Dashboard & Leaderboard
-- Maintains a pinned live dashboard in your server's chosen channel.
-- Automatically syncs all 10 official Codeforces rank tiers (from **Newbie** up to **Legendary Grandmaster**).
-- Command `/leaderboard` displays real-time server rankings sorted by rating, solved count, or active daily streak.
-
-### 🩸 Daily Challenges & First Blood Race
-- Every evening at 9:00 PM (local timezone), BigOof selects curated problems tailored to your community's rating bracket.
-- **First Blood 🩸:** The first member to solve any daily problem triggers an immediate server celebration.
-- Celebrates daily sweeps when ambitious coders solve all problems in the set.
-
-### 🌅 Contest Wrap-up & Upsolve Radar
-- **Autonomous Morning Recap (9:00 AM):** Automatically triggers the next morning at **9:00 AM** (local timezone) and posts directly to your server's `#general` channel.
-- **Personalized Roadblock Detection:** Analyzes the finished Codeforces round for all server contenders. For each participant, BigOof pinpoints the exact roadblock problem where they choked (e.g. `WA on test 4`, `TLE on test 2`, or the first unattempted problem).
-- **Direct 1-Click Problem Links:** Formats problems with clean clickable markdown links `[2277C - Edge Addeleting](url)` directly into Codeforces.
-- **Zero Ratings Delay / Zero Clutter:** Avoids unrated/null post-contest rating artifacts, eliminates ugly raw URLs, and avoids gamified reaction or thread spam.
-- **On-Demand Command (`/wrapup`):** Run `/wrapup [contest]` anytime to view recent round standings and your upsolve challenge instantly.
-
-### 📅 Contest Radar & Countdown Pings
-- Scrapes and aggregates upcoming contests across Codeforces, AtCoder, Toph, plus server-specific custom rounds.
-- Dispatches countdown notification pings **24 hours** and **1 hour** before each contest starts.
-
-### ⚔️ 3x3 Battle Grid & Duels (`/vs`)
-- **3x3 Battle Grid (Default):** Generates a dynamic 9-problem board spanning 3 rating tiers with point values from 100 to 500 (2,500 max points).
-- **1/3 Value Drop (No Locking Frustration):** Problems are **never completely locked**! The first contender to solve a tile captures the full **100% points** (First Blood). The tile is then downgraded to **1/3 value** for all other contenders (e.g. 300 pts → 100 pts), so your effort is never wasted.
-- **Rival Alert Pings:** The moment a contender claims 1st AC, opponents are immediately `@mentioned` in chat so they know the tile downgraded and can decide whether to finish for partial points or pivot to a full-value tile.
-- **Interactive Discord Problem Buttons:** Features 3 rows of direct Link buttons on Discord. Button labels update in real time (`[P1] 300 pts` → `🟡 [P1] 100 pts` → `✅ Done`), allowing 1-click access to each Codeforces problem.
-- **Real-Time ASCII Grid & Scoreboard:** Polled every 15 seconds with live ASCII board status, First Blood count, and lead tug-of-war ratio bar.
-- **Decisive Early Victory:** Detects mathematical locks when the leader is mathematically uncatchable even if rivals solve all remaining problems, awarding victory with a championship gold verdict card.
-- **Classic Race Mode:** Supports traditional 5-problem races with time-decay scoring via `/vs mode:Classic Race`.
-
-### 🏁 Virtual Contests (`/vc`)
-- Run simulated ICPC/Div rounds right inside Discord.
-- BigOof assembles a balanced problem set, tracks active participants, and tallies the final standings upon round conclusion.
-
-### 🤖 ICPC Team Builder & Skill Radar
-- **Skill Radar (`/skills`):** Plots an RPG-style radar sheet of topic masteries (DP, Graph Theory, Number Theory, Trees, Greedy, Geometry, Strings).
-- **ICPC Team Builder (`/build-teams`):** Uses diversity matching heuristics to construct balanced 3-person teams with complementary algorithmic strengths.
-
-### 🐙 GitHub Developer Feed
-- Keeps track of members' public commits, repository creations, and pull requests.
-- Never misses a beat when your community is shipping software!
+- **⚡ Live Submission Tracker:** Polls Codeforces, AtCoder, and Toph every 60s (chained safely to prevent overlaps) and posts solved embeds with problem tags, difficulty, and Codeforces/AtCoder execution telemetry.
+- **📊 Dynamic Dashboard & Leaderboard:** Auto-updating leaderboard in your chosen channel alongside automatic **CP**, Codeforces Rank tier (`Newbie` → `Legendary Grandmaster`), and Streak milestone (`7d` / `15d` / `30d`) roles.
+- **🩸 Daily Challenges & First Blood:** Posts 5 progressive daily challenges at 9:00 PM local time and crowns First Blood / Daily Sweep winners every 5 minutes.
+- **🌅 Contest Wrap-up & Upsolve Radar:** At 9:00 AM daily, recaps finished Codeforces rounds in your server's wrapup/general channel and identifies each contender's exact upsolve roadblock (e.g., `WA on test 4`, `TLE on test 2`). On-demand `/wrapup` also supported.
+- **📅 Contest Radar & 24h/1h Reminders:** Aggregates upcoming contests across Codeforces, AtCoder, Toph, and server custom contests (`/custom-contest`), refreshing silently every 12 hours and sending 24-hour and 1-hour alerts.
+- **⚔️ 3x3 Battle Grid & Duels (`/vs`):** Real-time 1v1 or multiplayer 9-problem Battle Grid (1st AC scores 100%, later solves score 1/3) or Classic time-decay race, synced every 15 seconds with lock protection.
+- **🏁 Persistent Virtual Contests (`/vc`):** Simulated individual or multi-team Codeforces rounds with restart recovery and contest-window timestamp verification.
+- **🐙 GitHub Stream:** Tracks public commits, PRs, releases, branches, and forks via `/github` (supports `GITHUB_TOKEN` for 5,000 req/hr).
 
 ---
 
-## 📚 Command Reference
-
-BigOof features **26 unified slash commands** with zero duplicates:
+## 📚 Command Reference (27 Slash Commands)
 
 ### 👤 Profile & Account Management
 
 | Command | Options | Description |
 |---|---|---|
-| `/link` | `platform`, `handle` | Links your Codeforces, AtCoder, Toph, or GitHub account. |
-| `/unlink` | `platform` | Unlinks an account from your Discord profile. |
-| `/profile` | `user` *(optional)* | View comprehensive CP profile card with ratings, solves, badges, and streaks. |
-| `/compare` | `user1`, `user2`, `handle1`, `handle2` | Head-to-Head statistical showdown comparing rating, peak, solves, mutual problem overlap, and duel history. |
-| `/solved` | `user` *(optional)* | Visual breakdown of Codeforces solves by difficulty division (Div 1 through Div 4). |
-| `/github` | `user` *(optional)* | Displays GitHub statistics, top repositories, recent commits, and contribution metrics. |
+| `/link` | `platform`, `handle` | Link your Codeforces, AtCoder, Toph, or GitHub account. |
+| `/unlink` | `platform` | Unlink a connected account from your Discord profile. |
+| `/profile` | `member` *(optional)* | View a profile card with ratings, solves, rank badges, and streaks. |
+| `/compare` | `user1`, `user2`, `handle1`, `handle2` | Head-to-head comparison (rating, peak, solves, overlap, duel H2H). |
+| `/solved` | `member` *(optional)* | Breakdown of Codeforces solves by division (Div 1 through Div 4). |
+| `/github` | `link` / `profile` / `sync` / `unlink` | Manage GitHub linking, developer cards, and manual activity sync. |
 
 ### 📈 Discovery & Problem Solving
 
 | Command | Options | Description |
 |---|---|---|
-| `/leaderboard` | None | Shows the server leaderboard ranked by rating, solves, or active streaks. |
-| `/contests` | `platform` *(optional)* | Upcoming contests radar (All, Codeforces, AtCoder, Toph, Custom). |
-| `/wrapup` | `contest` *(optional)*, `broadcast` *(optional)* | View the latest Codeforces round wrap-up and your personal upsolve roadblock. |
-| `/graph` | `platform`, `user` *(optional)* | Generates a visual rating progress line chart. |
-| `/skills` | `user` *(optional)* | Generates an RPG topic mastery radar sheet (DP, Math, Graphs, etc.). |
-| `/whosolved` | `problem_link` | Finds every server member who has solved a given problem. |
-| `/suggest` | `rating` *(optional)*, `tag` *(optional)* | Recommends an unsolved Codeforces problem tailored to your rating. |
-| `/ask-help` | `problem`, `details` *(optional)* | Asks community members for hints or assistance on a problem. |
-| `/help` | None | Interactive command directory with category dropdowns. |
+| `/leaderboard` | None | Show the live server leaderboard for current server members. |
+| `/contests` | `platform` *(optional)* | View upcoming contests (All, Codeforces, AtCoder, Toph, Custom). |
+| `/wrapup` | `contest` *(optional)*, `broadcast` *(optional)* | View Codeforces contest standings & your upsolve roadblock. |
+| `/graph` | `platform`, `member` *(optional)* | Generate a QuickChart rating trajectory line graph. |
+| `/skills` | `member` *(optional)* | RPG skill sheet analyzing mastery across algorithm domains. |
+| `/whosolved` | `link` | Find current server members who solved a given Codeforces problem URL. |
+| `/suggest` | `tag`, `rating`, `div`, `problems` *(all optional)* | Suggest unsolved Codeforces problems tailored to your filters. |
+| `/ask-help` | `problem`, `image1`..`image5` *(optional)* | Request community hints with optional code/screenshot images. |
+| `/help` | None | Interactive command directory with category selector menu. |
 
 ### 🎮 Duels & Competitions
 
 | Command | Options | Description |
 |---|---|---|
-| `/vs` | `rating`, `mode` *(optional)*, `duration` *(optional)*, `problems` *(optional)*, `tag` *(optional)*, `division` *(optional)* | Starts a 1v1 or multiplayer **3x3 Battle Grid** (1st AC: 100%, later AC: 1/3) or **Classic Race** with interactive problem buttons and real-time sync. |
-| `/vc start` | `duration`, `difficulty` | Launches a server-wide Virtual Contest round. |
-| `/vc status` | None | Displays the remaining time and standings for the active Virtual Contest. |
-| `/vc end` | None | Concludes the active Virtual Contest and calculates final standings. |
-| `/build-teams` | None | Generates balanced 3-person ICPC teams based on members' strengths. |
+| `/vs` | `rating`, `mode`, `tag`, `duration`, `problems`, `division` | Start a 3x3 Battle Grid or Classic Race duel lobby. |
+| `/vc` | `start`, `status`, `end` | Run persistent individual or team Virtual Contest rounds. |
+| `/build-teams` | None | Auto-generate balanced 3-person ICPC squads from CF ratings & tags. |
 
-### ⚙️ Server Administration
-*Requires `Administrator` or `Manage Server` permission.*
+### ⚙️ Server Administration & Bot Owner Operations
 
-| Command | Options | Description |
-|---|---|---|
-| `/set-channel` | `feature`, `channel` | Configures target channel for any feed (Contest Radar, Dashboard, Feeds, Daily Challenges, Contest Wrap-up, General Channel, etc.), or select **"🌐 All Features (One-Click Setup)"**. |
-| `/view-channels` | None | Displays all configured bot channels for this server. |
-| `/setup-roles` | None | Automatically creates and configures the base `CP` role, all 10 Codeforces rank roles (with official colors), and streak milestone roles. |
-| `/custom-contest` | `action` (add / edit / delete / list), ... | Manages custom server contests included in radar embeds and pings. |
-| `/force-unlink` | `target`, `platform` | Unlinks an account on behalf of a server member and updates the dashboard. |
-| `/announce` | `message`, `channel` *(optional)*, `ping` *(optional)* | Broadcasts a formatted announcement embed with optional `@everyone` mention. |
-
-### 🔒 Bot Owner Operations
-*Strictly restricted to the `OWNER_ID` defined in your environment.*
-
-| Command | Options | Description |
-|---|---|---|
-| `/set-bot` | `action` (avatar / username), `image` *(optional)*, `url` *(optional)*, `name` *(optional)* | Updates the bot application's avatar image or username across Discord. |
-| `/backupdb` | None | Manually triggers an immediate database backup to the backup channel. |
-| `/restoredb` | `source` (latest / attachment) | Restores the database from a backup snapshot. |
-
----
-
-## 🚀 Complete Setup & Installation Guide (Windows, macOS & Linux)
-
-Follow this complete guide to set up and run BigOof from scratch on **Windows**, **macOS**, or **Linux**.
-
-### Prerequisites (Windows, macOS, Linux)
-
-Before starting, ensure you have **Node.js** and **Git** installed on your operating system:
-
-| Tool | Windows | macOS | Linux (Ubuntu / Debian) |
+| Command | Options | Access | Description |
 |---|---|---|---|
-| **Node.js** (v18+) | Download `.msi` from [nodejs.org](https://nodejs.org/) (LTS recommended) | `brew install node` or download `.pkg` from [nodejs.org](https://nodejs.org/) | `sudo apt update && sudo apt install -y nodejs npm` |
-| **Git** | Download from [gitforwindows.org](https://gitforwindows.org/) | `brew install git` or `xcode-select --install` | `sudo apt install -y git` |
-| **Terminal** | PowerShell, Command Prompt (CMD), Windows Terminal, or Git Bash | Terminal (Zsh / Bash) | Terminal (Bash) |
-
-Verify installation in your terminal:
-```bash
-node -v   # Should be v18.0.0 or higher (e.g., v18.x, v20.x, v22.x)
-npm -v    # Should output npm version (e.g., 9.x, 10.x)
-git --version
-```
-
-- **A Discord Account & Server**: Where you have Administrator permissions.
+| `/set-channel` | `feature`, `channel` | Manage Server | Route feeds/dashboards to dedicated channels (or **All Features**). |
+| `/view-channels` | None | Manage Server | Inspect configured channels for the current server. |
+| `/setup-roles` | None | Manage Roles | Create and sync `CP`, CF Rank tiers, and Streak milestone roles. |
+| `/custom-contest` | `add` / `edit` / `delete` / `list` | Manage Channels | Manage custom server contests on the radar & reminder schedule. |
+| `/force-unlink` | `member`, `platform` *(optional)* | Manage Server | Forcefully unlink or purge a member's accounts. |
+| `/announce` | `channel` *(optional)* | Mention Everyone | Open an announcement modal and broadcast with `@everyone`. |
+| `/set-bot` | `avatar` / `username` | Bot Owner | Update the bot avatar or username on Discord. |
+| `/backupdb` | None | Bot Owner | Upload a WAL-consistent `bigoof-backup-*.db` snapshot immediately. |
+| `/restoredb` | `source` (`latest`/`upload`), `database` | Bot Owner | Validate & restore the SQLite DB live from backup or attachment. |
 
 ---
 
-### Step 1: Create Your Bot Application on Discord Portal
+## 🚀 Complete Setup & Installation Guide
 
-1. Open the **[Discord Developer Portal](https://discord.com/developers/applications)**.
-2. Click the blue **New Application** button in the top right.
-3. Enter the name **BigOof**, accept the Developer Terms, and click **Create**.
-4. **Set Avatar & Copy Client ID:**
-   - Under **General Information**, click on the App Icon placeholder and upload [`assets/bot-avatar.png`](assets/bot-avatar.png).
-   - Locate **Application ID** and click **Copy**. Save this as your `CLIENT_ID`.
-5. **Get Bot Token & Enable Intents:**
-   - On the left sidebar, click **Bot**.
-   - Under the username, click **Reset Token** (confirm with your 2FA code if prompted).
-   - Click **Copy** to copy your new token. Save this as your `DISCORD_TOKEN`. *(Never share this token publicly!)*
-   - Scroll down to the **Privileged Gateway Intents** section:
-     - ✅ Enable **Server Members Intent** *(mandatory for role syncing and leaderboards)*.
-     - ✅ Enable **Message Content Intent** *(mandatory for problem link parsing)*.
-   - Click **Save Changes** at the bottom of the page.
-6. **Generate the Bot Invite Link:**
-   - On the left sidebar, click **OAuth2 > URL Generator**.
-   - Under **Scopes**, select:
-     - `bot`
-     - `applications.commands`
-   - Under **Bot Permissions**, select:
-     - `Administrator` *(recommended for full channel and role management)*.
-   - Copy the generated URL at the bottom, paste it into a browser tab, choose your Discord server, and click **Authorize**.
+### Prerequisites
+- **Node.js** `>= 18.0.0` (LTS v20/v22 recommended)
+- **Git**
 
----
+### Step 1: Discord Developer Portal
+1. Create a new application at [discord.com/developers/applications](https://discord.com/developers/applications).
+2. Under **General Information**, copy the **Application ID** (`CLIENT_ID`).
+3. Under **Bot**, generate/copy your **Token** (`DISCORD_TOKEN`) and enable **Server Members Intent** under **Privileged Gateway Intents**.
+4. Under **OAuth2 → URL Generator**, select scopes `bot` + `applications.commands` and invite the bot to your server.
 
-### Step 2: Clone the Repository & Install Dependencies
+### Step 2: Install & Configure
 
-Open your preferred terminal (**PowerShell**, **Command Prompt**, or **Git Bash** on Windows; **Terminal** on macOS/Linux):
-
-#### 🪟 Windows (Command Prompt / PowerShell / Git Bash) & 🍎🐧 macOS / Linux:
 ```bash
-# 1. Clone the repository
 git clone https://github.com/Pri8899/BigOof.git
-
-# 2. Enter the project folder
 cd BigOof
-
-# 3. Install required npm packages
 npm install
-```
-
-> **Note for Windows Users:**  
-> BigOof uses `better-sqlite3`, which automatically downloads prebuilt native binaries for Windows 64-bit on all official Node.js LTS versions (v18, v20, v22). You do **not** need Visual Studio or Python installed!
-
----
-
-### Step 3: Configure Your Environment (`.env`)
-
-Create your `.env` configuration file from the provided `.env.example` template:
-
-#### 🪟 On Windows (Command Prompt / CMD):
-```cmd
-copy .env.example .env
-```
-
-#### 🪟 On Windows (PowerShell):
-```powershell
-Copy-Item .env.example .env
-```
-
-#### 🍎🐧 On macOS / Linux:
-```bash
 cp .env.example .env
 ```
 
-#### 🖱️ Or Using File Explorer / Visual Studio Code (All Systems):
-1. Duplicate the `.env.example` file in your project folder.
-2. Rename the new file to `.env`.  
-   *(Windows Tip: If using Windows File Explorer, click **View > Show > File name extensions** to make sure the file is named `.env` and not accidentally `.env.txt`).*
+Edit `.env`:
+- Set `DISCORD_TOKEN`, `CLIENT_ID`, and `OWNER_ID`.
+- Optionally set `GITHUB_TOKEN` (increases GitHub API limit from 60 to 5,000 req/hr), `TIMEZONE` (e.g., `Asia/Dhaka`, `Asia/Kolkata`, `UTC`), and `GUILD_ID` (for instant guild command registration).
 
-Open `.env` in any text editor and fill in your values:
+### Step 3: Deploy Commands & Start
 
-```env
-# Paste the token copied from Step 1.5:
-DISCORD_TOKEN=your_bot_token_here
-
-# Paste the Application ID copied from Step 1.4:
-CLIENT_ID=your_application_id_here
-
-# Your own Discord User ID (gives you access to /backupdb, /restoredb, /set-bot):
-OWNER_ID=your_discord_user_id_here
-
-# Optional: Set your test server ID here for INSTANT command updates during dev.
-# Leave blank to deploy commands globally across all servers.
-GUILD_ID=
-
-# Optional: Timezone for daily challenges and weekly summaries (defaults to UTC):
-# Examples: UTC, America/New_York, Asia/Dhaka, Europe/London
-TIMEZONE=UTC
+```bash
+npm run deploy
+npm start
 ```
 
-> **Tip (How to get your `OWNER_ID`):**  
-> In Discord, go to **User Settings > Advanced > enable Developer Mode**. Then right-click your own profile in any chat and select **Copy User ID**.
-
----
-
-### Step 4: Register Slash Commands & Launch
-
-1. **Deploy Slash Commands to Discord:**
-   ```bash
-   npm run deploy
-   ```
-   *You should see:* `✅ Slash commands registered successfully!`
-
-2. **(Optional) Set Bot Profile Avatar:**
-   ```bash
-   npm run set-avatar
-   ```
-   *This automatically uploads the included cute mascot avatar directly to Discord.*
-
-3. **Start BigOof:**
-   ```bash
-   npm start
-   ```
-   *For live development with auto-reload on file edits:*
-   ```bash
-   npm run dev
-   ```
-
----
-
-### Step 5: Initial In-Discord Server Setup (Important!)
-
-Once BigOof is online in your server, execute these 3 quick setup steps:
-
-1. **Adjust Discord Role Hierarchy (Crucial):**
-   - Go to your Discord server's **Server Settings > Roles**.
-   - Drag the **BigOof** role **ABOVE** the rank roles and members.
-   - *Why?* Discord security prohibits bots from assigning roles that sit higher than the bot's own highest role!
-2. **Auto-Generate Server Roles:**
-   - In any channel, run:
-     ```
-     /setup-roles
-     ```
-   - BigOof will instantly create the base `CP` role, all 10 Codeforces rank tiers with official colors (`Legendary Grandmaster` down to `Newbie`), and 3 streak milestone roles (`💫 30+ Day`, `👑 15+ Day`, `🔥 7+ Day`).
-3. **Configure Announcement Channels:**
-   - **Option A (Super Easy — 1 Single Channel for Everything):**
-     If you only have one bot channel and want all feeds to go there, run:
-     ```
-     /set-channel feature:All Features channel:#cp-bot
-     ```
-     *(This automatically routes submissions, leaderboards, contests, rating alerts, and daily challenges into that single channel with one click!)*
-   - **Option B (Custom Dedicated Channels):**
-     If your server has separate channels, route them individually:
-     ```
-     /set-channel feature:feed channel:#submissions
-     /set-channel feature:dashboard channel:#leaderboard
-     /set-channel feature:contest channel:#contests
-     ```
-   - Run `/view-channels` at any time to inspect your active channel routing!
-4. **Link Your Account:**
-   - Run `/link platform:Codeforces handle:your_handle` to connect your coding profile!
+Inside Discord:
+1. Drag the **BigOof** bot role above rank/streak roles in **Server Settings → Roles**.
+2. Run `/setup-roles`.
+3. Run `/set-channel feature:All Features channel:#cp-bot` (or configure dedicated channels individually).
+4. Link your account with `/link platform:Codeforces handle:your_handle`.
 
 ---
 
 ## ☁️ 24/7 Production Deployment
 
-### Option A: Docker & Docker Compose (Windows, macOS, Linux)
-
-BigOof includes a production-grade multi-stage `Dockerfile` and `docker-compose.yml`. This works seamlessly on **Windows** (using [Docker Desktop](https://www.docker.com/products/docker-desktop/)), **macOS**, and **Linux**.
-
-1. Ensure your `.env` is configured.
-2. Launch the container in the background:
-   ```bash
-   docker compose up -d
-   ```
-3. View live logs:
-   ```bash
-   docker compose logs -f
-   ```
-
-All database files and persistent data are automatically saved to `./data/bigoof.db` on your host machine.
-
----
-
-### Option B: Windows 24/7 Background Service (PM2 / Task Scheduler)
-
-If you are hosting BigOof on a **Windows PC**, laptop, or Windows Server:
-
-#### Method 1: Using PM2 Process Manager
-```cmd
-# 1. Install PM2 globally
-npm install -g pm2
-
-# 2. Start BigOof under PM2 management
-pm2 start index.js --name "bigoof"
-
-# 3. View status and logs at any time
-pm2 status
-pm2 logs bigoof
-
-# 4. Save the running process list
-pm2 save
-```
-> **Windows Auto-Start on Boot:**  
-> Install the Windows service wrapper by running in Administrator Command Prompt:  
-> `npm install -g pm2-windows-service` followed by `pm2-service-install`.
-
-#### Method 2: Windows Task Scheduler (Native)
-1. Press `Win + R`, type `taskschd.msc`, and press Enter.
-2. Click **Create Basic Task**, name it `BigOof Bot`.
-3. Set Trigger to **When the computer starts** or **When I log on**.
-4. Set Action to **Start a program**:
-   - **Program/script:** `node` (or path to `node.exe`, e.g. `C:\Program Files\nodejs\node.exe`)
-   - **Add arguments:** `index.js`
-   - **Start in:** `C:\path\to\BigOof`
-5. Finish the wizard. BigOof will now automatically run silently in the background!
-
----
-
-### Option C: Linux VPS with PM2 (Ubuntu, Debian, CentOS)
-
-To run BigOof as a continuous background daemon on a remote Linux server:
+### Docker & Docker Compose
 
 ```bash
-# 1. Install pm2 globally
-npm install -g pm2
-
-# 2. Start BigOof under pm2 management
-pm2 start index.js --name "bigoof"
-
-# 3. Configure pm2 to auto-start on server reboot
-pm2 save
-pm2 startup
+docker compose up -d
+docker compose logs -f
 ```
 
----
+Persistent SQLite data is stored on the host in `./data/bigoof.db` (`DATABASE_PATH=/data/bigoof.db`).
 
-### Option D: Windows Subsystem for Linux (WSL2)
+### PM2 (Linux / macOS / Windows)
 
-If you are on Windows 10/11 and prefer a native Linux terminal:
-1. Open PowerShell and run: `wsl --install` (reboot if prompted).
-2. Open **Ubuntu** from your Windows Start Menu.
-3. Install Node.js: `sudo apt update && sudo apt install -y nodejs npm git`
-4. Clone and launch BigOof inside WSL:
-   ```bash
-   git clone https://github.com/Pri8899/BigOof.git
-   cd BigOof
-   npm install
-   cp .env.example .env
-   # Edit .env, deploy, and start:
-   npm run deploy
-   npm start
-   ```
+```bash
+npm install -g pm2
+npm run deploy
+pm2 start index.js --name "bigoof"
+pm2 save
+```
 
 ---
 
 ## 🗄 Database Architecture
 
-BigOof uses **SQLite** through `better-sqlite3` configured in **WAL (Write-Ahead Logging)** mode for lightning-fast concurrent operations.
+BigOof persists state in SQLite (`bigoof.db` by default, or `DATABASE_PATH`) using **WAL mode**:
 
 | Table | Purpose |
 |---|---|
-| `guild_config` | Multi-tenant key-value store (`(guild_id, key)`) keeping all server configurations isolated. |
-| `users` | Maps Discord User IDs to Codeforces, AtCoder, Toph, and GitHub handles. |
-| `ratings` | Caches current and peak ratings, platform ranks, and solved counts. |
-| `streaks` | Tracks active daily solving streaks and all-time records. |
-| `daily_problems` | Caches daily challenge problem sets, solvers, and first blood records. |
-| `vs_matches` & `vs_participants` | Manages live 1v1 and multiplayer duel lobbies, problems, and submission timers. |
-| `virtual_contests` | Manages server-wide simulated contest rounds and scoreboards. |
-| `custom_contests` | Admin-defined contests featured in the radar and countdown alerts. |
-| `notified_contests` | Deduplication store preventing redundant contest reminder pings. |
-| `processed_submissions` | Deduplication store ensuring Accepted verdicts are never announced twice. |
-| `processed_github_commits` | Deduplication store ensuring GitHub commits are never announced twice. |
+| `guild_config` | Per-server configuration (`(guild_id, key)`) and host global settings |
+| `users` | Discord IDs mapped to Codeforces, AtCoder, Toph, and GitHub handles |
+| `ratings` & `rating_history` | Cached ratings, peaks, solved counts, and chronological rating history |
+| `streaks` | Current & max daily activity streaks across platforms |
+| `daily_problems` | Daily challenge problem sets, First Blood owners, and Daily Sweeps |
+| `vs_matches` & `vs_participants` | Live Battle Grid & Classic Race state, tile locks, scores, and attempts |
+| `virtual_contests` & `vc_participants` | Persistent Virtual Contests with timer recovery |
+| `notified_contests` | Upcoming platform + Custom contests and 24h / 1h alert tracking |
+| `contest_wrapups` | Per-guild finished-round wrap-up deduplication |
+| `weekly_snapshots` | Sunday baseline snapshots for delta rating/solve digests |
+| `processed_submissions` & `processed_github_commits` | Submission & GitHub event deduplication |
 
 ---
 
-## ❓ Frequently Asked Questions & Troubleshooting (Including Windows)
+## ❓ Frequently Asked Questions & Troubleshooting
 
-### 🪟 Q (Windows): PowerShell error `File ...\npm.ps1 cannot be loaded because running scripts is disabled on this system`.
-> **Fix:** PowerShell restricts execution of scripts by default on Windows. Open PowerShell as Administrator (or current user) and run:
-> ```powershell
-> Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-> ```
-> Type `Y` and press Enter. Now retry running `npm run deploy` or `npm start`.
-
-### 🪟 Q (Windows): `'node'` or `'npm'` is not recognized as an internal or external command.
-> **Fix:** After installing Node.js from [nodejs.org](https://nodejs.org/), make sure to close and restart all open Command Prompt or PowerShell windows so your system updates its `%PATH%` environment variable.
-
-### 🪟 Q (Windows): My `.env` file was created as `.env.txt`.
-> **Fix:** Windows File Explorer often hides file extensions and appends `.txt` to new files.
-> - In Windows 11: Open File Explorer > click **View** on the top menu > **Show** > check **File name extensions**.
-> - In Windows 10: Open File Explorer > click the **View** tab > check the **File name extensions** box.
-> - Then rename `.env.txt` to `.env` (removing the `.txt` suffix).
-
-### 🪟 Q (Windows): `better-sqlite3` build or `node-gyp` error during `npm install`.
-> **Fix:** Ensure you are using an official Node.js LTS release (v18, v20, or v22) from [nodejs.org](https://nodejs.org/). `better-sqlite3` provides precompiled binaries for Windows x64 on all official LTS versions. If you are on an unreleased bleeding-edge version, downgrade to Node LTS (e.g., v20.x or v22.x).
-
-### 🌐 Q: `An invalid token was provided.`
-> **Fix:** In the [Discord Developer Portal](https://discord.com/developers/applications) > your application > **Bot**, click **Reset Token**, copy the freshly generated token, and paste it into `DISCORD_TOKEN` in `.env` without extra spaces or quotes.
-
-### 🌐 Q: Slash commands do not show up in my Discord server.
-> **Fix:** Run `npm run deploy`. If `GUILD_ID` is left empty in `.env`, Discord registers commands globally, which may take up to an hour to propagate across Discord's CDN. For instant testing in your server, set `GUILD_ID=your_server_id` in `.env` and rerun `npm run deploy`.
-
-### 🌐 Q: The bot cannot assign rank or streak roles (`Missing Permissions`).
-> **Fix:** In Discord **Server Settings > Roles**, drag the **BigOof** role **above** the rank roles (`Legendary Grandmaster`, `CP`, etc.). Discord prohibits bots from modifying roles positioned higher than their own highest role.
-
-### 🌐 Q: Solving streaks reset at the wrong time of day.
-> **Fix:** Set your local timezone in `.env` (e.g. `TIMEZONE=Asia/Dhaka` or `TIMEZONE=America/New_York`). Daily streaks calculate against your local midnight.
-
----
-
-## 🤝 Contributing
-
-Contributions are warmly welcomed from the open-source community!
-
-1. Fork the Project.
-2. Create your Feature Branch:
-   ```bash
-   git checkout -b feature/EpicFeature
-   ```
-3. Commit your Changes:
-   ```bash
-   git commit -m 'feat: Add EpicFeature'
-   ```
-4. Push to the Branch:
-   ```bash
-   git push origin feature/EpicFeature
-   ```
-5. Open a Pull Request.
+- **Slash commands don't appear immediately:** Set `GUILD_ID` in `.env` during testing and run `npm run deploy`; global command propagation on Discord can take up to an hour.
+- **Role assignment fails (`Missing Permissions`):** Ensure the bot has **Manage Roles** and its role sits higher in **Server Settings → Roles** than `CP`, rank, and streak roles.
+- **GitHub feed stops updating (`403`):** Add a personal access token to `GITHUB_TOKEN` in `.env` to raise limits from 60 to 5,000 requests/hour.
 
 ---
 

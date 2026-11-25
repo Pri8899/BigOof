@@ -1,30 +1,34 @@
-// commands/admin/backupdb.js — Manually trigger a DB backup to the backup channel
+// commands/admin/backupdb.js — Manually trigger a consistent WAL-safe DB backup
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { runBackup } = require('../../tasks/autoBackup');
+const { isBotOwner } = require('../../utils/envHelper');
+const { successEmbed, errorEmbed } = require('../../utils/embeds');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('backupdb')
-    .setDescription('Admin only: Manually back up the database to the backup channel right now.')
+    .setDescription('Bot Owner only: Immediately upload a database backup to the backup channel.')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 });
 
-    const isOwner = interaction.user.id === process.env.OWNER_ID ||
-      (interaction.client.application?.owner?.id === interaction.user.id) ||
-      (interaction.client.application?.owner?.members?.has(interaction.user.id));
-
-    if (!isOwner) {
-      return interaction.editReply('❌ Permission Denied: Database operations are restricted to the Bot Owner.');
+    if (!isBotOwner(interaction)) {
+      return interaction.editReply({
+        embeds: [errorEmbed('Permission Denied', 'Database operations are restricted to the Bot Owner.')]
+      });
     }
 
     try {
-      await runBackup(interaction.client);
-      await interaction.editReply('✅ Database backup uploaded to the backup channel!');
+      await runBackup(interaction.client, { throwOnError: true });
+      return interaction.editReply({
+        embeds: [successEmbed('Backup Uploaded', 'Database snapshot created cleanly and uploaded to the backup channel!')]
+      });
     } catch (err) {
-      console.error('[backupdb]', err);
-      await interaction.editReply('❌ Backup failed. Check that the backup channel is set in .env (BACKUP_CHANNEL_ID) or via `/set-channel`.');
+      console.error('[backupdb]', err.message);
+      return interaction.editReply({
+        embeds: [errorEmbed('Backup Failed', err.message)]
+      });
     }
   }
 };

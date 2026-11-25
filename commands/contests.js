@@ -1,7 +1,8 @@
-// commands/contests.js — Show upcoming contests (CF + AtCoder only)
+// commands/contests.js — Show upcoming contests across CF, AtCoder, Toph, and Custom
 const { SlashCommandBuilder } = require('discord.js');
-const { getUpcomingContests } = require('../database/db');
+const { getUpcomingContests, getConfig } = require('../database/db');
 const { buildContestListEmbed } = require('../utils/embeds');
+const { getPlatformEmojis } = require('../utils/emojis');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,14 +18,22 @@ module.exports = {
           { name: '🎯 AtCoder',         value: 'atcoder' },
           { name: '⚡ Toph',            value: 'toph' },
           { name: '🌟 Custom Contests', value: 'custom' }
-        )),
+        )
+    ),
 
   async execute(interaction) {
+    await interaction.deferReply();
+
     const platform = interaction.options.getString('platform') ?? 'all';
     const contests = getUpcomingContests(7 * 24 * 3600);
-    const { getPlatformEmojis } = require('../utils/emojis');
+    const apiStatus = {
+      cf: getConfig('cf_api_online') !== '0',
+      ac: getConfig('ac_api_online') !== '0',
+      toph: getConfig('toph_api_online') !== '0'
+    };
+
     const emojis = await getPlatformEmojis(interaction.guild);
-    const embed    = buildContestListEmbed(contests, platform, {}, emojis);
-    return interaction.reply({ embeds: [embed] });
+    const embed = buildContestListEmbed(contests, platform, apiStatus, emojis);
+    return interaction.editReply({ embeds: [embed] });
   }
 };

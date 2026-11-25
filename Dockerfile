@@ -11,6 +11,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY . .
+RUN mkdir -p /data
 
 ENV NODE_ENV=production
 

@@ -1,9 +1,10 @@
-// commands/compare.js — Head-to-head competitive programming comparison
+// commands/compare.js — Head-to-head Codeforces comparison across members or arbitrary handles
 const { SlashCommandBuilder } = require('discord.js');
-const { getUser, getRatings, getStreak, getHeadToHeadVersus } = require('../database/db');
+const { getUser, getStreak, getHeadToHeadVersus } = require('../database/db');
 const { getCFUser, getCFSolvedSet } = require('../utils/codeforces');
 const { buildCompareEmbed, errorEmbed } = require('../utils/embeds');
-const { getPlatformEmojis } = require('../utils/emojis');
+
+const CF_ICON = 'https://codeforces.org/s/0/images/codeforces-telegram-square.png';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -12,108 +13,121 @@ module.exports = {
     .addUserOption(opt =>
       opt.setName('user1')
         .setDescription('First member to compare')
-        .setRequired(false))
+        .setRequired(false)
+    )
     .addUserOption(opt =>
       opt.setName('user2')
         .setDescription('Second member to compare (defaults to yourself)')
-        .setRequired(false))
+        .setRequired(false)
+    )
     .addStringOption(opt =>
       opt.setName('handle1')
         .setDescription('Compare arbitrary Codeforces handle 1')
-        .setRequired(false))
+        .setRequired(false)
+    )
     .addStringOption(opt =>
       opt.setName('handle2')
         .setDescription('Compare arbitrary Codeforces handle 2')
-        .setRequired(false)),
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
     await interaction.deferReply();
 
-    const handle1Opt = interaction.options.getString('handle1');
-    const handle2Opt = interaction.options.getString('handle2');
+    const u1 = interaction.options.getMember('user1') || interaction.options.getUser('user1');
+    const u2 = interaction.options.getMember('user2') || interaction.options.getUser('user2');
+    const handle1Opt = interaction.options.getString('handle1')?.trim() || null;
+    const handle2Opt = interaction.options.getString('handle2')?.trim() || null;
 
-    let member1 = null;
-    let member2 = null;
-    let user1 = null;
-    let user2 = null;
-    let cfHandle1 = null;
-    let cfHandle2 = null;
-    let name1 = null;
-    let name2 = null;
-    let avatar1 = null;
-    let avatar2 = null;
-    let discordId1 = null;
-    let discordId2 = null;
+    let cfHandle1 = null, cfHandle2 = null;
+    let name1 = null, name2 = null;
+    let avatar1 = CF_ICON, avatar2 = CF_ICON;
+    let discordId1 = null, discordId2 = null;
+
+    const resolveMemberMeta = (target) => {
+      const id = target.id;
+      const name = target.displayName || target.username || 'Member';
+      const avatar = typeof target.user?.displayAvatarURL === 'function'
+        ? target.user.displayAvatarURL({ dynamic: true })
+        : (typeof target.displayAvatarURL === 'function' ? target.displayAvatarURL({ dynamic: true }) : CF_ICON);
+      return { id, name, avatar };
+    };
 
     if (handle1Opt && handle2Opt) {
-      cfHandle1 = handle1Opt.trim();
-      cfHandle2 = handle2Opt.trim();
+      cfHandle1 = handle1Opt;
+      cfHandle2 = handle2Opt;
       name1 = cfHandle1;
       name2 = cfHandle2;
-      avatar1 = 'https://codeforces.org/s/0/images/codeforces-telegram-square.png';
-      avatar2 = 'https://codeforces.org/s/0/images/codeforces-telegram-square.png';
-    } else {
-      const u1 = interaction.options.getMember('user1');
-      const u2 = interaction.options.getMember('user2');
-
-      if (!u1 && !u2 && !handle1Opt) {
+    } else if (!u1 && !u2 && (handle1Opt || handle2Opt)) {
+      const callerDb = getUser(interaction.user.id);
+      if (!callerDb?.cf_handle) {
+        const provided = handle1Opt || handle2Opt;
         return interaction.editReply({
-          embeds: [errorEmbed('Missing Arguments', 'Please specify at least one member to compare, e.g. `/compare user1:@Member` or provide two handles `/compare handle1:tourist handle2:Benq`.')]
+          embeds: [errorEmbed(
+            'Handle Required',
+            `You haven't linked a Codeforces account yet. Link yours with \`/link\` or specify both handles: \`/compare handle1:${provided} handle2:your_handle\`.`
+          )]
+        });
+      }
+      const callerMeta = resolveMemberMeta(interaction.member || interaction.user);
+      discordId1 = callerMeta.id;
+      name1 = callerMeta.name;
+      avatar1 = callerMeta.avatar;
+      cfHandle1 = callerDb.cf_handle;
+      cfHandle2 = handle1Opt || handle2Opt;
+      name2 = cfHandle2;
+    } else if ((u1 || u2) && (handle1Opt || handle2Opt)) {
+      const target = u1 || u2;
+      const meta = resolveMemberMeta(target);
+      const dbU = getUser(meta.id);
+      if (!dbU?.cf_handle) {
+        return interaction.editReply({
+          embeds: [errorEmbed('Unlinked Account', `**${meta.name}** has not linked a Codeforces account yet.`)]
+        });
+      }
+      discordId1 = meta.id;
+      name1 = meta.name;
+      avatar1 = meta.avatar;
+      cfHandle1 = dbU.cf_handle;
+      cfHandle2 = handle1Opt || handle2Opt;
+      name2 = cfHandle2;
+    } else if (u1 || u2) {
+      const target1 = (u1 && u2) ? u1 : (interaction.member || interaction.user);
+      const target2 = (u1 && u2) ? u2 : (u1 || u2);
+
+      const m1 = resolveMemberMeta(target1);
+      const m2 = resolveMemberMeta(target2);
+      const user1 = getUser(m1.id);
+      const user2 = getUser(m2.id);
+
+      if (!user1?.cf_handle) {
+        return interaction.editReply({
+          embeds: [errorEmbed('Unlinked Account', `**${m1.name}** has not linked a Codeforces account yet! Use \`/link\` first.`)]
+        });
+      }
+      if (!user2?.cf_handle) {
+        return interaction.editReply({
+          embeds: [errorEmbed('Unlinked Account', `**${m2.name}** has not linked a Codeforces account yet! Use \`/link\` first.`)]
         });
       }
 
-      if (u1 && u2) {
-        member1 = u1;
-        member2 = u2;
-      } else if (u1 && !u2) {
-        member1 = interaction.member;
-        member2 = u1;
-      } else if (!u1 && u2) {
-        member1 = interaction.member;
-        member2 = u2;
-      } else if (handle1Opt && !handle2Opt) {
-        const callerUser = getUser(interaction.user.id);
-        if (!callerUser?.cf_handle) {
-          return interaction.editReply({
-            embeds: [errorEmbed('Handle Required', `You haven't linked a Codeforces account yet. Please link your account with \`/link\` or specify both handles: \`/compare handle1:${handle1Opt} handle2:your_handle\`.`)]
-          });
-        }
-        member1 = interaction.member;
-        cfHandle1 = callerUser.cf_handle;
-        cfHandle2 = handle1Opt.trim();
-        name1 = interaction.member.displayName;
-        name2 = cfHandle2;
-        avatar1 = interaction.user.displayAvatarURL({ dynamic: true });
-        avatar2 = 'https://codeforces.org/s/0/images/codeforces-telegram-square.png';
-      }
-
-      if (member1 && member2) {
-        user1 = getUser(member1.id);
-        user2 = getUser(member2.id);
-        discordId1 = member1.id;
-        discordId2 = member2.id;
-        name1 = member1.displayName;
-        name2 = member2.displayName;
-        avatar1 = member1.user.displayAvatarURL({ dynamic: true });
-        avatar2 = member2.user.displayAvatarURL({ dynamic: true });
-
-        if (!user1?.cf_handle) {
-          return interaction.editReply({
-            embeds: [errorEmbed('Unlinked Account', `**${name1}** has not linked a Codeforces account yet! Use \`/link\` first.`)]
-          });
-        }
-        if (!user2?.cf_handle) {
-          return interaction.editReply({
-            embeds: [errorEmbed('Unlinked Account', `**${name2}** has not linked a Codeforces account yet! Use \`/link\` first.`)]
-          });
-        }
-
-        cfHandle1 = user1.cf_handle;
-        cfHandle2 = user2.cf_handle;
-      }
+      discordId1 = m1.id;
+      discordId2 = m2.id;
+      name1 = m1.name;
+      name2 = m2.name;
+      avatar1 = m1.avatar;
+      avatar2 = m2.avatar;
+      cfHandle1 = user1.cf_handle;
+      cfHandle2 = user2.cf_handle;
+    } else {
+      return interaction.editReply({
+        embeds: [errorEmbed(
+          'Missing Arguments',
+          'Specify at least one member or handle, e.g. `/compare user1:@Member` or `/compare handle1:tourist handle2:Benq`.'
+        )]
+      });
     }
 
-    // Fetch stats in parallel
     const [cfData1, cfData2, solvedSet1, solvedSet2] = await Promise.all([
       getCFUser(cfHandle1),
       getCFUser(cfHandle2),
@@ -123,50 +137,45 @@ module.exports = {
 
     if (!cfData1) {
       return interaction.editReply({
-        embeds: [errorEmbed('Codeforces Lookup Error', `Could not find Codeforces profile for handle \`${cfHandle1}\`.`)]
+        embeds: [errorEmbed('Codeforces Lookup Error', `Could not find Codeforces profile for \`${cfHandle1}\`.`)]
       });
     }
     if (!cfData2) {
       return interaction.editReply({
-        embeds: [errorEmbed('Codeforces Lookup Error', `Could not find Codeforces profile for handle \`${cfHandle2}\`.`)]
+        embeds: [errorEmbed('Codeforces Lookup Error', `Could not find Codeforces profile for \`${cfHandle2}\`.`)]
       });
     }
 
-    // Compute problem overlap
     let commonCount = 0;
     for (const p of solvedSet1) {
       if (solvedSet2.has(p)) commonCount++;
     }
 
-    const unique1 = Math.max(0, solvedSet1.size - commonCount);
-    const unique2 = Math.max(0, solvedSet2.size - commonCount);
+    const solvedSet1Size = solvedSet1.size || cfData1.solved || 0;
+    const solvedSet2Size = solvedSet2.size || cfData2.solved || 0;
+    const unique1 = Math.max(0, solvedSet1Size - commonCount);
+    const unique2 = Math.max(0, solvedSet2Size - commonCount);
 
-    // Versus match record if both are guild members
-    let h2h = { total: 0, wins1: 0, wins2: 0, ties: 0 };
-    if (discordId1 && discordId2) {
-      h2h = getHeadToHeadVersus(discordId1, discordId2);
-    }
+    const h2h = (discordId1 && discordId2)
+      ? getHeadToHeadVersus(discordId1, discordId2)
+      : { total: 0, wins1: 0, wins2: 0, ties: 0 };
 
-    // Streaks if members
     const streak1 = discordId1 ? (getStreak(discordId1, 'cf')?.current_streak || 0) : null;
     const streak2 = discordId2 ? (getStreak(discordId2, 'cf')?.current_streak || 0) : null;
-
-    const emojis = await getPlatformEmojis(interaction.guild);
 
     const embed = buildCompareEmbed({
       name1, name2,
       avatar1, avatar2,
       cfHandle1, cfHandle2,
       cfData1, cfData2,
-      solvedSet1Size: solvedSet1.size || cfData1.solved,
-      solvedSet2Size: solvedSet2.size || cfData2.solved,
+      solvedSet1Size,
+      solvedSet2Size,
       commonCount,
       unique1,
       unique2,
       h2h,
       streak1,
-      streak2,
-      emojis
+      streak2
     });
 
     return interaction.editReply({ embeds: [embed] });

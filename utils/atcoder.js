@@ -1,4 +1,4 @@
-// utils/atcoder.js — AtCoder wrapper (scrapes atcoder.jp directly)
+// utils/atcoder.js — AtCoder API wrapper (Kenkoooo API + official atcoder.jp fallback)
 const axios = require('axios');
 
 async function axiosGetWithRetry(url, options = {}, retries = 3, backoff = 1500) {
@@ -6,14 +6,14 @@ async function axiosGetWithRetry(url, options = {}, retries = 3, backoff = 1500)
     try {
       return await axios.get(url, options);
     } catch (err) {
-      const status = err.response ? err.response.status : null;
+      const status = err.response?.status;
       const isRateLimit = status === 429;
       const isServerError = status && status >= 500;
-      const isTimeout = err.code === 'ECONNABORTED' || err.message.includes('timeout');
-      
+      const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout');
+
       if ((isRateLimit || isServerError || isTimeout) && i < retries - 1) {
         const delay = backoff * Math.pow(2, i);
-        console.warn(`[AC API Retry] Failed to fetch ${url} (Status: ${status || err.code}). Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+        console.warn(`[AC API Retry] Failed ${url} (${status || err.code}). Retrying in ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
@@ -24,112 +24,108 @@ async function axiosGetWithRetry(url, options = {}, retries = 3, backoff = 1500)
 
 const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
-  'Accept':     'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.5',
-  'Referer':    'https://atcoder.jp'
+  'Referer': 'https://atcoder.jp'
 };
 
 const KENKOOOO_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
-  'Origin':     'https://kenkoooo.com',
-  'Referer':    'https://kenkoooo.com/atcoder/'
+  'Origin': 'https://kenkoooo.com',
+  'Referer': 'https://kenkoooo.com/atcoder/'
 };
 
-// ─── Fetch Upcoming Contests ──────────────────────────────────
+/**
+ * Fetch upcoming contests from Kenkoooo (sorted chronologically) or atcoder.jp fallback.
+ */
 async function getACContests() {
-  // Try Kenkoooo first
   try {
-    const res = await axios.get(
+    const res = await axiosGetWithRetry(
       'https://kenkoooo.com/atcoder/resources/contests.json',
       { timeout: 10000, headers: KENKOOOO_HEADERS }
     );
     if (Array.isArray(res.data)) {
       const now = Math.floor(Date.now() / 1000);
-      const upcoming = res.data.filter(c => c.start_epoch_second > now).slice(0, 20).map(c => ({
-        id:          `ac_${c.id}`,
-        platform:    'AtCoder',
-        name:        c.title,
-        startTime:   c.start_epoch_second,
-        durationSec: c.duration_second,
-        url:         `https://atcoder.jp/contests/${c.id}`
-      }));
+      const upcoming = res.data
+        .filter(c => c.start_epoch_second > now)
+        .sort((a, b) => a.start_epoch_second - b.start_epoch_second)
+        .slice(0, 20)
+        .map(c => ({
+          id: `ac_${c.id}`,
+          platform: 'AtCoder',
+          name: c.title,
+          startTime: c.start_epoch_second,
+          durationSec: c.duration_second,
+          url: `https://atcoder.jp/contests/${c.id}`
+        }));
       if (upcoming.length > 0) {
         console.log(`[AC] Fetched ${upcoming.length} contests from kenkoooo.`);
         return upcoming;
       }
     }
   } catch (e) {
-    console.warn('[AC] Kenkoooo failed:', e.message);
+    console.warn('[AC] Kenkoooo contests failed:', e.message);
   }
-  // Fallback: scrape atcoder.jp
   return scrapeAtCoderContests();
 }
 
-// ─── Scrape atcoder.jp/contests ───────────────────────────────
 async function scrapeAtCoderContests() {
   try {
-    const res = await axios.get('https://atcoder.jp/contests/?lang=en', {
+    const res = await axiosGetWithRetry('https://atcoder.jp/contests/?lang=en', {
       timeout: 15000,
       headers: BROWSER_HEADERS
     });
 
-    const html     = res.data;
-    const now      = Math.floor(Date.now() / 1000);
+    const html = res.data;
+    const now = Math.floor(Date.now() / 1000);
     const contests = [];
 
-    // Slice just the Upcoming Contests section
     const startIdx = html.indexOf('contest-table-upcoming');
-    const endIdx   = html.indexOf('contest-table-recent', startIdx);
+    const endIdx = html.indexOf('contest-table-recent', startIdx);
     if (startIdx === -1) {
       console.warn('[AC] Could not find upcoming contests table.');
       return [];
     }
     const section = html.slice(startIdx, endIdx > -1 ? endIdx : startIdx + 60000);
 
-    // Parse each <tr> block
-    // AtCoder HTML: <time class='fixtime fixtime-full'>2026-05-23 21:00:00+0900</time>
     const rowRegex = /<tr>([\s\S]*?)<\/tr>/g;
     let m;
     while ((m = rowRegex.exec(section)) !== null) {
       const row = m[1];
-
-      // ── Start Time ──
       const timeMatch = row.match(/<time[^>]*>([\d]{4}-[\d]{2}-[\d]{2} [\d]{2}:[\d]{2}:[\d]{2}\+\d{4})<\/time>/);
       if (!timeMatch) continue;
-      // "2026-05-23 21:00:00+0900" → ISO: replace space with T
-      const isoStr    = timeMatch[1].replace(' ', 'T');
+      const isoStr = timeMatch[1].replace(' ', 'T');
       const startTime = Math.floor(new Date(isoStr).getTime() / 1000);
-      if (!startTime || isNaN(startTime) || startTime <= now) continue;
+      if (!startTime || Number.isNaN(startTime) || startTime <= now) continue;
 
-      // ── Contest Name & URL ──
       const linkMatch = row.match(/href="\/contests\/([^"]+)"[^>]*>([^<]+)<\/a>/);
       if (!linkMatch) continue;
       const contestId = linkMatch[1].trim();
-      const name      = linkMatch[2].trim();
+      const name = linkMatch[2].trim();
       if (!name || contestId === 'archive') continue;
 
-      // ── Duration ── plain text in a <td> like "01:40" or "240:00"
       let durationSec = 7200;
-      const tdIter    = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)];
+      const tdIter = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)];
       for (const td of tdIter) {
         const inner = td[1].replace(/<[^>]+>/g, '').trim();
-        const dur   = inner.match(/^(\d+):(\d{2})$/);
+        const dur = inner.match(/^(\d+):(\d{2})$/);
         if (dur) {
-          durationSec = parseInt(dur[1]) * 3600 + parseInt(dur[2]) * 60;
+          durationSec = parseInt(dur[1], 10) * 3600 + parseInt(dur[2], 10) * 60;
           break;
         }
       }
 
       contests.push({
-        id:          `ac_${contestId}`,
-        platform:    'AtCoder',
+        id: `ac_${contestId}`,
+        platform: 'AtCoder',
         name,
         startTime,
         durationSec,
-        url:         `https://atcoder.jp/contests/${contestId}`
+        url: `https://atcoder.jp/contests/${contestId}`
       });
     }
 
+    contests.sort((a, b) => a.startTime - b.startTime);
     console.log(`[AC] Scraped ${contests.length} upcoming contests from atcoder.jp`);
     return contests.slice(0, 20);
   } catch (err) {
@@ -138,104 +134,123 @@ async function scrapeAtCoderContests() {
   }
 }
 
-// Helper to fetch solved count from submissions API
+/**
+ * Fetches total distinct AC problems solved by an AtCoder handle (up to 50 pages / 25k subs).
+ */
 async function getACSolvedCount(handle) {
   const solvedProblems = new Set();
   let fromSecond = 0;
   let pagesFetched = 0;
-  while (pagesFetched < 10) { // Safety cap to prevent infinite loop
+  const encoded = encodeURIComponent(handle);
+
+  while (pagesFetched < 50) {
     const res = await axiosGetWithRetry(
-      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${handle}&from_second=${fromSecond}`,
+      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${encoded}&from_second=${fromSecond}`,
       { timeout: 15000, headers: KENKOOOO_HEADERS }
     );
-    if (!Array.isArray(res.data) || res.data.length === 0) {
-      break;
-    }
+    if (!Array.isArray(res.data) || res.data.length === 0) break;
+
     for (const s of res.data) {
-      if (s.result === 'AC') {
-        solvedProblems.add(s.problem_id);
-      }
+      if (s.result === 'AC') solvedProblems.add(s.problem_id);
     }
-    if (res.data.length < 500) {
-      break;
-    }
+    if (res.data.length < 500) break;
+
     const maxEpoch = Math.max(...res.data.map(s => s.epoch_second));
+    if (maxEpoch + 1 <= fromSecond) break;
     fromSecond = maxEpoch + 1;
     pagesFetched++;
   }
   return solvedProblems.size;
 }
 
-// ─── User Stats ──────────────────────────────────────────────
+/**
+ * Fetches AtCoder rating, peak rating, rank title, solved count, and last contest.
+ */
 async function getACUser(handle) {
-  const solved = await getACSolvedCount(handle);
+  const encoded = encodeURIComponent(handle);
+  let solved = null;
   try {
+    try {
+      solved = await getACSolvedCount(handle);
+    } catch (solvedErr) {
+      console.warn(`[AC] Solved count lookup failed for ${handle}:`, solvedErr.message);
+    }
+
     const res = await axiosGetWithRetry(
-      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/history?user=${handle}`,
+      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/history?user=${encoded}`,
       { timeout: 15000, headers: KENKOOOO_HEADERS }
     ).catch(() => null);
 
-    let rating = 0, maxRating = 0;
+    let rating = 0;
+    let maxRating = 0;
+    let lastContest = null;
+
     if (res && Array.isArray(res.data) && res.data.length > 0) {
       const last = res.data[res.data.length - 1];
-      rating    = last.NewRating ?? 0;
+      rating = last.NewRating ?? 0;
       maxRating = Math.max(...res.data.map(h => h.NewRating ?? 0));
-    } else {
-      // Fallback to official history JSON endpoint
-      const officialRes = await axiosGetWithRetry(`https://atcoder.jp/users/${handle}/history/json`, {
-        timeout: 15000,
-        headers: BROWSER_HEADERS
-      }).catch(() => null);
-      if (officialRes && Array.isArray(officialRes.data) && officialRes.data.length > 0) {
-        const last = officialRes.data[officialRes.data.length - 1];
-        rating    = last.NewRating ?? 0;
-        maxRating = Math.max(...officialRes.data.map(h => h.NewRating ?? 0));
-      }
+      lastContest = {
+        contestName: last.ContestName || last.ContestScreenName,
+        rank: last.Place
+      };
     }
 
-    let lastContest = null;
-    try {
-      const histRes = await axiosGetWithRetry(`https://atcoder.jp/users/${handle}/history/json`, {
-        timeout: 15000,
-        headers: BROWSER_HEADERS
-      });
-      if (Array.isArray(histRes.data) && histRes.data.length > 0) {
-        const last = histRes.data[histRes.data.length - 1];
-        lastContest = {
-          contestName: last.ContestName || last.ContestScreenName,
-          rank: last.Place
-        };
-      }
-    } catch (_) {}
+    // Fetch official AtCoder JSON when Kenkoooo history didn't supply contest metadata or was empty
+    if (!lastContest || rating === 0) {
+      try {
+        const officialRes = await axiosGetWithRetry(
+          `https://atcoder.jp/users/${encoded}/history/json`,
+          { timeout: 15000, headers: BROWSER_HEADERS }
+        );
+        if (Array.isArray(officialRes.data) && officialRes.data.length > 0) {
+          const last = officialRes.data[officialRes.data.length - 1];
+          rating = last.NewRating ?? rating;
+          maxRating = Math.max(maxRating, ...officialRes.data.map(h => h.NewRating ?? 0));
+          lastContest = {
+            contestName: last.ContestName || last.ContestScreenName,
+            rank: last.Place
+          };
+        }
+      } catch (_) {}
+    }
 
-    return { rating, max_rating: maxRating, rank_title: getACRankTitle(rating), solved, acceptance: 0, lastContest };
+    return {
+      rating,
+      max_rating: maxRating,
+      rank_title: getACRankTitle(rating),
+      solved: solved ?? 0,
+      acceptance: 0,
+      lastContest
+    };
   } catch (err) {
     console.error(`[AC] User fetch error for ${handle}:`, err.message);
-    // Fallback: check if handle actually exists on AtCoder
-    const isValid = await validateACHandle(handle);
-    if (isValid) {
-      return { rating: 0, max_rating: 0, rank_title: 'Unrated', solved, acceptance: 0, lastContest: null };
-    }
-    throw err; // Propagate the error so ratingSync knows the fetch failed
+    return null;
   }
 }
 
-
-// ─── Handle Validation ───────────────────────────────────────
+/**
+ * Validates that an AtCoder user actually exists (checks atcoder.jp profile status first).
+ */
 async function validateACHandle(handle) {
+  const encoded = encodeURIComponent(handle);
   try {
-    const res = await axios.get(
-      `https://kenkoooo.com/atcoder/atcoder-api/v3/user/history?user=${handle}`,
-      { timeout: 8000, headers: KENKOOOO_HEADERS }
-    );
-    return Array.isArray(res.data);
+    const r = await axiosGetWithRetry(`https://atcoder.jp/users/${encoded}`, {
+      timeout: 8000,
+      headers: BROWSER_HEADERS,
+      validateStatus: s => s < 500
+    }, 2);
+    return r.status === 200;
   } catch {
     try {
-      const r = await axios.get(`https://atcoder.jp/users/${handle}`, {
-        timeout: 8000, headers: BROWSER_HEADERS, validateStatus: s => s < 500
-      });
-      return r.status === 200;
-    } catch { return false; }
+      const res = await axiosGetWithRetry(
+        `https://kenkoooo.com/atcoder/atcoder-api/v3/user/history?user=${encoded}`,
+        { timeout: 8000, headers: KENKOOOO_HEADERS },
+        2
+      );
+      return Array.isArray(res.data) && res.data.length > 0;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -245,9 +260,9 @@ function getACRankTitle(rating) {
   if (rating >= 2000) return 'Yellow';
   if (rating >= 1600) return 'Blue';
   if (rating >= 1200) return 'Cyan';
-  if (rating >= 800)  return 'Green';
-  if (rating >= 400)  return 'Brown';
-  if (rating > 0)     return 'Gray';
+  if (rating >= 800) return 'Green';
+  if (rating >= 400) return 'Brown';
+  if (rating > 0) return 'Gray';
   return 'Unrated';
 }
 

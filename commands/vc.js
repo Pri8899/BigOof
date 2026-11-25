@@ -1,11 +1,22 @@
-// commands/vc.js — Unified Virtual Contest command (start, end, status)
-const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ComponentType, PermissionFlagsBits } = require('discord.js');
-const { getUser, getActiveVCForChannel, createVC, getVC, joinVC, getVCParticipants, endVC, updateVCSolved, getRatings } = require('../database/db');
-const { getCFProblems, checkCFSolved } = require('../utils/codeforces');
-const { errorEmbed, successEmbed }     = require('../utils/embeds');
+// commands/vc.js — Persistent Virtual Contests with timestamp-scoped scoring & restart recovery
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits } = require('discord.js');
 const crypto = require('crypto');
+const {
+  getUser,
+  getActiveVCForChannel,
+  getAllActiveVCs,
+  createVC,
+  getVC,
+  joinVC,
+  getVCParticipants,
+  markVCEndedIfActive,
+  updateVCSolved,
+  getRatings
+} = require('../database/db');
+const { getCFProblems, getCFStatus } = require('../utils/codeforces');
+const { chunkLines } = require('../utils/envHelper');
+const { errorEmbed, successEmbed } = require('../utils/embeds');
 
-// Active VC timers (in-memory)
 const vcTimers = new Map();
 
 const TEAM_NAMES = [
@@ -21,35 +32,46 @@ const TEAM_NAMES = [
   { name: 'Team J', emoji: '🟩' }
 ];
 
-async function getCFUserSolvedKeys(handle) {
-  try {
-    const axios = require('axios');
-    const res = await axios.get(
-      `https://codeforces.com/api/user.status?handle=${handle}&from=1&count=200`,
-      { timeout: 10000 }
-    );
-    if (res.data.status !== 'OK') return new Set();
-    const solved = new Set();
-    for (const sub of res.data.result) {
-      if (sub.verdict === 'OK' && sub.problem) {
-        solved.add(`${sub.problem.contestId}-${sub.problem.index}`);
-      }
+const CF_TAGS = [
+  'implementation', 'math', 'greedy', 'dp', 'data structures',
+  'graphs', 'strings', 'binary search', 'constructive algorithms',
+  'number theory'
+];
+
+const DIV_CHOICES = [
+  { name: 'Div. 1', value: 'div1' },
+  { name: 'Div. 2', value: 'div2' },
+  { name: 'Div. 3', value: 'div3' },
+  { name: 'Div. 4', value: 'div4' }
+];
+
+/**
+ * Fetches CF problem keys solved STRICTLY within the VC's [startedAt, endsAt] window.
+ */
+async function getCFUserWindowSolvedKeys(handle, startedAt, endsAt) {
+  const subs = await getCFStatus(handle, 500);
+  const solved = new Set();
+  if (!subs) return solved;
+
+  for (const sub of subs) {
+    if (
+      sub.verdict === 'OK' &&
+      sub.problem &&
+      sub.creationTimeSeconds >= startedAt &&
+      sub.creationTimeSeconds <= endsAt
+    ) {
+      solved.add(`${sub.problem.contestId}-${sub.problem.index}`);
     }
-    return solved;
-  } catch (err) {
-    console.error(`[CF] Error fetching submissions for ${handle}:`, err.message);
-    return new Set();
   }
+  return solved;
 }
 
 function buildVCEmbed(vc, problems, participants = [], ended = false, individualSolves = null) {
   const endsAt = vc.ends_at ?? (vc.started_at + vc.duration_sec);
   const isTeam = vc.type && vc.type.startsWith('team');
-
-  let teamsCount = 2;
-  if (vc.type && vc.type.startsWith('team_')) {
-    teamsCount = parseInt(vc.type.split('_')[1], 10) || 2;
-  }
+  const teamsCount = (vc.type && vc.type.startsWith('team_'))
+    ? (parseInt(vc.type.split('_')[1], 10) || 2)
+    : 2;
 
   const themes = [0x5865F2, 0x2ECC71, 0xE67E22, 0x9B59B6, 0x1ABC9C, 0xE74C3C];
   let color = 0x5865F2;
@@ -70,21 +92,21 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
 
   if (!ended) {
     embed.setDescription([
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       `> ⏱️ **Clock:** <t:${endsAt}:R> (ends <t:${endsAt}:t>)`,
       `> 👥 **Format:** ${isTeam ? `Team Contest (${teamsCount} Squad${teamsCount > 1 ? 's' : ''})` : 'Individual Round'}`,
       `> 🎯 **Challenges:** **\`${problems.length}\` problems**`,
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-      ``,
-      `*Click the **Join Contest** button below to participate!*`
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '',
+      '*Click **Join Contest** below to participate!*'
     ].join('\n'));
   } else {
     embed.setDescription([
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-      `> 🏁 **Contest Status:** \`Concluded\``,
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '> 🏁 **Contest Status:** `Concluded`',
       `> 👥 **Format:** ${isTeam ? `Team Contest (${teamsCount} Squad${teamsCount > 1 ? 's' : ''})` : 'Individual Round'}`,
-      `> 🏆 **Results:** Final scores & standings calculated below!`,
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      '> 🏆 **Results:** Final scores & standings calculated below!',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     ].join('\n'));
   }
 
@@ -94,7 +116,10 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
     const url = `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`;
     return `\`${letter}.\` [${p.name}](${url}) · ⭐ \`${p.rating ?? '?'}\``;
   });
-  embed.addFields({ name: `📋 Problem Set (${problems.length})`, value: probLines.join('\n') || 'None', inline: false });
+
+  chunkLines(probLines.length > 0 ? probLines : ['None'], 1000).forEach((chunk, idx) => {
+    embed.addFields({ name: idx === 0 ? `📋 Problem Set (${problems.length})` : '📋 Problem Set (cont.)', value: chunk, inline: false });
+  });
 
   if (participants.length > 0) {
     if (isTeam) {
@@ -103,7 +128,6 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
         const teamObj = TEAM_NAMES[i] || { name: `Team ${String.fromCharCode(65 + i)}`, emoji: '⚔️' };
         teams[teamObj.name] = { emoji: teamObj.emoji, members: [], solved: 0 };
       }
-
       for (const p of participants) {
         const t = p.team || 'Team A';
         if (!teams[t]) teams[t] = { emoji: '⚔️', members: [], solved: 0 };
@@ -119,7 +143,7 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
 
         embed.addFields({
           name: `${tData.emoji} ${tName} — ${tData.solved} Solved`,
-          value: memberLines,
+          value: memberLines.slice(0, 1024),
           inline: true
         });
       }
@@ -132,7 +156,9 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
       const lines = sorted.map((p, i) =>
         `${medals[i] ?? `${i + 1}.`} <@${p.discord_id}> (\`${p.cf_handle}\`) — **${p.solved}** solved`
       );
-      embed.addFields({ name: '🏆 Leaderboard', value: lines.join('\n') || 'No solves recorded', inline: false });
+      chunkLines(lines, 1000).forEach((chunk, idx) => {
+        embed.addFields({ name: idx === 0 ? '🏆 Leaderboard' : '🏆 Leaderboard (cont.)', value: chunk, inline: false });
+      });
     }
   } else {
     embed.addFields({ name: '🏆 Leaderboard', value: 'No participants joined.', inline: false });
@@ -142,16 +168,27 @@ function buildVCEmbed(vc, problems, participants = [], ended = false, individual
   return embed;
 }
 
-async function concludeVC(client, vcId, channelId, problems) {
+async function concludeVC(client, vcId, channelId, fallbackProblems = []) {
+  // Atomic ended = 0 -> 1 claim prevents /vc end and setTimeout from double-concluding
+  if (!markVCEndedIfActive(vcId)) return false;
+
+  if (vcTimers.has(vcId)) {
+    clearTimeout(vcTimers.get(vcId));
+    vcTimers.delete(vcId);
+  }
+
   const vc = getVC(vcId);
+  const problems = vc?.problems?.length ? vc.problems : fallbackProblems;
   const participants = getVCParticipants(vcId);
+  const startedAt = vc?.started_at || 0;
+  const endsAt = Math.min(Math.floor(Date.now() / 1000), vc?.ends_at || Math.floor(Date.now() / 1000));
 
   const individualSolves = {};
   const participantSolvedSets = new Map();
 
   for (const p of participants) {
     if (p.cf_handle) {
-      const solvedKeys = await getCFUserSolvedKeys(p.cf_handle);
+      const solvedKeys = await getCFUserWindowSolvedKeys(p.cf_handle, startedAt, endsAt);
       const solvedContestProblems = new Set();
       for (const prob of problems) {
         const key = `${prob.contestId}-${prob.index}`;
@@ -163,14 +200,11 @@ async function concludeVC(client, vcId, channelId, problems) {
       participantSolvedSets.set(p.discord_id, new Set());
       individualSolves[p.discord_id] = 0;
     }
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 250));
   }
 
-  const isTeam = vc && vc.type && vc.type.startsWith('team');
-  let teamsCount = 2;
-  if (vc && vc.type && vc.type.startsWith('team_')) {
-    teamsCount = parseInt(vc.type.split('_')[1], 10) || 2;
-  }
+  const isTeam = vc?.type?.startsWith('team');
+  const teamsCount = vc?.type?.startsWith('team_') ? (parseInt(vc.type.split('_')[1], 10) || 2) : 2;
 
   if (isTeam) {
     const teamSolvedProblems = {};
@@ -178,56 +212,134 @@ async function concludeVC(client, vcId, channelId, problems) {
       const tName = TEAM_NAMES[i]?.name || `Team ${String.fromCharCode(65 + i)}`;
       teamSolvedProblems[tName] = new Set();
     }
-
     for (const p of participants) {
       const teamName = p.team || 'Team A';
       if (!teamSolvedProblems[teamName]) teamSolvedProblems[teamName] = new Set();
-      const pSolves = participantSolvedSets.get(p.discord_id) || new Set();
-      for (const key of pSolves) teamSolvedProblems[teamName].add(key);
+      for (const key of (participantSolvedSets.get(p.discord_id) || new Set())) {
+        teamSolvedProblems[teamName].add(key);
+      }
     }
-
     for (const p of participants) {
       const teamName = p.team || 'Team A';
-      const teamScore = teamSolvedProblems[teamName]?.size ?? 0;
-      updateVCSolved(vcId, p.discord_id, teamScore);
+      updateVCSolved(vcId, p.discord_id, teamSolvedProblems[teamName]?.size ?? 0);
     }
   } else {
     for (const p of participants) {
-      const pScore = individualSolves[p.discord_id] || 0;
-      updateVCSolved(vcId, p.discord_id, pScore);
+      updateVCSolved(vcId, p.discord_id, individualSolves[p.discord_id] || 0);
     }
   }
 
-  endVC(vcId);
-
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel) return;
+  if (!channel) return true;
 
   const updatedParts = getVCParticipants(vcId);
   const embed = buildVCEmbed(
-    vc || { id: vcId, ends_at: 0, started_at: 0, duration_sec: 0, difficulty: problems[0]?.rating ?? '?', type: 'individual' },
+    vc || { id: vcId, ends_at: endsAt, started_at: startedAt, duration_sec: 0, difficulty: problems[0]?.rating ?? '?', type: 'individual' },
     problems,
     updatedParts,
     true,
     individualSolves
   );
   await channel.send({ content: '🏁 **Virtual Contest Ended!**', embeds: [embed] }).catch(() => {});
+  return true;
 }
 
-const CF_TAGS = [
-  'implementation', 'math', 'greedy', 'dp', 'data structures',
-  'graphs', 'strings', 'binary search', 'constructive algorithms',
-  'number theory'
-];
+function scheduleVCEnd(client, vcId, channelId, delayMs, problems = []) {
+  if (vcTimers.has(vcId)) {
+    clearTimeout(vcTimers.get(vcId));
+  }
+  const timer = setTimeout(async () => {
+    await concludeVC(client, vcId, channelId, problems).catch(err =>
+      console.error(`[VC] Timer conclusion error for ${vcId}:`, err.message)
+    );
+  }, Math.max(0, delayMs));
+  vcTimers.set(vcId, timer);
+}
 
-const DIV_CHOICES = [
-  { name: 'Div. 1', value: 'div1' },
-  { name: 'Div. 2', value: 'div2' },
-  { name: 'Div. 3', value: 'div3' },
-  { name: 'Div. 4', value: 'div4' }
-];
+/**
+ * Re-arms timers and settles any expired VCs on bot boot.
+ */
+async function initVCRecovery(client) {
+  const activeVCs = getAllActiveVCs();
+  if (!activeVCs.length) return;
+
+  const now = Math.floor(Date.now() / 1000);
+  for (const vc of activeVCs) {
+    if (vc.ends_at <= now) {
+      await concludeVC(client, vc.id, vc.channel_id, vc.problems || []).catch(() => {});
+    } else {
+      const delayMs = (vc.ends_at - now) * 1000;
+      scheduleVCEnd(client, vc.id, vc.channel_id, delayMs, vc.problems || []);
+    }
+  }
+  console.log(`[VC] Recovered ${activeVCs.length} active Virtual Contest(s) on boot.`);
+}
+
+/**
+ * Handles `vc-join-<vcId>` button clicks globally (works even >15m after start or across restarts).
+ */
+async function handleVCJoinButton(interaction) {
+  const vcId = interaction.customId.slice('vc-join-'.length);
+  const vc = getVC(vcId);
+  const now = Math.floor(Date.now() / 1000);
+
+  if (!vc || vc.ended === 1 || vc.ends_at <= now) {
+    return interaction.reply({ content: '❌ This Virtual Contest has already ended.', flags: 64 });
+  }
+
+  const joinerId = interaction.user.id;
+  const joinerUser = getUser(joinerId);
+  if (!joinerUser || !joinerUser.cf_handle) {
+    return interaction.reply({
+      content: '❌ Link your Codeforces account first with `/link platform:Codeforces` to participate!',
+      flags: 64
+    });
+  }
+
+  const currentParts = getVCParticipants(vcId);
+  if (currentParts.some(p => p.discord_id === joinerId)) {
+    return interaction.reply({
+      content: 'ℹ️ You have already joined this contest! Solve problems on Codeforces and scores will be tallied when it ends.',
+      flags: 64
+    });
+  }
+
+  let teamVal = null;
+  if (vc.type && vc.type.startsWith('team')) {
+    const teamsCount = vc.type.startsWith('team_') ? (parseInt(vc.type.split('_')[1], 10) || 2) : 2;
+    const teamCounts = {};
+    for (let i = 0; i < teamsCount; i++) {
+      const tName = TEAM_NAMES[i]?.name || `Team ${String.fromCharCode(65 + i)}`;
+      teamCounts[tName] = 0;
+    }
+    for (const p of currentParts) {
+      if (p.team && teamCounts[p.team] !== undefined) teamCounts[p.team]++;
+    }
+    let minCount = Infinity;
+    let bestTeam = 'Team A';
+    for (const [tName, count] of Object.entries(teamCounts)) {
+      if (count < minCount) {
+        minCount = count;
+        bestTeam = tName;
+      }
+    }
+    teamVal = bestTeam;
+  }
+
+  joinVC(vcId, joinerId, joinerUser.cf_handle, teamVal);
+
+  const updatedParts = getVCParticipants(vcId);
+  const updatedEmbed = buildVCEmbed(vc, vc.problems || [], updatedParts, false);
+
+  await interaction.message.edit({ embeds: [updatedEmbed] }).catch(() => {});
+  return interaction.reply({
+    content: `✅ Joined! ${teamVal ? `Assigned to **${teamVal}**.` : ''} Solve on Codeforces during the round window!`,
+    flags: 64
+  });
+}
 
 module.exports = {
+  guildOnly: true,
   data: new SlashCommandBuilder()
     .setName('vc')
     .setDescription('Virtual Contest system (simulated contest rounds)')
@@ -251,7 +363,7 @@ module.exports = {
         )
         .addIntegerOption(opt =>
           opt.setName('problems')
-            .setDescription('Number of problems (default: 5)')
+            .setDescription('Number of problems (default: 5, max: 10)')
             .setRequired(false)
             .setMinValue(1)
             .setMaxValue(10)
@@ -291,16 +403,14 @@ module.exports = {
     )
     .addSubcommand(sub =>
       sub.setName('status')
-        .setDescription('View the timer and standings of the active Virtual Contest in this channel')
+        .setDescription('View timer and standings of the active Virtual Contest in this channel')
     ),
 
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
-    const userId = interaction.user.id;
     let cfRating = 1200;
     try {
-      const ratings = getRatings(userId);
-      cfRating = ratings.find(r => r.platform === 'cf')?.rating ?? 1200;
+      cfRating = getRatings(interaction.user.id).find(r => r.platform === 'cf')?.rating ?? 1200;
     } catch (_) {}
 
     const allRatings = [];
@@ -308,20 +418,19 @@ module.exports = {
 
     let choices = [];
     if (focusedValue) {
-      const filtered = allRatings
+      choices = allRatings
         .map(r => r.toString())
-        .filter(choice => choice.startsWith(focusedValue))
-        .slice(0, 25);
-      choices = filtered.map(choice => ({ name: choice, value: parseInt(choice, 10) }));
+        .filter(c => c.startsWith(focusedValue))
+        .slice(0, 25)
+        .map(c => ({ name: c, value: parseInt(c, 10) }));
     } else {
-      const roundedRating = Math.round(cfRating / 100) * 100;
-      const targetRating = Math.max(800, Math.min(3500, roundedRating));
+      const targetRating = Math.max(800, Math.min(3500, Math.round(cfRating / 100) * 100));
       const targetIndex = allRatings.indexOf(targetRating);
-      let startIndex = Math.max(0, targetIndex - 12);
-      let endIndex = Math.min(allRatings.length - 1, startIndex + 24);
+      const startIndex = Math.max(0, targetIndex - 12);
+      const endIndex = Math.min(allRatings.length - 1, startIndex + 24);
       choices = allRatings.slice(startIndex, endIndex + 1).map(r => ({ name: r.toString(), value: r }));
     }
-    await interaction.respond(choices);
+    await interaction.respond(choices).catch(() => {});
   },
 
   async execute(interaction) {
@@ -329,9 +438,8 @@ module.exports = {
     const channelId = interaction.channelId;
     const userId = interaction.user.id;
 
-    // ─── END ─────────────────────────────────────────────────────────
     if (subcommand === 'end') {
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: 64 });
       const vc = getActiveVCForChannel(channelId);
       if (!vc) {
         return interaction.editReply({
@@ -341,67 +449,70 @@ module.exports = {
 
       const isCreator = vc.started_by === userId;
       const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
-
       if (!isCreator && !isAdmin) {
         return interaction.editReply({
           embeds: [errorEmbed('Permission Denied', 'Only the contest creator or a server admin can end the contest.')]
         });
       }
 
-      if (vcTimers.has(vc.id)) {
-        clearTimeout(vcTimers.get(vc.id));
-        vcTimers.delete(vc.id);
-      }
-
-      const problems = vc.problems ?? [];
-      await concludeVC(interaction.client, vc.id, channelId, problems);
-
+      await concludeVC(interaction.client, vc.id, channelId, vc.problems || []);
       return interaction.editReply({
-        embeds: [successEmbed('Contest Ended', `Virtual contest **${vc.id}** ended. Final results posted.`)]
+        embeds: [successEmbed('Contest Ended', `Virtual contest **${vc.id}** ended and final standings have been posted.`)]
       });
     }
 
-    // ─── STATUS ──────────────────────────────────────────────────────
     if (subcommand === 'status') {
       const vc = getActiveVCForChannel(channelId);
       if (!vc) {
         return interaction.reply({
           embeds: [errorEmbed('No Active Contest', 'There is no active virtual contest in this channel. Start one with `/vc start`!')],
-          ephemeral: true
+          flags: 64
         });
       }
-
       const parts = getVCParticipants(vc.id);
       const embed = buildVCEmbed(vc, vc.problems || [], parts, false);
       return interaction.reply({ embeds: [embed] });
     }
 
-    // ─── START ───────────────────────────────────────────────────────
     if (subcommand === 'start') {
       await interaction.deferReply();
 
       const existingVC = getActiveVCForChannel(channelId);
       if (existingVC) {
         return interaction.editReply({
-          embeds: [errorEmbed('Contest Already Running', 'A virtual contest is already running in this channel! End it with `/vc end` before starting a new one.')]
+          embeds: [errorEmbed('Contest Already Running', 'A virtual contest is already running in this channel! End it with `/vc end` first.')]
         });
       }
 
       const targetRating = interaction.options.getInteger('difficulty');
-      const durationMin  = interaction.options.getInteger('duration') ?? 90;
-      const durationSec  = durationMin * 60;
-      const count        = interaction.options.getInteger('problems') ?? 5;
-      const tag          = interaction.options.getString('tag');
-      const division     = interaction.options.getString('division');
-      const type         = interaction.options.getString('type') || 'individual';
-      const teamsCount   = interaction.options.getInteger('teams') || 2;
+      const durationMin = interaction.options.getInteger('duration') ?? 90;
+      const durationSec = durationMin * 60;
+      const count = interaction.options.getInteger('problems') ?? 5;
+      const tag = interaction.options.getString('tag');
+      const division = interaction.options.getString('division');
+      const type = interaction.options.getString('type') || 'individual';
+      const teamsCount = interaction.options.getInteger('teams') || 2;
+
+      const creator = getUser(userId);
+      const excludeIds = new Set();
+      if (creator?.cf_handle) {
+        const subs = await getCFStatus(creator.cf_handle, 5000);
+        if (subs) {
+          for (const sub of subs) {
+            if (sub.verdict === 'OK' && sub.problem) {
+              excludeIds.add(`${sub.problem.contestId}${sub.problem.index}`);
+            }
+          }
+        }
+      }
 
       let problems = await getCFProblems({
         minRating: Math.max(800, targetRating - 200),
         maxRating: Math.min(3500, targetRating + 200),
         tag: tag || undefined,
         division: division || undefined,
-        count: count
+        excludeIds,
+        count
       });
 
       if (problems.length < count) {
@@ -410,30 +521,31 @@ module.exports = {
           maxRating: Math.min(3500, targetRating + 400),
           tag: tag || undefined,
           division: division || undefined,
-          count: count
+          excludeIds,
+          count
         });
       }
 
       if (problems.length === 0) {
         return interaction.editReply({
-          embeds: [errorEmbed('No Problems Found', 'Could not find Codeforces problems matching your criteria. Try adjusting the difficulty or tag.')]
+          embeds: [errorEmbed('No Problems Found', 'Could not find Codeforces problems matching your criteria. Try widening rating/tag filters.')]
         });
       }
 
       const vcId = crypto.randomBytes(4).toString('hex');
       const dbType = type === 'team' ? `team_${teamsCount}` : 'individual';
+      const nowSec = Math.floor(Date.now() / 1000);
+      const endsAt = nowSec + durationSec;
 
       createVC(vcId, channelId, interaction.guildId, userId, targetRating, durationSec, problems, dbType);
 
-      const creator = getUser(userId);
-      if (creator && creator.cf_handle) {
+      if (creator?.cf_handle) {
         joinVC(vcId, userId, creator.cf_handle, type === 'team' ? 'Team A' : null);
       }
 
       const initialParts = getVCParticipants(vcId);
-      const endsAt = Math.floor(Date.now() / 1000) + durationSec;
       const embed = buildVCEmbed(
-        { id: vcId, ends_at: endsAt, started_at: Math.floor(Date.now() / 1000), duration_sec: durationSec, difficulty: targetRating, type: dbType },
+        { id: vcId, ends_at: endsAt, started_at: nowSec, duration_sec: durationSec, difficulty: targetRating, type: dbType },
         problems,
         initialParts,
         false
@@ -444,81 +556,13 @@ module.exports = {
         .setLabel('Join Contest ⚔️')
         .setStyle(ButtonStyle.Success);
 
-      const row = new ActionRowBuilder().addComponents(joinBtn);
-      const message = await interaction.editReply({ embeds: [embed], components: [row] });
-
-      const collector = message.createMessageComponentCollector({
-        componentType: ComponentType.Button,
-        time: durationSec * 1000
-      });
-
-      collector.on('collect', async btnInteraction => {
-        const joinerId = btnInteraction.user.id;
-        const joinerUser = getUser(joinerId);
-
-        if (!joinerUser || !joinerUser.cf_handle) {
-          return btnInteraction.reply({
-            content: '❌ You must link your Codeforces account first with `/link platform: Codeforces` to participate!',
-            ephemeral: true
-          });
-        }
-
-        const currentParts = getVCParticipants(vcId);
-        if (currentParts.some(p => p.discord_id === joinerId)) {
-          return btnInteraction.reply({
-            content: 'ℹ️ You have already joined this contest! Solve problems on Codeforces and your score will be tallied when time expires.',
-            ephemeral: true
-          });
-        }
-
-        let teamVal = null;
-        if (type === 'team') {
-          const teamCounts = {};
-          for (let i = 0; i < teamsCount; i++) {
-            const tName = TEAM_NAMES[i]?.name || `Team ${String.fromCharCode(65 + i)}`;
-            teamCounts[tName] = 0;
-          }
-          for (const p of currentParts) {
-            if (p.team && teamCounts[p.team] !== undefined) teamCounts[p.team]++;
-          }
-          let minCount = Infinity;
-          let bestTeam = 'Team A';
-          for (const [tName, count] of Object.entries(teamCounts)) {
-            if (count < minCount) {
-              minCount = count;
-              bestTeam = tName;
-            }
-          }
-          teamVal = bestTeam;
-        }
-
-        joinVC(vcId, joinerId, joinerUser.cf_handle, teamVal);
-
-        const updatedParts = getVCParticipants(vcId);
-        const updatedEmbed = buildVCEmbed(
-          { id: vcId, ends_at: endsAt, started_at: Math.floor(Date.now() / 1000), duration_sec: durationSec, difficulty: targetRating, type: dbType },
-          problems,
-          updatedParts,
-          false
-        );
-
-        await interaction.editReply({ embeds: [updatedEmbed] }).catch(() => {});
-        await btnInteraction.reply({
-          content: `✅ Joined! ${type === 'team' ? `Assigned to **${teamVal}**.` : ''} Solve on Codeforces; solves are tracked automatically.`,
-          ephemeral: true
-        });
-      });
-
-      const timer = setTimeout(async () => {
-        collector.stop();
-        await concludeVC(interaction.client, vcId, channelId, problems);
-        vcTimers.delete(vcId);
-      }, durationSec * 1000);
-
-      vcTimers.set(vcId, timer);
+      await interaction.editReply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(joinBtn)] });
+      scheduleVCEnd(interaction.client, vcId, channelId, durationSec * 1000, problems);
     }
   },
 
   concludeVC,
+  handleVCJoinButton,
+  initVCRecovery,
   vcTimers
 };

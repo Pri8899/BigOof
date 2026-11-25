@@ -1,7 +1,8 @@
-// commands/skills.js — CP RPG & Skill Tree Level-up System
+// commands/skills.js — CP RPG & Skill Tree character sheet built from Codeforces solves
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { getUser, getRatings } = require('../database/db');
-const axios = require('axios');
+const { getUser } = require('../database/db');
+const { getCFStatus } = require('../utils/codeforces');
+const { getPlatformEmojis } = require('../utils/emojis');
 
 const RPG_CLASSES = {
   attack: {
@@ -21,7 +22,7 @@ const RPG_CLASSES = {
   },
   chrono: {
     name: '🌀 Chrono',
-    description: 'Dynamic programming and memoization',
+    description: 'Dynamic programming',
     tags: ['dp']
   },
   inventory: {
@@ -55,11 +56,7 @@ function calculateLevel(totalExp) {
     lvl++;
     expNeeded += 100;
   }
-  return {
-    level: lvl,
-    currentExp: tempExp,
-    nextLevelExp: expNeeded
-  };
+  return { level: lvl, currentExp: tempExp, nextLevelExp: expNeeded };
 }
 
 function getCharacterTitle(levels, overallLvl) {
@@ -104,156 +101,128 @@ module.exports = {
     .addUserOption(opt =>
       opt.setName('member')
         .setDescription('Member to inspect (defaults to yourself)')
-        .setRequired(false)),
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
     await interaction.deferReply();
 
     const targetUser = interaction.options.getUser('member') ?? interaction.user;
-    const userId     = targetUser.id;
+    const dbUser = getUser(targetUser.id);
 
-    // Get database user
-    const dbUser = getUser(userId);
     if (!dbUser || !dbUser.cf_handle) {
-      const isSelf = userId === interaction.user.id;
+      const isSelf = targetUser.id === interaction.user.id;
       return interaction.editReply({
         content: `⚠️ ${isSelf ? "You haven't" : `${targetUser.username} hasn't`} linked a Codeforces account! Use \`/link\` first.`
       });
     }
 
-    try {
-      // Fetch status submissions from Codeforces (max 2000 submissions)
-      const cfRes = await axios.get(`https://codeforces.com/api/user.status?handle=${dbUser.cf_handle}&from=1&count=2000`, { timeout: 8000 });
-      if (cfRes.data.status !== 'OK') {
-        throw new Error('Codeforces status API returned non-OK status');
-      }
-
-      // Filter unique solved problems to avoid double counting
-      const solvedProblems = new Map();
-      for (const sub of cfRes.data.result) {
-        if (sub.verdict === 'OK' && sub.problem) {
-          const problemId = `${sub.problem.contestId}${sub.problem.index}`;
-          if (!solvedProblems.has(problemId)) {
-            solvedProblems.set(problemId, sub.problem);
-          }
-        }
-      }
-
-      // Initialize EXP counters for all classes
-      const classExps = {
-        attack: 0,
-        defense: 0,
-        magic: 0,
-        chrono: 0,
-        inventory: 0,
-        exploration: 0,
-        precision: 0,
-        runes: 0
-      };
-
-      let totalSolvesCount = 0;
-      let totalRatingSum = 0;
-      let ratedSolvesCount = 0;
-
-      // Classify solved problems and calculate EXP
-      for (const problem of solvedProblems.values()) {
-        totalSolvesCount++;
-        const rating = problem.rating;
-        const exp = rating ? Math.round(rating / 100) : 8; // Default to 8 EXP if unrated
-
-        if (rating) {
-          totalRatingSum += rating;
-          ratedSolvesCount++;
-        }
-
-        const tags = problem.tags || [];
-        let matched = false;
-
-        // Attribute EXP to matching RPG classes
-        for (const [classKey, classInfo] of Object.entries(RPG_CLASSES)) {
-          const hasMatchingTag = tags.some(tag => classInfo.tags.includes(tag.toLowerCase()));
-          if (hasMatchingTag) {
-            classExps[classKey] += exp;
-            matched = true;
-          }
-        }
-
-        // Default to Defense class if no tags match
-        if (!matched) {
-          classExps.defense += exp;
-        }
-      }
-
-      // Calculate class levels and progress
-      const classLevels = {};
-      let totalCumulativeExp = 0;
-
-      for (const [classKey, exp] of Object.entries(classExps)) {
-        classLevels[classKey] = calculateLevel(exp);
-        totalCumulativeExp += exp;
-      }
-
-      // Extract levels for title computation
-      const lvlMap = {};
-      for (const [key, val] of Object.entries(classLevels)) {
-        lvlMap[key] = val.level;
-      }
-
-      // Overall Level calculations
-      const overallLevelInfo = calculateLevel(totalCumulativeExp);
-      const title = getCharacterTitle(lvlMap, overallLevelInfo.level);
-      const averageRating = ratedSolvesCount > 0 ? Math.round(totalRatingSum / ratedSolvesCount) : 0;
-
-      const { getPlatformEmojis } = require('../utils/emojis');
-      const emojis = await getPlatformEmojis(interaction.guild);
-      // Construct Embed Card
-      const embed = new EmbedBuilder()
-        .setColor(0x7C4DFF) // Deep Violet
-        .setAuthor({
-          name: 'Competitive Programming RPG Archetype',
-          iconURL: targetUser.displayAvatarURL({ dynamic: true })
-        })
-        .setDescription([
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-          `> 🏆 **Class Title:** \`${title}\``,
-          `> 👤 **Codeforces:** [\`${dbUser.cf_handle}\`](https://codeforces.com/profile/${dbUser.cf_handle})`,
-          `> 📊 **Mastery:** **Level ${overallLevelInfo.level}** (\`${overallLevelInfo.currentExp}/${overallLevelInfo.nextLevelExp}\` EXP)`,
-          `> 📈 **XP Bar:** ${drawProgressBar(overallLevelInfo.currentExp, overallLevelInfo.nextLevelExp, 12)}`,
-          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
-        ].join('\n'))
-        .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-        .addFields(
-          {
-            name: '⚔️ Combat & Core Disciplines',
-            value: `🗡️ **Greedy/BF**: Lvl ${classLevels.attack.level}\n${drawProgressBar(classLevels.attack.currentExp, classLevels.attack.nextLevelExp, 8)} (\`${classLevels.attack.currentExp}/${classLevels.attack.nextLevelExp}\`)\n\n` +
-                   `🛡️ **Implementation**: Lvl ${classLevels.defense.level}\n${drawProgressBar(classLevels.defense.currentExp, classLevels.defense.nextLevelExp, 8)} (\`${classLevels.defense.currentExp}/${classLevels.defense.nextLevelExp}\`)\n\n` +
-                   `🏹 **Binary Search**: Lvl ${classLevels.precision.level}\n${drawProgressBar(classLevels.precision.currentExp, classLevels.precision.nextLevelExp, 8)} (\`${classLevels.precision.currentExp}/${classLevels.precision.nextLevelExp}\`)\n\n` +
-                   `✍️ **Strings & Hash**: Lvl ${classLevels.runes.level}\n${drawProgressBar(classLevels.runes.currentExp, classLevels.runes.nextLevelExp, 8)} (\`${classLevels.runes.currentExp}/${classLevels.runes.nextLevelExp}\`)`,
-            inline: true
-          },
-          {
-            name: '🔮 Arcane & Advanced Data Structures',
-            value: `🧙‍♂️ **Math & Number Theory**: Lvl ${classLevels.magic.level}\n${drawProgressBar(classLevels.magic.currentExp, classLevels.magic.nextLevelExp, 8)} (\`${classLevels.magic.currentExp}/${classLevels.magic.nextLevelExp}\`)\n\n` +
-                   `🌀 **Dynamic Programming**: Lvl ${classLevels.chrono.level}\n${drawProgressBar(classLevels.chrono.currentExp, classLevels.chrono.nextLevelExp, 8)} (\`${classLevels.chrono.currentExp}/${classLevels.chrono.nextLevelExp}\`)\n\n` +
-                   `📦 **Trees & Structures**: Lvl ${classLevels.inventory.level}\n${drawProgressBar(classLevels.inventory.currentExp, classLevels.inventory.nextLevelExp, 8)} (\`${classLevels.inventory.currentExp}/${classLevels.inventory.nextLevelExp}\`)\n\n` +
-                   `🗺️ **Graphs & Shortest Path**: Lvl ${classLevels.exploration.level}\n${drawProgressBar(classLevels.exploration.currentExp, classLevels.exploration.nextLevelExp, 8)} (\`${classLevels.exploration.currentExp}/${classLevels.exploration.nextLevelExp}\`)`,
-            inline: true
-          },
-          {
-            name: '📊 Competitive Profile & Metric',
-            value: `> ${emojis.cf} **Total Solved**: \`${totalSolvesCount}\` problems\n> ⭐ **Mean Solved Rating**: \`${averageRating || '—'}\``,
-            inline: false
-          }
-        )
-        .setFooter({ text: 'BigOof Skill Matrix · Analyzed from Codeforces solves', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
-        .setTimestamp();
-
-      return interaction.editReply({ embeds: [embed] });
-    } catch (err) {
-      console.error('[Skills Command] Error fetching status:', err);
+    const subs = await getCFStatus(dbUser.cf_handle, 5000);
+    if (!subs) {
       return interaction.editReply({
-        content: `❌ Failed to retrieve Codeforces data for \`${dbUser.cf_handle}\`. Codeforces API might be temporarily down or rate-limited. Please try again later.`
+        content: `❌ Failed to retrieve Codeforces data for \`${dbUser.cf_handle}\`. Codeforces API may be temporarily unavailable.`
       });
     }
+
+    const solvedProblems = new Map();
+    for (const sub of subs) {
+      if (sub.verdict === 'OK' && sub.problem) {
+        const key = sub.problem.contestId !== undefined && sub.problem.index !== undefined
+          ? `${sub.problem.contestId}-${sub.problem.index}`
+          : sub.problem.name;
+        if (key && !solvedProblems.has(key)) solvedProblems.set(key, sub.problem);
+      }
+    }
+
+    const classExps = {
+      attack: 0, defense: 0, magic: 0, chrono: 0,
+      inventory: 0, exploration: 0, precision: 0, runes: 0
+    };
+
+    let totalSolvesCount = 0;
+    let totalRatingSum = 0;
+    let ratedSolvesCount = 0;
+
+    for (const problem of solvedProblems.values()) {
+      totalSolvesCount++;
+      const rating = problem.rating;
+      const exp = rating ? Math.round(rating / 100) : 8;
+
+      if (rating) {
+        totalRatingSum += rating;
+        ratedSolvesCount++;
+      }
+
+      const tags = problem.tags || [];
+      let matched = false;
+      for (const [classKey, classInfo] of Object.entries(RPG_CLASSES)) {
+        if (tags.some(tag => classInfo.tags.includes(tag.toLowerCase()))) {
+          classExps[classKey] += exp;
+          matched = true;
+        }
+      }
+      if (!matched) classExps.defense += exp;
+    }
+
+    const classLevels = {};
+    const lvlMap = {};
+    let totalCumulativeExp = 0;
+
+    for (const [classKey, exp] of Object.entries(classExps)) {
+      classLevels[classKey] = calculateLevel(exp);
+      lvlMap[classKey] = classLevels[classKey].level;
+      totalCumulativeExp += exp;
+    }
+
+    const overallLevelInfo = calculateLevel(totalCumulativeExp);
+    const title = getCharacterTitle(lvlMap, overallLevelInfo.level);
+    const averageRating = ratedSolvesCount > 0 ? Math.round(totalRatingSum / ratedSolvesCount) : 0;
+    const emojis = await getPlatformEmojis(interaction.guild);
+    const encodedHandle = encodeURIComponent(dbUser.cf_handle);
+
+    const embed = new EmbedBuilder()
+      .setColor(0x7C4DFF)
+      .setAuthor({
+        name: 'Competitive Programming RPG Archetype',
+        iconURL: targetUser.displayAvatarURL({ dynamic: true })
+      })
+      .setDescription([
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        `> 🏆 **Class Title:** \`${title}\``,
+        `> 👤 **Codeforces:** [\`${dbUser.cf_handle}\`](https://codeforces.com/profile/${encodedHandle})`,
+        `> 📊 **Mastery:** **Level ${overallLevelInfo.level}** (\`${overallLevelInfo.currentExp}/${overallLevelInfo.nextLevelExp}\` EXP)`,
+        `> 📈 **XP Bar:** ${drawProgressBar(overallLevelInfo.currentExp, overallLevelInfo.nextLevelExp, 12)}`,
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+      ].join('\n'))
+      .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+      .addFields(
+        {
+          name: '⚔️ Combat & Core Disciplines',
+          value:
+            `🗡️ **Greedy/BF**: Lvl ${classLevels.attack.level}\n${drawProgressBar(classLevels.attack.currentExp, classLevels.attack.nextLevelExp)} (\`${classLevels.attack.currentExp}/${classLevels.attack.nextLevelExp}\`)\n\n` +
+            `🛡️ **Implementation**: Lvl ${classLevels.defense.level}\n${drawProgressBar(classLevels.defense.currentExp, classLevels.defense.nextLevelExp)} (\`${classLevels.defense.currentExp}/${classLevels.defense.nextLevelExp}\`)\n\n` +
+            `🏹 **Search/Two Ptrs/Geo**: Lvl ${classLevels.precision.level}\n${drawProgressBar(classLevels.precision.currentExp, classLevels.precision.nextLevelExp)} (\`${classLevels.precision.currentExp}/${classLevels.precision.nextLevelExp}\`)\n\n` +
+            `✍️ **Strings & Hash**: Lvl ${classLevels.runes.level}\n${drawProgressBar(classLevels.runes.currentExp, classLevels.runes.nextLevelExp)} (\`${classLevels.runes.currentExp}/${classLevels.runes.nextLevelExp}\`)`,
+          inline: true
+        },
+        {
+          name: '🔮 Arcane & Advanced Structures',
+          value:
+            `🧙‍♂️ **Math & Number Theory**: Lvl ${classLevels.magic.level}\n${drawProgressBar(classLevels.magic.currentExp, classLevels.magic.nextLevelExp)} (\`${classLevels.magic.currentExp}/${classLevels.magic.nextLevelExp}\`)\n\n` +
+            `🌀 **Dynamic Programming**: Lvl ${classLevels.chrono.level}\n${drawProgressBar(classLevels.chrono.currentExp, classLevels.chrono.nextLevelExp)} (\`${classLevels.chrono.currentExp}/${classLevels.chrono.nextLevelExp}\`)\n\n` +
+            `📦 **Structures & Bitmasks**: Lvl ${classLevels.inventory.level}\n${drawProgressBar(classLevels.inventory.currentExp, classLevels.inventory.nextLevelExp)} (\`${classLevels.inventory.currentExp}/${classLevels.inventory.nextLevelExp}\`)\n\n` +
+            `🗺️ **Graphs & Trees**: Lvl ${classLevels.exploration.level}\n${drawProgressBar(classLevels.exploration.currentExp, classLevels.exploration.nextLevelExp)} (\`${classLevels.exploration.currentExp}/${classLevels.exploration.nextLevelExp}\`)`,
+          inline: true
+        },
+        {
+          name: '📊 Competitive Profile & Metric',
+          value: `> ${emojis.cf} **Total Solved**: \`${totalSolvesCount}\` problems\n> ⭐ **Mean Solved Rating**: \`${averageRating || '—'}\``,
+          inline: false
+        }
+      )
+      .setFooter({ text: 'BigOof Skill Matrix · Analyzed from Codeforces solves', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
+      .setTimestamp();
+
+    return interaction.editReply({ embeds: [embed] });
   }
 };

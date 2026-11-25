@@ -1,10 +1,10 @@
-// commands/admin/custom-contest.js — Add, edit, or delete custom contests
+// commands/admin/custom-contest.js — Add, edit, list, or delete custom contests cleanly
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { db } = require('../../database/db');
 const { postContestSummary } = require('../../tasks/contestFetcher');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
-
-const TZ = process.env.TIMEZONE || 'UTC';
+const { chunkLines } = require('../../utils/envHelper');
+const { getTimeZone, getLocalParts, zonedDateTimeToUnix, isValidCalendarDate } = require('../../utils/time');
 
 function parseDuration(str) {
   if (!str) return null;
@@ -17,15 +17,15 @@ function parseDuration(str) {
 
   if (hMatch) totalSec += parseInt(hMatch[1], 10) * 3600;
   if (mMatch) totalSec += parseInt(mMatch[1], 10) * 60;
-
   if (!hMatch && !mMatch && /^\d+$/.test(s)) {
-    totalSec = parseInt(s, 10) * 60; // default minutes
+    totalSec = parseInt(s, 10) * 60;
   }
 
   return totalSec > 0 ? totalSec : null;
 }
 
 function parseDateTime(dateStr, timeStr) {
+  const TZ = getTimeZone();
   const isDateNA = !dateStr || ['n/a', 'na'].includes(dateStr.toLowerCase().trim());
   const isTimeNA = !timeStr || ['n/a', 'na'].includes(timeStr.toLowerCase().trim());
 
@@ -47,8 +47,13 @@ function parseDateTime(dateStr, timeStr) {
     return { error: 'Invalid date format. Use DD-MM-YYYY or YYYY-MM-DD.' };
   }
 
-  let hours = 0, minutes = 0;
-  let timeNA = isTimeNA ? 1 : 0;
+  if (!isValidCalendarDate(year, month, day)) {
+    return { error: `Invalid calendar date (${dateStr}). Please enter a valid day/month.` };
+  }
+
+  let hours = 0;
+  let minutes = 0;
+  const timeNA = isTimeNA ? 1 : 0;
 
   if (!isTimeNA) {
     const timeMatch = timeStr.trim().match(/^(\d{1,2}):(\d{2})$/);
@@ -58,21 +63,12 @@ function parseDateTime(dateStr, timeStr) {
     hours = parseInt(timeMatch[1], 10);
     minutes = parseInt(timeMatch[2], 10);
     if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-      return { error: 'Invalid time values. Hours must be 0-23, minutes 0-59.' };
+      return { error: 'Invalid time values. Hours must be 0–23, minutes 0–59.' };
     }
   }
 
   try {
-    const approx = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
-    const getLocalHour = (d) => {
-      const f = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: 'numeric', hour12: false });
-      const pList = f.formatToParts(d);
-      const h = parseInt(pList.find(p => p.type === 'hour').value, 10);
-      const m = parseInt(pList.find(p => p.type === 'minute').value, 10);
-      return h * 60 + m;
-    };
-    const diffMinutes = (hours * 60 + minutes) - getLocalHour(approx);
-    const startTimeSec = Math.floor((approx.getTime() + diffMinutes * 60 * 1000) / 1000);
+    const startTimeSec = zonedDateTimeToUnix(year, month, day, hours, minutes, 0, TZ);
     return { startTimeSec, timeNA };
   } catch (err) {
     return { error: `Failed to parse date/time: ${err.message}` };
@@ -80,6 +76,7 @@ function parseDateTime(dateStr, timeStr) {
 }
 
 module.exports = {
+  guildOnly: true,
   data: new SlashCommandBuilder()
     .setName('custom-contest')
     .setDescription('Manage manually added custom contests (Admin only)')
@@ -89,9 +86,9 @@ module.exports = {
         .setDescription('Add a new custom contest to the radar')
         .addStringOption(opt => opt.setName('name').setDescription('Contest name').setRequired(true))
         .addStringOption(opt => opt.setName('link').setDescription('Contest URL').setRequired(true))
-        .addStringOption(opt => opt.setName('date').setDescription('Date (DD-MM-YYYY, YYYY-MM-DD or N/A)').setRequired(true))
+        .addStringOption(opt => opt.setName('date').setDescription('Date (DD-MM-YYYY, YYYY-MM-DD, or N/A)').setRequired(true))
         .addStringOption(opt => opt.setName('time').setDescription('Start time (HH:MM in 24h or N/A)').setRequired(true))
-        .addStringOption(opt => opt.setName('duration').setDescription('Duration (e.g. 2h, 120m, 2h 30m or N/A)').setRequired(true))
+        .addStringOption(opt => opt.setName('duration').setDescription('Duration (e.g. 2h, 120m, 2h 30m, or N/A)').setRequired(true))
     )
     .addSubcommand(sub =>
       sub.setName('edit')
@@ -99,9 +96,9 @@ module.exports = {
         .addStringOption(opt => opt.setName('contest').setDescription('Select custom contest to edit').setRequired(true).setAutocomplete(true))
         .addStringOption(opt => opt.setName('new_name').setDescription('New name for contest').setRequired(false))
         .addStringOption(opt => opt.setName('link').setDescription('New URL link').setRequired(false))
-        .addStringOption(opt => opt.setName('date').setDescription('New date (DD-MM-YYYY, YYYY-MM-DD or N/A)').setRequired(false))
+        .addStringOption(opt => opt.setName('date').setDescription('New date (DD-MM-YYYY, YYYY-MM-DD, or N/A)').setRequired(false))
         .addStringOption(opt => opt.setName('time').setDescription('New time (HH:MM 24h or N/A)').setRequired(false))
-        .addStringOption(opt => opt.setName('duration').setDescription('New duration (e.g. 2h, 120m or N/A)').setRequired(false))
+        .addStringOption(opt => opt.setName('duration').setDescription('New duration (e.g. 2h, 120m, or N/A)').setRequired(false))
     )
     .addSubcommand(sub =>
       sub.setName('delete')
@@ -114,27 +111,19 @@ module.exports = {
     ),
 
   async autocomplete(interaction) {
+    const TZ = getTimeZone();
     const focusedValue = interaction.options.getFocused().toLowerCase();
-    const contests = db.prepare(`
-      SELECT contest_id, name, start_time, time_na FROM notified_contests
-      WHERE platform = 'Custom'
-    `).all();
+    const contests = db.prepare("SELECT contest_id, name, start_time, time_na FROM notified_contests WHERE platform = 'Custom'").all();
 
     const choices = contests.map(c => {
       let dateLabel = 'Date: N/A';
       if (c.start_time) {
-        const d = new Date(c.start_time * 1000);
-        const formatter = new Intl.DateTimeFormat('en-US', {
-          timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit'
-        });
-        dateLabel = formatter.format(d);
+        const p = getLocalParts(new Date(c.start_time * 1000), TZ);
+        dateLabel = p.dateStr;
         if (c.time_na === 1) {
           dateLabel += ' (Time: N/A)';
         } else {
-          const timeFormatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false
-          });
-          dateLabel += ` @ ${timeFormatter.format(d)}`;
+          dateLabel += ` @ ${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
         }
       }
       return {
@@ -144,15 +133,15 @@ module.exports = {
     });
 
     const filtered = choices.filter(c => c.name.toLowerCase().includes(focusedValue)).slice(0, 25);
-    await interaction.respond(filtered);
+    await interaction.respond(filtered).catch(() => {});
   },
 
   async execute(interaction) {
+    const TZ = getTimeZone();
     const subcommand = interaction.options.getSubcommand();
 
-    // ─── ADD ─────────────────────────────────────────────────────────
     if (subcommand === 'add') {
-      const name = interaction.options.getString('name');
+      const name = interaction.options.getString('name').trim();
       let link = interaction.options.getString('link').trim();
       const dateStr = interaction.options.getString('date');
       const timeStr = interaction.options.getString('time');
@@ -161,10 +150,15 @@ module.exports = {
       if (!link.startsWith('http://') && !link.startsWith('https://')) {
         link = 'https://' + link;
       }
+      try {
+        new URL(link);
+      } catch {
+        return interaction.reply({ embeds: [errorEmbed('Invalid URL', 'Please enter a valid contest link URL.')], flags: 64 });
+      }
 
       const parsed = parseDateTime(dateStr, timeStr);
       if (parsed.error) {
-        return interaction.reply({ embeds: [errorEmbed('Invalid Date/Time', parsed.error)], ephemeral: true });
+        return interaction.reply({ embeds: [errorEmbed('Invalid Date/Time', parsed.error)], flags: 64 });
       }
 
       const durationSec = parseDuration(durationStr);
@@ -175,38 +169,62 @@ module.exports = {
         VALUES (?, 'Custom', ?, ?, ?, ?, ?)
       `).run(contestId, name, parsed.startTimeSec, durationSec, link, parsed.timeNA);
 
-      postContestSummary(interaction.client).catch(() => {});
+      postContestSummary(interaction.client, interaction.guildId).catch(() => {});
 
       return interaction.reply({
         embeds: [successEmbed('Custom Contest Added', `**[${name}](${link})** has been added to the contest radar.`)],
-        ephemeral: true
+        flags: 64
       });
     }
 
-    // ─── EDIT ────────────────────────────────────────────────────────
     if (subcommand === 'edit') {
       const contestId = interaction.options.getString('contest');
-      const contest = db.prepare('SELECT * FROM notified_contests WHERE contest_id = ? AND platform = "Custom"').get(contestId);
+      const contest = db.prepare("SELECT * FROM notified_contests WHERE contest_id = ? AND platform = 'Custom'").get(contestId);
 
       if (!contest) {
-        return interaction.reply({ embeds: [errorEmbed('Not Found', 'Custom contest not found.')], ephemeral: true });
+        return interaction.reply({ embeds: [errorEmbed('Not Found', 'Custom contest not found.')], flags: 64 });
       }
 
-      const newName = interaction.options.getString('new_name') || contest.name;
-      let newLink = interaction.options.getString('link') || contest.url;
+      const newName = interaction.options.getString('new_name')?.trim() || contest.name;
+      let newLink = interaction.options.getString('link')?.trim() || contest.url;
       if (newLink && !newLink.startsWith('http://') && !newLink.startsWith('https://')) {
         newLink = 'https://' + newLink;
+      }
+      if (newLink) {
+        try {
+          new URL(newLink);
+        } catch {
+          return interaction.reply({ embeds: [errorEmbed('Invalid URL', 'Please enter a valid contest link URL.')], flags: 64 });
+        }
       }
 
       let newStartTime = contest.start_time;
       let newTimeNA = contest.time_na;
 
-      const dateStr = interaction.options.getString('date');
-      const timeStr = interaction.options.getString('time');
-      if (dateStr !== null || timeStr !== null) {
-        const parsed = parseDateTime(dateStr || 'N/A', timeStr || 'N/A');
+      const dateOpt = interaction.options.getString('date');
+      const timeOpt = interaction.options.getString('time');
+
+      if (dateOpt !== null || timeOpt !== null) {
+        let effectiveDate = dateOpt;
+        let effectiveTime = timeOpt;
+
+        // Preserve untouched date or time component when only one option is edited
+        if (effectiveDate === null && contest.start_time) {
+          const existingParts = getLocalParts(new Date(contest.start_time * 1000), TZ);
+          effectiveDate = existingParts.isoDate;
+        }
+        if (effectiveTime === null) {
+          if (contest.time_na === 1 || !contest.start_time) {
+            effectiveTime = 'N/A';
+          } else {
+            const existingParts = getLocalParts(new Date(contest.start_time * 1000), TZ);
+            effectiveTime = `${String(existingParts.hour).padStart(2, '0')}:${String(existingParts.minute).padStart(2, '0')}`;
+          }
+        }
+
+        const parsed = parseDateTime(effectiveDate || 'N/A', effectiveTime || 'N/A');
         if (parsed.error) {
-          return interaction.reply({ embeds: [errorEmbed('Invalid Date/Time', parsed.error)], ephemeral: true });
+          return interaction.reply({ embeds: [errorEmbed('Invalid Date/Time', parsed.error)], flags: 64 });
         }
         newStartTime = parsed.startTimeSec;
         newTimeNA = parsed.timeNA;
@@ -217,44 +235,44 @@ module.exports = {
 
       db.prepare(`
         UPDATE notified_contests
-        SET name = ?, url = ?, start_time = ?, duration_sec = ?, time_na = ?
+        SET name = ?, url = ?, start_time = ?, duration_sec = ?, time_na = ?,
+            notified_24h = CASE WHEN start_time IS NOT ? THEN 0 ELSE notified_24h END,
+            notified_1h  = CASE WHEN start_time IS NOT ? THEN 0 ELSE notified_1h END
         WHERE contest_id = ?
-      `).run(newName, newLink, newStartTime, newDuration, newTimeNA, contestId);
+      `).run(newName, newLink, newStartTime, newDuration, newTimeNA, newStartTime, newStartTime, contestId);
 
-      postContestSummary(interaction.client).catch(() => {});
+      postContestSummary(interaction.client, interaction.guildId).catch(() => {});
 
       return interaction.reply({
         embeds: [successEmbed('Custom Contest Updated', `Updated **[${newName}](${newLink})** successfully.`)],
-        ephemeral: true
+        flags: 64
       });
     }
 
-    // ─── DELETE ──────────────────────────────────────────────────────
     if (subcommand === 'delete') {
       const contestId = interaction.options.getString('contest');
-      const contest = db.prepare('SELECT name FROM notified_contests WHERE contest_id = ? AND platform = "Custom"').get(contestId);
+      const contest = db.prepare("SELECT name FROM notified_contests WHERE contest_id = ? AND platform = 'Custom'").get(contestId);
 
       if (!contest) {
-        return interaction.reply({ embeds: [errorEmbed('Not Found', 'Custom contest not found.')], ephemeral: true });
+        return interaction.reply({ embeds: [errorEmbed('Not Found', 'Custom contest not found.')], flags: 64 });
       }
 
       db.prepare('DELETE FROM notified_contests WHERE contest_id = ?').run(contestId);
-      postContestSummary(interaction.client).catch(() => {});
+      postContestSummary(interaction.client, interaction.guildId).catch(() => {});
 
       return interaction.reply({
         embeds: [successEmbed('Custom Contest Deleted', `Removed **${contest.name}** from the contest radar.`)],
-        ephemeral: true
+        flags: 64
       });
     }
 
-    // ─── LIST ────────────────────────────────────────────────────────
     if (subcommand === 'list') {
       const contests = db.prepare(`
         SELECT * FROM notified_contests WHERE platform = 'Custom' ORDER BY COALESCE(start_time, 9999999999) ASC
       `).all();
 
       if (contests.length === 0) {
-        return interaction.reply({ content: '📅 No custom contests are currently scheduled.', ephemeral: true });
+        return interaction.reply({ content: '📅 No custom contests are currently scheduled.', flags: 64 });
       }
 
       const lines = contests.map((c, i) => {
@@ -262,10 +280,12 @@ module.exports = {
         return `\`${i + 1}.\` **[${c.name}](${c.url})**\n     🗓️ ${timeLabel}`;
       });
 
-      return interaction.reply({
-        embeds: [successEmbed('Custom Contests', lines.join('\n\n'))],
-        ephemeral: true
+      const embed = successEmbed('Custom Contests', 'Scheduled custom contests in this radar:');
+      chunkLines(lines, 1000, '\n\n').forEach((chunk, idx) => {
+        embed.addFields({ name: idx === 0 ? '📋 Schedule' : '📋 Schedule (cont.)', value: chunk, inline: false });
       });
+
+      return interaction.reply({ embeds: [embed], flags: 64 });
     }
   }
 };

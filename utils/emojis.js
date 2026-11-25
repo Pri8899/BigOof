@@ -1,84 +1,85 @@
-// utils/emojis.js — Custom emoji manager for CF, AC, and Toph logos
+// utils/emojis.js — Custom guild emoji manager for CF, AC, and Toph logos
 const fs = require('fs');
 const path = require('path');
 
-let emojiCache = {};
+const FALLBACK_EMOJIS = { cf: '🔵', ac: '🔴', toph: '🟣' };
+const emojiCache = new Map(); // guildId -> { value, expiresAt, complete }
+
+const PLATFORM_ASSETS = [
+  { key: 'cf', emojiName: 'codeforces', file: 'codeforces.png' },
+  { key: 'ac', emojiName: 'atcoder', file: 'atcoder.png' },
+  { key: 'toph', emojiName: 'toph', file: 'toph.png' }
+];
 
 /**
- * Get or create custom emojis for Codeforces, AtCoder, and Toph logos.
- * On every bot restart: re-uploads all 3 logos if the v2 flag is not set.
- * Fallback to circle emojis if guild is missing or bot lacks permissions.
+ * Get or upload custom platform emojis for a guild, with per-guild reset tracking & TTL cache.
  */
 async function getPlatformEmojis(guild) {
-  if (!guild) return { cf: '🔵', ac: '🔴', toph: '🟣' };
-  if (emojiCache[guild.id]) return emojiCache[guild.id];
+  if (!guild) return { ...FALLBACK_EMOJIS };
+
+  const cached = emojiCache.get(guild.id);
+  if (cached && Date.now() < cached.expiresAt) {
+    // Verify cached custom emojis haven't been deleted externally
+    const stillValid = !cached.complete || PLATFORM_ASSETS.every(({ emojiName }) =>
+      guild.emojis.cache.some(e => e.name === emojiName)
+    );
+    if (stillValid) return cached.value;
+  }
 
   try {
-    await guild.emojis.fetch().catch(e => console.warn(`[Emojis] Fetch failed:`, e.message));
+    await guild.emojis.fetch().catch(e => console.warn('[Emojis] Fetch failed:', e.message));
 
-    // v3 flag: delete & re-upload all logos — only load DB when we actually need to check/set the flag
+    // Per-guild v3 reset flag so multi-tenant servers reset independently
     try {
-      const { getConfig, setConfig } = require('../database/db');
-      if (getConfig('reset_circle_emojis_v3') !== 'true') {
-        console.log(`[Emojis] v3 reset — deleting old logos and re-uploading...`);
-        for (const name of ['codeforces', 'atcoder', 'toph']) {
-          const old = guild.emojis.cache.find(e => e.name === name);
+      const { getFullGuildConfig, setConfig } = require('../database/db');
+      const guildCfg = getFullGuildConfig(guild.id);
+      if (guildCfg.reset_circle_emojis_v3 !== 'true') {
+        console.log(`[Emojis] v3 reset in guild '${guild.name}' — refreshing platform logos...`);
+        for (const { emojiName } of PLATFORM_ASSETS) {
+          const old = guild.emojis.cache.find(e => e.name === emojiName);
           if (old) await old.delete().catch(() => {});
         }
         await guild.emojis.fetch().catch(() => {});
-        setConfig('reset_circle_emojis_v3', 'true');
+        setConfig('reset_circle_emojis_v3', 'true', guild.id);
       }
-    } catch (_dbErr) {
-      // DB not available (e.g. sandbox patch scripts) — skip the reset check, use existing emojis
+    } catch (_) {
+      // Skip reset check if DB is unavailable
     }
 
-    // ── Codeforces ─────────────────────────────────────────────────
-    let cfEmoji = guild.emojis.cache.find(e => e.name === 'codeforces');
-    if (!cfEmoji) {
-      const p = path.join(__dirname, '..', 'assets', 'codeforces.png');
-      if (fs.existsSync(p)) {
-        console.log(`[Emojis] Uploading Codeforces logo...`);
-        cfEmoji = await guild.emojis.create({ attachment: fs.readFileSync(p), name: 'codeforces' }).catch(err => {
-          console.warn(`[Emojis] codeforces emoji failed:`, err.message); return null;
-        });
+    const result = {};
+    let uploadedCount = 0;
+
+    for (const { key, emojiName, file } of PLATFORM_ASSETS) {
+      let emoji = guild.emojis.cache.find(e => e.name === emojiName);
+      if (!emoji) {
+        const assetPath = path.join(__dirname, '..', 'assets', file);
+        if (fs.existsSync(assetPath)) {
+          console.log(`[Emojis] Uploading ${emojiName} logo in '${guild.name}'...`);
+          emoji = await guild.emojis.create({
+            attachment: fs.readFileSync(assetPath),
+            name: emojiName
+          }).catch(err => {
+            console.warn(`[Emojis] ${emojiName} upload failed in '${guild.name}':`, err.message);
+            return null;
+          });
+        }
       }
+      if (emoji) uploadedCount++;
+      result[key] = emoji ? `<:${emoji.name}:${emoji.id}>` : FALLBACK_EMOJIS[key];
     }
 
-    // ── AtCoder ─────────────────────────────────────────────────────
-    let acEmoji = guild.emojis.cache.find(e => e.name === 'atcoder');
-    if (!acEmoji) {
-      const p = path.join(__dirname, '..', 'assets', 'atcoder.png');
-      if (fs.existsSync(p)) {
-        console.log(`[Emojis] Uploading AtCoder logo...`);
-        acEmoji = await guild.emojis.create({ attachment: fs.readFileSync(p), name: 'atcoder' }).catch(err => {
-          console.warn(`[Emojis] atcoder emoji failed:`, err.message); return null;
-        });
-      }
-    }
+    const complete = uploadedCount === PLATFORM_ASSETS.length;
+    // Cache both complete and partial results (shorter TTL if partial so missing permissions don't spam REST)
+    emojiCache.set(guild.id, {
+      value: result,
+      complete,
+      expiresAt: Date.now() + (complete ? 60 * 60 * 1000 : 10 * 60 * 1000)
+    });
 
-    // ── Toph (circular, transparent bg) ─────────────────────────────
-    let tophEmoji = guild.emojis.cache.find(e => e.name === 'toph');
-    if (!tophEmoji) {
-      const p = path.join(__dirname, '..', 'assets', 'toph.png');
-      if (fs.existsSync(p)) {
-        console.log(`[Emojis] Uploading Toph logo...`);
-        tophEmoji = await guild.emojis.create({ attachment: fs.readFileSync(p), name: 'toph' }).catch(err => {
-          console.warn(`[Emojis] toph emoji failed:`, err.message); return null;
-        });
-      }
-    }
-
-    const result = {
-      cf:   cfEmoji   ? `<:${cfEmoji.name}:${cfEmoji.id}>`     : '🔵',
-      ac:   acEmoji   ? `<:${acEmoji.name}:${acEmoji.id}>`     : '🔴',
-      toph: tophEmoji ? `<:${tophEmoji.name}:${tophEmoji.id}>` : '🟣'
-    };
-
-    if (cfEmoji && acEmoji && tophEmoji) emojiCache[guild.id] = result;
     return result;
   } catch (err) {
     console.error(`[Emojis] Failed in guild '${guild?.name}':`, err.message);
-    return { cf: '🔵', ac: '🔴', toph: '🟣' };
+    return { ...FALLBACK_EMOJIS };
   }
 }
 

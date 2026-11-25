@@ -1,4 +1,4 @@
-// commands/admin/setup-roles.js — Create and configure CP, Rank, and Streak roles
+// commands/admin/setup-roles.js — Create and configure CP, Rank, and Streak roles safely
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { setConfig, getAllUsers, getRatings, getAllStreaks } = require('../../database/db');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
@@ -17,24 +17,31 @@ const CF_ROLES = [
 ];
 
 const STREAK_ROLES = [
-  { name: '💫 30+ Day Streak', color: 0xE0115F },
-  { name: '👑 15+ Day Streak', color: 0xF1C40F },
-  { name: '🔥 7+ Day Streak',  color: 0xE67E22 }
+  { name: '💫 30+ Day Streak', min: 30, color: 0xE0115F },
+  { name: '👑 15+ Day Streak', min: 15, color: 0xF1C40F },
+  { name: '🔥 7+ Day Streak',  min: 7,  color: 0xE67E22 }
 ];
 
 module.exports = {
+  guildOnly: true,
   data: new SlashCommandBuilder()
     .setName('setup-roles')
-    .setDescription('Create the CP, Rank, and Streak roles and assign them to members (Admin only)')
+    .setDescription('Create CP, Rank, and Streak roles and sync them across members (Admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
 
   async execute(interaction) {
     await interaction.deferReply({ flags: 64 });
     const guild = interaction.guild;
+    const me = guild.members.me;
+
+    if (!me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      return interaction.editReply({
+        embeds: [errorEmbed('Missing Permission', 'I need the **Manage Roles** permission to create and assign roles.')]
+      });
+    }
 
     let createdCount = 0;
 
-    // 1. Find or create base CP role
     let cpRole = guild.roles.cache.find(r => r.name === 'CP');
     if (!cpRole) {
       try {
@@ -53,72 +60,73 @@ module.exports = {
     }
     setConfig('cp_role_id', cpRole.id, guild.id);
 
-    // 2. Create Rank Roles (if not existing)
     for (const rDef of CF_ROLES) {
-      const existing = guild.roles.cache.find(r => r.name === rDef.name);
-      if (!existing) {
+      if (!guild.roles.cache.find(r => r.name === rDef.name)) {
         try {
-          await guild.roles.create({
-            name: rDef.name,
-            color: rDef.color,
-            reason: 'Created by BigOof (Rank Tier)'
-          });
+          await guild.roles.create({ name: rDef.name, color: rDef.color, reason: 'Created by BigOof (Rank Tier)' });
           createdCount++;
         } catch (_) {}
       }
     }
 
-    // 3. Create Streak Roles (if not existing)
     for (const sDef of STREAK_ROLES) {
-      const existing = guild.roles.cache.find(r => r.name === sDef.name);
-      if (!existing) {
+      if (!guild.roles.cache.find(r => r.name === sDef.name)) {
         try {
-          await guild.roles.create({
-            name: sDef.name,
-            color: sDef.color,
-            reason: 'Created by BigOof (Streak Milestone)'
-          });
+          await guild.roles.create({ name: sDef.name, color: sDef.color, reason: 'Created by BigOof (Streak Milestone)' });
           createdCount++;
         } catch (_) {}
       }
     }
 
-    // Reply immediately
+    const hierarchyBlocked = cpRole.position >= me.roles.highest.position;
     await interaction.editReply({
       embeds: [successEmbed(
         'Server Roles Configured! ✅',
-        `Successfully verified/created **CP Member**, **Codeforces Rank**, and **Streak** roles in this server (${createdCount} new role(s) created).\n\n` +
-        `Now bulk-assigning the **CP** role to server members and syncing rank roles in the background...`
+        `Verified/created **CP**, **Codeforces Rank**, and **Streak** roles (${createdCount} created).\n` +
+        `Now assigning **CP**, rank, and streak roles in the background...` +
+        (hierarchyBlocked ? '\n\n⚠️ *Reminder: Move the bot\'s role above these roles in Server Settings → Roles so assignment succeeds.*' : '')
       )]
     });
 
-    // 4. Background member assignment
     guild.members.fetch()
       .then(async members => {
-        // Bulk assign CP role
         for (const [, member] of members) {
-          if (!member.user.bot && !member.roles.cache.has(cpRole.id)) {
+          if (!member.user.bot && cpRole.editable && cpRole.position < me.roles.highest.position && !member.roles.cache.has(cpRole.id)) {
             await member.roles.add(cpRole).catch(() => {});
           }
         }
 
-        // Sync ranks for linked users in this server
+        const streaksByUser = {};
+        for (const s of getAllStreaks()) {
+          streaksByUser[s.discord_id] = Math.max(streaksByUser[s.discord_id] || 0, s.current_streak || 0);
+        }
+
         const users = getAllUsers();
         for (const user of users) {
           const member = members.get(user.discord_id);
           if (!member) continue;
 
-          // Rank sync
-          const ratings = getRatings(user.discord_id);
-          const cf = ratings.find(r => r.platform === 'cf');
+          // Sync CF Rank role
+          const cf = getRatings(user.discord_id).find(r => r.platform === 'cf');
           if (cf && cf.rating !== null) {
-            const roleName = cf.rank_title || 'Newbie';
-            const role = guild.roles.cache.find(r => r.name.toLowerCase() === roleName.toLowerCase());
-            if (role && !member.roles.cache.has(role.id)) {
-              await member.roles.add(role).catch(() => {});
+            const roleName = (cf.rank_title || 'Newbie').toLowerCase();
+            const targetRole = guild.roles.cache.find(r => r.name.toLowerCase() === roleName);
+            if (targetRole && targetRole.editable && targetRole.position < me.roles.highest.position && !member.roles.cache.has(targetRole.id)) {
+              await member.roles.add(targetRole).catch(() => {});
+            }
+          }
+
+          // Sync Streak Milestone role
+          const bestStreak = streaksByUser[user.discord_id] || 0;
+          const targetStreakDef = STREAK_ROLES.find(s => bestStreak >= s.min);
+          if (targetStreakDef) {
+            const streakRole = guild.roles.cache.find(r => r.name === targetStreakDef.name);
+            if (streakRole && streakRole.editable && streakRole.position < me.roles.highest.position && !member.roles.cache.has(streakRole.id)) {
+              await member.roles.add(streakRole).catch(() => {});
             }
           }
         }
+
         console.log(`[setup-roles] Role setup and background sync complete for ${guild.name}.`);
       })
       .catch(err => console.error('[setup-roles] Background sync error:', err.message));

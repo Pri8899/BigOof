@@ -41,7 +41,6 @@ module.exports = {
     const userId = interaction.user.id;
     const username = interaction.user.username;
 
-    // ─── Subcommand: Link ──────────────────────────────────────────
     if (subcommand === 'link') {
       await interaction.deferReply({ flags: 64 });
       const ghUsername = interaction.options.getString('username').trim();
@@ -51,7 +50,7 @@ module.exports = {
         return interaction.editReply({
           embeds: [errorEmbed(
             'Invalid GitHub Username',
-            `🐙 Could not find GitHub user **\`${ghUsername}\`**.\nPlease verify your username on [github.com](https://github.com/${ghUsername}) and try again.`
+            `🐙 Could not find GitHub user **\`${ghUsername}\`**.\nVerify your username on [github.com](https://github.com/${encodeURIComponent(ghUsername)}) and try again.`
           )]
         });
       }
@@ -59,9 +58,7 @@ module.exports = {
       upsertUser(userId, username);
       linkPlatform(userId, 'github', ghUsername);
 
-      // Trigger instant catch-up sync for the newly linked user
       const syncRes = await runGitHubFeed(interaction.client, userId).catch(() => ({ count: 0 }));
-
       const ghData = await getGitHubUser(ghUsername);
       const profileEmbed = ghData ? buildGitHubProfileEmbed(ghData) : null;
 
@@ -73,16 +70,16 @@ module.exports = {
         new ButtonBuilder()
           .setLabel('View on GitHub ↗️')
           .setStyle(ButtonStyle.Link)
-          .setURL(`https://github.com/${ghUsername}`)
+          .setURL(`https://github.com/${encodeURIComponent(ghUsername)}`)
       );
 
       return interaction.editReply({
         embeds: [
           successEmbed(
             'GitHub Account Linked! 🐙',
-            `Your GitHub account **[${ghUsername}](https://github.com/${ghUsername})** has been linked!\n` +
-            `Whenever you push code or solve problems, your activity will be posted to **#github**.\n` +
-            (syncRes && syncRes.count > 0 ? `\n🚀 **Caught up:** Posted **${syncRes.count}** recent activities to #github right now!` : '')
+            `Your GitHub account **[${ghUsername}](https://github.com/${encodeURIComponent(ghUsername)})** has been linked!\n` +
+            'Whenever you push commits, open PRs, or publish releases, your activity will be posted to **#github**.' +
+            (syncRes?.count > 0 ? `\n\n🚀 **Caught up:** Posted **${syncRes.count}** recent activities right now!` : '')
           ),
           ...(profileEmbed ? [profileEmbed] : [])
         ],
@@ -90,7 +87,6 @@ module.exports = {
       });
     }
 
-    // ─── Subcommand: Profile ───────────────────────────────────────
     if (subcommand === 'profile') {
       await interaction.deferReply();
       const targetDiscordUser = interaction.options.getUser('user') || interaction.user;
@@ -110,15 +106,11 @@ module.exports = {
       const ghData = await getGitHubUser(dbUser.github_handle);
       if (!ghData) {
         return interaction.editReply({
-          embeds: [errorEmbed(
-            'Error Fetching Profile',
-            `Could not load GitHub profile for **${dbUser.github_handle}**.`
-          )]
+          embeds: [errorEmbed('Error Fetching Profile', `Could not load GitHub profile for **${dbUser.github_handle}**.`)]
         });
       }
 
       const embed = buildGitHubProfileEmbed(ghData);
-
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('github_sync_btn')
@@ -133,7 +125,6 @@ module.exports = {
       return interaction.editReply({ embeds: [embed], components: [row] });
     }
 
-    // ─── Subcommand: Sync (Secret manual catch-up trigger) ─────────
     if (subcommand === 'sync') {
       await interaction.deferReply({ flags: 64 });
       const dbUser = getUser(userId);
@@ -155,20 +146,19 @@ module.exports = {
         return interaction.editReply({
           embeds: [successEmbed(
             'GitHub Activity Synced! 🚀',
-            `Successfully scanned **[${dbUser.github_handle}](https://github.com/${dbUser.github_handle})** and posted **${result.count}** new activities to **#github**!`
-          )]
-        });
-      } else {
-        return interaction.editReply({
-          embeds: [successEmbed(
-            'Everything Up-to-Date! 🟢',
-            `Scanned **[${dbUser.github_handle}](https://github.com/${dbUser.github_handle})**. All recent commits and activities are already posted in **#github**!`
+            `Scanned **[${dbUser.github_handle}](https://github.com/${encodeURIComponent(dbUser.github_handle)})** and posted **${result.count}** new activities to **#github**!`
           )]
         });
       }
+
+      return interaction.editReply({
+        embeds: [successEmbed(
+          'Everything Up-to-Date! 🟢',
+          `Scanned **[${dbUser.github_handle}](https://github.com/${encodeURIComponent(dbUser.github_handle)})**. All recent activities are already posted!`
+        )]
+      });
     }
 
-    // ─── Subcommand: Unlink ────────────────────────────────────────
     if (subcommand === 'unlink') {
       const dbUser = getUser(userId);
       if (!dbUser || !dbUser.github_handle) {

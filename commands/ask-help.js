@@ -1,4 +1,4 @@
-// commands/ask-help.js — Request assistance on an algorithmic problem or bug
+// commands/ask-help.js — Request community assistance with deferred attachment forwarding
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 const data = new SlashCommandBuilder()
@@ -19,17 +19,18 @@ for (let i = 1; i <= 5; i++) {
 }
 
 module.exports = {
+  guildOnly: true,
   data,
   async execute(interaction) {
+    await interaction.deferReply();
+
     const problem = interaction.options.getString('problem');
     const user = interaction.user;
 
     const attachments = [];
     for (let i = 1; i <= 5; i++) {
       const attachment = interaction.options.getAttachment(`image${i}`);
-      if (attachment) {
-        attachments.push(attachment.url);
-      }
+      if (attachment) attachments.push(attachment.url);
     }
 
     const embed = new EmbedBuilder()
@@ -39,23 +40,38 @@ module.exports = {
         iconURL: user.displayAvatarURL({ dynamic: true })
       })
       .setDescription([
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
         `> 👤 **Author:** <@${user.id}>`,
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-        ``,
-        `**Problem & Context:**`,
-        `> ${problem.replace(/\n/g, '\n> ')}`,
-        ``,
-        `💡 *Got an idea, edge case, or complexity hint? Jump in to discuss!*`
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        '',
+        '**Problem & Context:**',
+        `> ${problem.slice(0, 3500).replace(/\n/g, '\n> ')}`,
+        '',
+        '💡 *Got an idea, edge case, or complexity hint? Jump in to discuss!*'
       ].join('\n'))
       .setThumbnail(user.displayAvatarURL({ dynamic: true }))
       .setFooter({ text: 'BigOof Peer Support · /ask-help', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
       .setTimestamp();
 
-    await interaction.reply({
-      content: `🔔 Community notification: ${user} asked for help!`,
-      embeds: [embed],
-      files: attachments
-    });
+    try {
+      await interaction.editReply({
+        content: `🔔 Community notification: ${user} asked for help!`,
+        embeds: [embed],
+        files: attachments
+      });
+    } catch {
+      // Fallback if attachments exceed upload size limits
+      if (attachments.length > 0) {
+        embed.addFields({
+          name: '📎 Attachments',
+          value: attachments.map((u, idx) => `[Attachment ${idx + 1}](${u})`).join(' · '),
+          inline: false
+        });
+      }
+      await interaction.editReply({
+        content: `🔔 Community notification: ${user} asked for help!`,
+        embeds: [embed]
+      });
+    }
   }
 };

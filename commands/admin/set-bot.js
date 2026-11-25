@@ -1,8 +1,9 @@
-// commands/admin/set-bot.js — Configure bot profile (avatar and username)
+// commands/admin/set-bot.js — Configure bot avatar and username (Bot Owner only)
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const { isBotOwner } = require('../../utils/envHelper');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
 
 module.exports = {
@@ -20,7 +21,7 @@ module.exports = {
         )
         .addStringOption(opt =>
           opt.setName('url')
-            .setDescription('URL of the new avatar image')
+            .setDescription('HTTPS URL of the new avatar image')
             .setRequired(false)
         )
     )
@@ -29,20 +30,17 @@ module.exports = {
         .setDescription('Update the bot username on Discord')
         .addStringOption(opt =>
           opt.setName('name')
-            .setDescription('New bot username')
+            .setDescription('New bot username (2–32 characters)')
             .setRequired(true)
+            .setMinLength(2)
+            .setMaxLength(32)
         )
     ),
 
   async execute(interaction) {
     await interaction.deferReply({ flags: 64 });
 
-    const isOwner = interaction.user.id === process.env.OWNER_ID ||
-      (interaction.client.application && interaction.client.application.owner &&
-       (interaction.client.application.owner.id === interaction.user.id ||
-        (interaction.client.application.owner.members && interaction.client.application.owner.members.has(interaction.user.id))));
-
-    if (!isOwner) {
+    if (!isBotOwner(interaction)) {
       return interaction.editReply({
         embeds: [errorEmbed('Permission Denied', 'Managing the bot profile and avatar is restricted to the Bot Owner.')]
       });
@@ -52,35 +50,44 @@ module.exports = {
 
     if (subcommand === 'avatar') {
       const attachment = interaction.options.getAttachment('image');
-      const url = interaction.options.getString('url');
-
+      const url = interaction.options.getString('url')?.trim();
       let imageBuffer = null;
 
       try {
         if (attachment) {
-          const res = await axios.get(attachment.url, { responseType: 'arraybuffer', timeout: 15000 });
+          const res = await axios.get(attachment.url, {
+            responseType: 'arraybuffer',
+            timeout: 15000,
+            maxContentLength: 8 * 1024 * 1024
+          });
           imageBuffer = Buffer.from(res.data);
         } else if (url) {
-          const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000 });
-          imageBuffer = Buffer.from(res.data);
-        } else {
-          // Default to bundled official assets/bot-avatar.png
-          const defaultPath = path.join(__dirname, '../../assets/bot-avatar.png');
-          if (fs.existsSync(defaultPath)) {
-            imageBuffer = fs.readFileSync(defaultPath);
-          } else {
+          if (!/^https?:\/\//i.test(url)) {
             return interaction.editReply({
-              embeds: [errorEmbed('No Image Provided', 'Please attach an image or provide a valid image URL.')]
+              embeds: [errorEmbed('Invalid URL', 'Avatar URL must start with `https://` or `http://`.')]
             });
           }
+          const res = await axios.get(url, {
+            responseType: 'arraybuffer',
+            timeout: 15000,
+            maxContentLength: 8 * 1024 * 1024
+          });
+          imageBuffer = Buffer.from(res.data);
+        } else {
+          const defaultPath = path.join(__dirname, '../../assets/bot-avatar.png');
+          if (!fs.existsSync(defaultPath)) {
+            return interaction.editReply({
+              embeds: [errorEmbed('No Image Provided', 'Please attach an image or provide an image URL.')]
+            });
+          }
+          imageBuffer = fs.readFileSync(defaultPath);
         }
 
         await interaction.client.user.setAvatar(imageBuffer);
-
         return interaction.editReply({
           embeds: [successEmbed(
             'Bot Avatar Updated! 🎨',
-            'The bot avatar has been successfully updated on Discord.\n\n*Note: Discord strictly limits avatar updates to 2 per 10 minutes.*'
+            'The bot avatar has been updated on Discord.\n\n*Note: Discord rate-limits avatar updates to 2 per 10 minutes.*'
           )]
         });
       } catch (err) {
@@ -96,10 +103,7 @@ module.exports = {
       try {
         await interaction.client.user.setUsername(newName);
         return interaction.editReply({
-          embeds: [successEmbed(
-            'Bot Username Updated! 🏷️',
-            `The bot username has been changed to **${newName}**.`
-          )]
+          embeds: [successEmbed('Bot Username Updated! 🏷️', `The bot username has been changed to **${newName}**.`)]
         });
       } catch (err) {
         console.error('[set-bot] Username error:', err.message);

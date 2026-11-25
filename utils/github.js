@@ -1,41 +1,45 @@
-// utils/github.js — GitHub API wrapper for profile and push event tracking
+// utils/github.js — GitHub REST API wrapper for profile & activity tracking
 const axios = require('axios');
 
 const GITHUB_API = 'https://api.github.com';
-const GITHUB_HEADERS = {
-  'User-Agent': 'DC-Bot/1.0 (Discord Competitive Programming Bot)',
-  'Accept': 'application/vnd.github.v3+json'
-};
+
+function getGitHubHeaders() {
+  const headers = {
+    'User-Agent': 'BigOof-Bot/1.0 (Discord Competitive Programming Bot)',
+    'Accept': 'application/vnd.github+json'
+  };
+  const token = process.env.GITHUB_TOKEN?.trim();
+  if (token && !token.includes('your_')) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
 
 /**
- * Validate if a GitHub username exists
- * @param {string} username
- * @returns {Promise<boolean>}
+ * Validate if a GitHub username exists.
  */
 async function validateGitHubUser(username) {
   try {
     const res = await axios.get(`${GITHUB_API}/users/${encodeURIComponent(username)}`, {
-      headers: GITHUB_HEADERS,
+      headers: getGitHubHeaders(),
       timeout: 8000
     });
-    return res.status === 200 && !!res.data.login;
-  } catch (err) {
+    return res.status === 200 && Boolean(res.data?.login);
+  } catch {
     return false;
   }
 }
 
 /**
- * Fetch GitHub user profile data
- * @param {string} username
- * @returns {Promise<Object|null>}
+ * Fetch normalized GitHub user profile data.
  */
 async function getGitHubUser(username) {
   try {
     const res = await axios.get(`${GITHUB_API}/users/${encodeURIComponent(username)}`, {
-      headers: GITHUB_HEADERS,
+      headers: getGitHubHeaders(),
       timeout: 8000
     });
-    if (res.status !== 200) return null;
+    if (res.status !== 200 || !res.data) return null;
     const data = res.data;
     return {
       login: data.login,
@@ -55,55 +59,54 @@ async function getGitHubUser(username) {
 }
 
 /**
- * Fetch recent public GitHub events for a user (pushes, PRs, new repos, branches, releases)
- * @param {string} username
- * @returns {Promise<Array>}
+ * Fetch recent public GitHub events for a user.
  */
 async function getUserRecentEvents(username) {
   try {
     const res = await axios.get(`${GITHUB_API}/users/${encodeURIComponent(username)}/events/public`, {
-      headers: GITHUB_HEADERS,
+      headers: getGitHubHeaders(),
       timeout: 10000
     });
     if (res.status !== 200 || !Array.isArray(res.data)) return [];
-    const supportedTypes = ['PushEvent', 'CreateEvent', 'PullRequestEvent', 'IssuesEvent', 'ReleaseEvent', 'ForkEvent'];
-    return res.data.filter(event => supportedTypes.includes(event.type));
+    const supportedTypes = new Set([
+      'PushEvent',
+      'CreateEvent',
+      'PullRequestEvent',
+      'IssuesEvent',
+      'ReleaseEvent',
+      'ForkEvent'
+    ]);
+    return res.data.filter(event => supportedTypes.has(event.type));
   } catch (err) {
     console.error(`[GitHub] Error fetching events for ${username}:`, err.message);
     return [];
   }
 }
 
-// Backward compatibility alias
-const getUserRecentPushEvents = getUserRecentEvents;
-
 /**
- * Fetch detailed commit information
- * @param {string} repoFullName - e.g. "octocat/Hello-World"
- * @param {string} sha - commit SHA
- * @returns {Promise<Object|null>}
+ * Fetch detailed commit information.
  */
 async function getCommitDetails(repoFullName, sha) {
   try {
-    const res = await axios.get(`${GITHUB_API}/repos/${repoFullName}/commits/${sha}`, {
-      headers: GITHUB_HEADERS,
+    const safeRepo = repoFullName.split('/').map(encodeURIComponent).join('/');
+    const res = await axios.get(`${GITHUB_API}/repos/${safeRepo}/commits/${encodeURIComponent(sha)}`, {
+      headers: getGitHubHeaders(),
       timeout: 10000
     });
-    if (res.status !== 200) return null;
+    if (res.status !== 200 || !res.data) return null;
     const data = res.data;
     return {
       sha: data.sha,
       shortSha: data.sha.substring(0, 7),
-      message: data.commit.message,
-      authorName: data.commit.author.name,
+      message: data.commit?.message || 'Commit pushed',
+      authorName: data.commit?.author?.name || 'Unknown',
       commitUrl: data.html_url,
       stats: data.stats || { total: 0, additions: 0, deletions: 0 },
       files: (data.files || []).map(f => ({
         filename: f.filename,
         status: f.status,
         additions: f.additions,
-        deletions: f.deletions,
-        patch: f.patch
+        deletions: f.deletions
       }))
     };
   } catch (err) {
@@ -113,11 +116,10 @@ async function getCommitDetails(repoFullName, sha) {
 }
 
 /**
- * Helper to get programming language name and badge emoji from filename
- * @param {string} filename
- * @returns {{ name: string, emoji: string }}
+ * Infer language display metadata from filename extension.
  */
 function detectLanguage(filename) {
+  if (!filename) return { name: 'Code', emoji: '💻' };
   const ext = filename.split('.').pop()?.toLowerCase();
   switch (ext) {
     case 'cpp':
@@ -136,8 +138,10 @@ function detectLanguage(filename) {
       return { name: 'Dart/Flutter', emoji: '🎯' };
     case 'js':
     case 'mjs':
+    case 'cjs':
       return { name: 'JavaScript', emoji: '🟨' };
     case 'ts':
+    case 'tsx':
       return { name: 'TypeScript', emoji: '🔷' };
     case 'rs':
       return { name: 'Rust', emoji: '🦀' };
@@ -160,7 +164,6 @@ module.exports = {
   validateGitHubUser,
   getGitHubUser,
   getUserRecentEvents,
-  getUserRecentPushEvents,
   getCommitDetails,
   detectLanguage
 };

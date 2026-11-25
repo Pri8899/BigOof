@@ -1,4 +1,4 @@
-// utils/codeforces.js — Codeforces API wrapper
+// utils/codeforces.js — Codeforces REST API wrapper with shared headers, caching, and retries
 const axios = require('axios');
 
 const CF_BASE = 'https://codeforces.com/api';
@@ -7,42 +7,113 @@ const CF_HEADERS = {
   'Accept': 'application/json, text/plain, */*'
 };
 
+const CACHE_DURATION = 6 * 3600 * 1000; // 6 hours
+let cachedProblems = null;
+let lastCacheFetchTime = 0;
+let cachedContests = null;
+let lastContestCacheFetchTime = 0;
+let problemFetchPromise = null;
+let contestFetchPromise = null;
+
 /**
- * Fetch user info from Codeforces
- * @param {string} handle
- * @returns {{ rating, maxRating, rankTitle, solved }} or null
+ * Performs a resilient GET request to Codeforces API with browser headers & retry backoff.
+ */
+async function cfGet(endpoint, timeout = 12000, retries = 3) {
+  const url = endpoint.startsWith('http') ? endpoint : `${CF_BASE}${endpoint}`;
+  let lastErr;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await axios.get(url, { timeout, headers: CF_HEADERS });
+    } catch (err) {
+      lastErr = err;
+      const status = err.response?.status;
+      const retryable =
+        status === 429 ||
+        status === 503 ||
+        (status && status >= 500) ||
+        err.code === 'ECONNABORTED' ||
+        err.code === 'ECONNRESET' ||
+        err.message?.includes('timeout');
+      if (retryable && i < retries - 1) {
+        const delay = 1500 * Math.pow(2, i);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
+function getCFProblemKey(problem) {
+  if (!problem) return null;
+  if (problem.contestId !== undefined && problem.index !== undefined) {
+    return `${problem.contestId}-${problem.index}`;
+  }
+  return problem.name ? `${problem.name.trim().toLowerCase()}_${problem.rating || 0}` : null;
+}
+
+function getRatingTitle(rating) {
+  if (!rating || rating <= 0) return 'Unrated';
+  if (rating >= 3000) return 'Legendary Grandmaster';
+  if (rating >= 2600) return 'International Grandmaster';
+  if (rating >= 2400) return 'Grandmaster';
+  if (rating >= 2300) return 'International Master';
+  if (rating >= 2100) return 'Master';
+  if (rating >= 1900) return 'Candidate Master';
+  if (rating >= 1600) return 'Expert';
+  if (rating >= 1400) return 'Specialist';
+  if (rating >= 1200) return 'Pupil';
+  return 'Newbie';
+}
+
+/**
+ * Fetches Codeforces user submissions safely. Returns array on OK, or null if API failed.
+ */
+async function getCFStatus(handle, count = 2000, from = 1) {
+  try {
+    const res = await cfGet(
+      `/user.status?handle=${encodeURIComponent(handle)}&from=${from}&count=${count}`,
+      12000
+    );
+    if (res.data?.status === 'OK' && Array.isArray(res.data.result)) {
+      return res.data.result;
+    }
+    return null;
+  } catch (err) {
+    console.warn(`[CF] user.status failed for ${handle}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Fetch user info, solved count, and last rated contest from Codeforces.
  */
 async function getCFUser(handle) {
   try {
-    const infoRes = await axios.get(`${CF_BASE}/user.info?handles=${handle}`, { timeout: 8000, headers: CF_HEADERS });
-    if (infoRes.data.status !== 'OK') return null;
+    const infoRes = await cfGet(`/user.info?handles=${encodeURIComponent(handle)}`, 8000);
+    if (infoRes.data?.status !== 'OK' || !Array.isArray(infoRes.data.result) || !infoRes.data.result[0]) {
+      return null;
+    }
     const user = infoRes.data.result[0];
 
-    // Count accepted submissions
-    let solved = 0;
-    try {
-      const subRes = await axios.get(
-        `${CF_BASE}/user.status?handle=${handle}&from=1&count=10000`,
-        { timeout: 10000, headers: CF_HEADERS }
-      );
-      if (subRes.data.status === 'OK') {
-        const seen = new Set();
-        for (const sub of subRes.data.result) {
-          if (sub.verdict === 'OK' && sub.problem) {
-            const key = sub.problem.name
-              ? `${sub.problem.name.trim().toLowerCase()}_${sub.problem.rating || 0}`
-              : `${sub.problem.contestId}-${sub.problem.index}`;
-            seen.add(key);
-          }
+    let solved = null;
+    const subs = await getCFStatus(handle, 10000);
+    if (subs) {
+      const seen = new Set();
+      for (const sub of subs) {
+        if (sub.verdict === 'OK' && sub.problem) {
+          const key = getCFProblemKey(sub.problem);
+          if (key) seen.add(key);
         }
-        solved = seen.size;
       }
-    } catch (_) { /* ignore solve count errors */ }
+      solved = seen.size;
+    }
 
     let lastContest = null;
     try {
-      const ratingRes = await axios.get(`${CF_BASE}/user.rating?handle=${handle}`, { timeout: 6000, headers: CF_HEADERS });
-      if (ratingRes.data.status === 'OK' && ratingRes.data.result.length > 0) {
+      const ratingRes = await cfGet(`/user.rating?handle=${encodeURIComponent(handle)}`, 8000);
+      if (ratingRes.data?.status === 'OK' && Array.isArray(ratingRes.data.result) && ratingRes.data.result.length > 0) {
         const last = ratingRes.data.result[ratingRes.data.result.length - 1];
         lastContest = {
           contestName: last.contestName,
@@ -52,9 +123,9 @@ async function getCFUser(handle) {
     } catch (_) {}
 
     return {
-      rating:    user.rating    ?? 0,
+      rating: user.rating ?? 0,
       max_rating: user.maxRating ?? 0,
-      rank_title: user.rank      ?? 'Unrated',
+      rank_title: user.rank ?? 'Unrated',
       solved,
       acceptance: 0,
       lastContest
@@ -66,23 +137,23 @@ async function getCFUser(handle) {
 }
 
 /**
- * Fetch upcoming/running contests from Codeforces
- * @returns {Array<{id, name, startTimeSeconds, durationSeconds}>}
+ * Fetch upcoming contests from Codeforces.
  */
 async function getCFContests() {
   try {
-    const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 15000, headers: CF_HEADERS });
-    if (res.data.status !== 'OK') return [];
+    const res = await cfGet('/contest.list?gym=false', 15000);
+    if (res.data?.status !== 'OK') return [];
     const now = Math.floor(Date.now() / 1000);
     return res.data.result
       .filter(c => c.phase === 'BEFORE' && c.startTimeSeconds > now)
+      .sort((a, b) => a.startTimeSeconds - b.startTimeSeconds)
       .map(c => ({
-        id:           `cf_${c.id}`,
-        platform:     'Codeforces',
-        name:         c.name,
-        startTime:    c.startTimeSeconds,
-        durationSec:  c.durationSeconds,
-        url:          `https://codeforces.com/contests/${c.id}`
+        id: `cf_${c.id}`,
+        platform: 'Codeforces',
+        name: c.name,
+        startTime: c.startTimeSeconds,
+        durationSec: c.durationSeconds,
+        url: `https://codeforces.com/contests/${c.id}`
       }));
   } catch (err) {
     console.error('[CF] Contest fetch error:', err.message);
@@ -90,54 +161,84 @@ async function getCFContests() {
   }
 }
 
-/**
- * Validate a Codeforces handle
- */
 async function validateCFHandle(handle) {
   try {
-    const res = await axios.get(`${CF_BASE}/user.info?handles=${handle}`, { timeout: 6000, headers: CF_HEADERS });
-    return res.data.status === 'OK';
+    const res = await cfGet(`/user.info?handles=${encodeURIComponent(handle)}`, 6000, 2);
+    return res.data?.status === 'OK';
   } catch {
     return false;
   }
 }
 
-let cachedProblems = null;
-let lastCacheFetchTime = 0;
-let cachedContests = null;
-let lastContestCacheFetchTime = 0;
-const CACHE_DURATION = 6 * 3600 * 1000; // 6 hours
+async function ensureProblemCache(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cachedProblems && (now - lastCacheFetchTime <= CACHE_DURATION)) {
+    return cachedProblems;
+  }
 
-// Pre-populate problemset and contest cache on boot
-async function initializeProblemCache() {
-  console.log('[CF] Warming up Codeforces problem set and contest caches...');
-  try {
-    const [probRes, contestRes] = await Promise.all([
-      axios.get(`${CF_BASE}/problemset.problems`, { timeout: 20000, headers: CF_HEADERS }),
-      axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 15000, headers: CF_HEADERS }).catch(() => null)
-    ]);
-    
-    if (probRes && probRes.data && probRes.data.status === 'OK' && probRes.data.result && Array.isArray(probRes.data.result.problems)) {
-      cachedProblems = probRes.data.result.problems;
-      lastCacheFetchTime = Date.now();
-      console.log(`[CF] Problem set cache warmed up: ${cachedProblems.length} problems loaded.`);
-    }
-
-    if (contestRes && contestRes.data && contestRes.data.status === 'OK' && Array.isArray(contestRes.data.result)) {
-      const contestMap = {};
-      for (const c of contestRes.data.result) {
-        contestMap[c.id] = c.name;
+  if (!problemFetchPromise) {
+    problemFetchPromise = (async () => {
+      try {
+        const res = await cfGet('/problemset.problems', 20000);
+        if (res.data?.status === 'OK' && Array.isArray(res.data.result?.problems)) {
+          cachedProblems = res.data.result.problems;
+          lastCacheFetchTime = Date.now();
+        }
+      } catch (err) {
+        console.warn('[CF] Failed to refresh problemset cache:', err.message);
+      } finally {
+        problemFetchPromise = null;
       }
-      cachedContests = contestMap;
-      lastContestCacheFetchTime = Date.now();
-      console.log(`[CF] Contest list cache warmed up: ${Object.keys(cachedContests).length} contests loaded.`);
-    }
-  } catch (err) {
-    console.warn('[CF] Failed to warm up caches on startup:', err.message);
+      return cachedProblems;
+    })();
+  }
+  return problemFetchPromise;
+}
+
+async function ensureContestCache(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cachedContests && (now - lastContestCacheFetchTime <= CACHE_DURATION)) {
+    return cachedContests;
+  }
+
+  if (!contestFetchPromise) {
+    contestFetchPromise = (async () => {
+      try {
+        const res = await cfGet('/contest.list?gym=false', 15000);
+        if (res.data?.status === 'OK' && Array.isArray(res.data.result)) {
+          const contestMap = {};
+          for (const c of res.data.result) {
+            contestMap[c.id] = c.name;
+          }
+          cachedContests = contestMap;
+          lastContestCacheFetchTime = Date.now();
+        }
+      } catch (err) {
+        console.warn('[CF] Failed to refresh contest list cache:', err.message);
+      } finally {
+        contestFetchPromise = null;
+      }
+      return cachedContests;
+    })();
+  }
+  return contestFetchPromise;
+}
+
+async function getProblemsetCache() {
+  return ensureProblemCache(false);
+}
+
+async function initializeProblemCache() {
+  console.log('[CF] Warming up Codeforces problemset and contest caches...');
+  await Promise.all([ensureProblemCache(false), ensureContestCache(false)]);
+  if (cachedProblems) {
+    console.log(`[CF] Problemset cache warmed up: ${cachedProblems.length} problems loaded.`);
+  }
+  if (cachedContests) {
+    console.log(`[CF] Contest list cache warmed up: ${Object.keys(cachedContests).length} contests loaded.`);
   }
 }
 
-// Check if a contest name matches the selected division filter
 function matchesDivision(contestName, division, rating = null) {
   if (!contestName) {
     if (!rating) return true;
@@ -147,7 +248,7 @@ function matchesDivision(contestName, division, rating = null) {
     if (division === 'div4') return rating <= 1400;
     return true;
   }
-  
+
   const lowerName = contestName.toLowerCase();
   const hasDiv1 = /div\.?\s*1\b/i.test(lowerName) || lowerName.includes('global') || lowerName.includes('div. 1 + div. 2');
   const hasDiv2 = /div\.?\s*2\b/i.test(lowerName) || lowerName.includes('educational') || lowerName.includes('div. 1 + div. 2');
@@ -158,251 +259,187 @@ function matchesDivision(contestName, division, rating = null) {
   if (division === 'div2') return hasDiv2;
   if (division === 'div3') return hasDiv3;
   if (division === 'div4') return hasDiv4;
-
   return true;
 }
 
-/**
- * Helper to filter problem candidates from cache
- */
 function filterProblemCandidates(problems, minRating, maxRating, tag, excludeIds, division, excludeTags, contestMap) {
   return problems.filter(p => {
-    const pId = `${p.contestId}${p.index}`;
-    
-    // Check rating
+    const compactId = `${p.contestId}${p.index}`;
+    const hyphenId = `${p.contestId}-${p.index}`;
+
     if (p.rating === undefined || p.rating === null || p.rating < minRating || p.rating > maxRating) {
       return false;
     }
-    
-    // Check exclusions (solved problems)
-    if (excludeIds && excludeIds.has(pId)) {
+    if (excludeIds && (excludeIds.has(compactId) || excludeIds.has(hyphenId))) {
       return false;
     }
-    
-    // Check tag if provided
     if (tag) {
       const lowerTag = tag.toLowerCase();
       if (!p.tags || !p.tags.some(t => t.toLowerCase() === lowerTag)) {
         return false;
       }
     }
-
-    // Check division if provided
     if (division) {
       const contestName = contestMap ? contestMap[p.contestId] : null;
       if (!matchesDivision(contestName, division, p.rating)) {
         return false;
       }
     }
-    
-    // Check exclude tags
     if (excludeTags && excludeTags.size > 0 && p.tags) {
       for (const t of p.tags) {
         if (excludeTags.has(t.toLowerCase())) return false;
       }
     }
-
-    // Filter out Surprise Language Rounds and Gym contests — they don't allow C++
-    if (p.contestId >= 100000) return false; // Gym contest
+    if (p.contestId >= 100000) return false;
     if (contestMap) {
       const cName = (contestMap[p.contestId] || '').toLowerCase();
-      if (cName.includes('surprise') || cName.includes('language round') || cName.includes('kotlin') || cName.includes('java') || cName.includes('scala')) {
+      if (cName.includes('surprise') || cName.includes('language round') || cName.includes('kotlin')) {
         return false;
       }
     }
-
     return true;
   });
 }
 
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 /**
- * Fetch CF problems filtered by rating range, optional tag, and optional division
- * @param {number} minRating
- * @param {number} maxRating
- * @param {string|null} tag
- * @param {number} count - how many to return
- * @param {Set} excludeIds - solved problem IDs
- * @param {string|null} division - 'div1', 'div2', 'div3', 'div4'
- * @param {Set} excludeTags - tags to exclude
+ * Fetch filtered CF problems. Accepts either positional arguments or a single options object.
  */
-async function getCFProblems(minRating = 800, maxRating = 3500, tag = null, count = 5, excludeIds = new Set(), division = null, excludeTags = new Set()) {
+async function getCFProblems(
+  minRatingOrOpts = 800,
+  maxRating = 3500,
+  tag = null,
+  count = 5,
+  excludeIds = new Set(),
+  division = null,
+  excludeTags = new Set()
+) {
+  let minRating = minRatingOrOpts;
+  if (minRatingOrOpts && typeof minRatingOrOpts === 'object' && !(minRatingOrOpts instanceof Set)) {
+    minRating = minRatingOrOpts.minRating ?? 800;
+    maxRating = minRatingOrOpts.maxRating ?? 3500;
+    tag = minRatingOrOpts.tag ?? null;
+    count = minRatingOrOpts.count ?? 5;
+    excludeIds = minRatingOrOpts.excludeIds ?? new Set();
+    division = minRatingOrOpts.division ?? null;
+    excludeTags = minRatingOrOpts.excludeTags ?? new Set();
+  }
+
   try {
-    const now = Date.now();
-    
-    // Fetch problemset cache if needed
-    if (!cachedProblems || (now - lastCacheFetchTime > CACHE_DURATION)) {
-      console.log('[CF] Cache expired or empty. Fetching full problemset from Codeforces API...');
-      const res = await axios.get(`${CF_BASE}/problemset.problems`, { timeout: 20000, headers: CF_HEADERS });
-      if (res.data && res.data.status === 'OK' && res.data.result && Array.isArray(res.data.result.problems)) {
-        cachedProblems = res.data.result.problems;
-        lastCacheFetchTime = now;
-        console.log(`[CF] Successfully cached ${cachedProblems.length} problems.`);
-      }
-    }
+    const [problems, contestMap] = await Promise.all([ensureProblemCache(false), ensureContestCache(false)]);
 
-    // Fetch contest list cache if needed
-    if (!cachedContests || (now - lastContestCacheFetchTime > CACHE_DURATION)) {
-      const res = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 20000, headers: CF_HEADERS }).catch(() => null);
-      if (res && res.data && res.data.status === 'OK' && Array.isArray(res.data.result)) {
-        const contestMap = {};
-        for (const c of res.data.result) {
-          contestMap[c.id] = c.name;
-        }
-        cachedContests = contestMap;
-        lastContestCacheFetchTime = now;
-      }
-    }
-
-    if (!cachedProblems || cachedProblems.length === 0) {
+    if (!problems || problems.length === 0) {
       console.error('[CF] Problem cache is empty and API fetch failed.');
       return [];
     }
 
-    // Attempt 1: Strict filter
-    let filtered = filterProblemCandidates(cachedProblems, minRating, maxRating, tag, excludeIds, division, excludeTags, cachedContests);
+    let filtered = filterProblemCandidates(problems, minRating, maxRating, tag, excludeIds, division, excludeTags, contestMap);
 
-    // Attempt 2: If no matches and minRating === maxRating, widen rating window (±100)
     if (filtered.length === 0 && minRating === maxRating) {
-      const wMin = Math.max(800, minRating - 100);
-      const wMax = Math.min(3500, maxRating + 100);
-      filtered = filterProblemCandidates(cachedProblems, wMin, wMax, tag, excludeIds, division, excludeTags, cachedContests);
+      filtered = filterProblemCandidates(
+        problems, Math.max(800, minRating - 100), Math.min(3500, maxRating + 100),
+        tag, excludeIds, division, excludeTags, contestMap
+      );
     }
 
-    // Attempt 3: If still no matches, widen rating window (±200)
     if (filtered.length === 0 && (minRating === maxRating || minRating > 800 || maxRating < 3500)) {
-      const wMin = Math.max(800, minRating - 200);
-      const wMax = Math.min(3500, maxRating + 200);
-      filtered = filterProblemCandidates(cachedProblems, wMin, wMax, tag, excludeIds, division, excludeTags, cachedContests);
+      filtered = filterProblemCandidates(
+        problems, Math.max(800, minRating - 200), Math.min(3500, maxRating + 200),
+        tag, excludeIds, division, excludeTags, contestMap
+      );
     }
 
-    // Attempt 4: If still no matches and division was specified, relax division filter
     if (filtered.length === 0 && division) {
-      const wMin = Math.max(800, minRating - 200);
-      const wMax = Math.min(3500, maxRating + 200);
-      filtered = filterProblemCandidates(cachedProblems, wMin, wMax, tag, excludeIds, null, excludeTags, cachedContests);
+      filtered = filterProblemCandidates(
+        problems, Math.max(800, minRating - 200), Math.min(3500, maxRating + 200),
+        tag, excludeIds, null, excludeTags, contestMap
+      );
     }
 
-    // Attempt 5: If still no matches, ignore excludeIds (if user solved everything matching criteria)
+    if (filtered.length === 0 && excludeTags && excludeTags.size > 0) {
+      filtered = filterProblemCandidates(
+        problems, Math.max(800, minRating - 200), Math.min(3500, maxRating + 200),
+        tag, excludeIds, null, null, contestMap
+      );
+    }
+
     if (filtered.length === 0 && excludeIds && excludeIds.size > 0) {
-      filtered = filterProblemCandidates(cachedProblems, Math.max(800, minRating - 200), Math.min(3500, maxRating + 200), tag, null, null, excludeTags, cachedContests);
+      filtered = filterProblemCandidates(
+        problems, Math.max(800, minRating - 200), Math.min(3500, maxRating + 200),
+        tag, null, null, null, contestMap
+      );
     }
 
-    // Shuffle and pick
-    filtered = filtered.sort(() => Math.random() - 0.5).slice(0, count);
-
-    return filtered.map(p => ({
-      id:         `${p.contestId}${p.index}`,
-      name:       p.name,
-      rating:     p.rating ?? '?',
-      tags:       (p.tags ?? []).slice(0, 4),
-      url:        `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`,
-      contestId:  p.contestId,
-      index:      p.index
+    const picked = shuffleInPlace([...filtered]).slice(0, count);
+    return picked.map(p => ({
+      id: `${p.contestId}${p.index}`,
+      name: p.name,
+      rating: p.rating ?? '?',
+      tags: (p.tags ?? []).slice(0, 4),
+      url: `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`,
+      contestId: p.contestId,
+      index: p.index
     }));
   } catch (err) {
     console.error('[CF] getCFProblems error:', err.message);
-    if (cachedProblems && cachedProblems.length > 0) {
-      let filtered = filterProblemCandidates(cachedProblems, minRating, maxRating, tag, excludeIds, division, excludeTags, cachedContests);
-      if (filtered.length === 0) {
-        filtered = filterProblemCandidates(cachedProblems, Math.max(800, minRating - 200), Math.min(3500, maxRating + 200), tag, null, null, excludeTags, cachedContests);
-      }
-      filtered = filtered.sort(() => Math.random() - 0.5).slice(0, count);
-      return filtered.map(p => ({
-        id:         `${p.contestId}${p.index}`,
-        name:       p.name,
-        rating:     p.rating ?? '?',
-        tags:       (p.tags ?? []).slice(0, 4),
-        url:        `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`,
-        contestId:  p.contestId,
-        index:      p.index
-      }));
-    }
     return [];
   }
 }
 
-
 /**
- * Check solved status for a CF user on specific problems
- * @param {string} handle
- * @param {Array<{contestId, index}>} problems
+ * Returns how many of `problems` the handle has solved (optionally after minTimestamp seconds).
  */
-async function checkCFSolved(handle, problems) {
-  try {
-    const res = await axios.get(
-      `${CF_BASE}/user.status?handle=${handle}&from=1&count=200`,
-      { timeout: 10000 }
-    );
-    if (res.data.status !== 'OK') return new Set();
+async function checkCFSolved(handle, problems, minTimestamp = 0) {
+  const subs = await getCFStatus(handle, 500);
+  if (!subs) return 0;
 
-    const solved = new Set();
-    for (const sub of res.data.result) {
-      if (sub.verdict === 'OK' && sub.problem) {
-        const key = `${sub.problem.contestId}-${sub.problem.index}`;
-        solved.add(key);
-      }
+  const solved = new Set();
+  for (const sub of subs) {
+    if (sub.verdict === 'OK' && sub.problem && (!minTimestamp || sub.creationTimeSeconds >= minTimestamp)) {
+      solved.add(`${sub.problem.contestId}-${sub.problem.index}`);
     }
-
-    return problems.filter(p => solved.has(`${p.contestId}-${p.index}`)).length;
-  } catch {
-    return 0;
   }
+  return problems.filter(p => solved.has(`${p.contestId}-${p.index}`)).length;
 }
 
 /**
- * Get the solved problem breakdown by division (Div 1, 2, 3, 4) for a user
+ * Returns solved problem breakdown by division (Div 1..4 & Others/Gym).
  */
 async function getCFDivisionBreakdown(handle) {
   try {
-    // Ensure the contest cache is populated — fetch it if missing
-    if (!cachedContests) {
-      try {
-        const contestRes = await axios.get(`${CF_BASE}/contest.list?gym=false`, { timeout: 15000, headers: CF_HEADERS });
-        if (contestRes.data.status === 'OK') {
-          const contestMap = {};
-          for (const c of contestRes.data.result) {
-            contestMap[c.id] = c.name;
-          }
-          cachedContests = contestMap;
-          lastContestCacheFetchTime = Date.now();
-          console.log(`[CF] Contest cache loaded on-demand: ${Object.keys(cachedContests).length} contests`);
-        }
-      } catch (cErr) {
-        console.warn('[CF] Could not fetch contest list for division breakdown:', cErr.message);
-      }
-    }
-
-    const subRes = await axios.get(
-      `${CF_BASE}/user.status?handle=${handle}&from=1&count=10000`,
-      { timeout: 12000 }
-    );
-    if (subRes.data.status !== 'OK') return null;
+    const contestMap = await ensureContestCache(false);
+    const subs = await getCFStatus(handle, 10000);
+    if (!subs) return null;
 
     const uniqueSolved = new Set();
     const breakdown = { div1: 0, div2: 0, div3: 0, div4: 0, others: 0, total: 0 };
 
-    for (const sub of subRes.data.result) {
+    for (const sub of subs) {
       if (sub.verdict === 'OK' && sub.problem) {
-        const key = `${sub.problem.contestId}-${sub.problem.index}`;
-        if (uniqueSolved.has(key)) continue;
+        const key = getCFProblemKey(sub.problem);
+        if (!key || uniqueSolved.has(key)) continue;
         uniqueSolved.add(key);
 
-        const contestId = sub.problem.contestId;
-        const contestName = cachedContests ? cachedContests[contestId] : null;
-
+        const contestName = contestMap ? contestMap[sub.problem.contestId] : null;
         if (contestName) {
           const lowerName = contestName.toLowerCase();
-          const hasDiv1 = lowerName.includes('div. 1') || lowerName.includes('div 1') || lowerName.includes('global');
-          const hasDiv2 = lowerName.includes('div. 2') || lowerName.includes('div 2') || lowerName.includes('educational');
-          const hasDiv3 = lowerName.includes('div. 3') || lowerName.includes('div 3');
-          const hasDiv4 = lowerName.includes('div. 4') || lowerName.includes('div 4');
+          const hasDiv1 = /div\.?\s*1\b/i.test(lowerName) || lowerName.includes('global');
+          const hasDiv2 = /div\.?\s*2\b/i.test(lowerName) || lowerName.includes('educational');
+          const hasDiv3 = /div\.?\s*3\b/i.test(lowerName);
+          const hasDiv4 = /div\.?\s*4\b/i.test(lowerName);
 
-          // Highest div wins: priority Div 1 > Div 2 > Div 3 > Div 4 > Others
-          if (hasDiv1)      breakdown.div1++;
+          if (hasDiv1) breakdown.div1++;
           else if (hasDiv2) breakdown.div2++;
           else if (hasDiv3) breakdown.div3++;
           else if (hasDiv4) breakdown.div4++;
-          else              breakdown.others++;
+          else breakdown.others++;
         } else {
           breakdown.others++;
         }
@@ -418,40 +455,34 @@ async function getCFDivisionBreakdown(handle) {
 }
 
 /**
- * Fetch set of all solved problem keys for a handle
+ * Fetches normalized Set (`contestId-index`) of solved problems for a handle.
  */
 async function getCFSolvedSet(handle) {
-  try {
-    const subRes = await axios.get(
-      `${CF_BASE}/user.status?handle=${handle}&from=1&count=10000`,
-      { timeout: 12000, headers: CF_HEADERS }
-    );
-    const solved = new Set();
-    if (subRes.data && subRes.data.status === 'OK') {
-      for (const sub of subRes.data.result) {
-        if (sub.verdict === 'OK' && sub.problem) {
-          const key = sub.problem.contestId && sub.problem.index
-            ? `${sub.problem.contestId}-${sub.problem.index}`
-            : sub.problem.name;
-          solved.add(key);
-        }
-      }
+  const subs = await getCFStatus(handle, 10000);
+  const solved = new Set();
+  if (!subs) return solved;
+  for (const sub of subs) {
+    if (sub.verdict === 'OK' && sub.problem) {
+      const key = getCFProblemKey(sub.problem);
+      if (key) solved.add(key);
     }
-    return solved;
-  } catch (err) {
-    console.error(`[CF] Error getting solved set for ${handle}:`, err.message);
-    return new Set();
   }
+  return solved;
 }
 
 module.exports = {
+  CF_BASE,
+  CF_HEADERS,
+  cfGet,
+  getCFStatus,
   getCFUser,
   getCFContests,
   validateCFHandle,
   getCFProblems,
+  getProblemsetCache,
   checkCFSolved,
   initializeProblemCache,
   getCFDivisionBreakdown,
-  getCFSolvedSet
+  getCFSolvedSet,
+  getRatingTitle
 };
-

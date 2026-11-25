@@ -1,39 +1,46 @@
-// commands/profile.js — Show a member's CP profile
+// commands/profile.js — Show a member's CP profile card with ratings, solves, and streaks
 const { SlashCommandBuilder } = require('discord.js');
-const { getUser, getRatings, upsertUser } = require('../database/db');
-const { buildProfileEmbed, errorEmbed }   = require('../utils/embeds');
+const { getUser, getRatings, getAllStreaks, upsertUser } = require('../database/db');
+const { buildProfileEmbed, errorEmbed } = require('../utils/embeds');
+const { getPlatformEmojis } = require('../utils/emojis');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('profile')
-    .setDescription('View your or another member\'s CP profile')
+    .setDescription("View your or another member's CP profile")
     .addUserOption(opt =>
       opt.setName('member')
         .setDescription('Member to view (leave blank for yourself)')
-        .setRequired(false)),
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
-    const target = interaction.options.getMember('member') ?? interaction.member;
-    const userId = target.id;
+    await interaction.deferReply();
 
-    // Auto-create row if viewing own profile
+    const target = interaction.options.getMember('member')
+      || interaction.options.getUser('member')
+      || interaction.member
+      || interaction.user;
+
+    const userId = target.id;
+    const displayName = target.displayName || target.username || 'Member';
+
     if (target.id === interaction.user.id) {
       upsertUser(userId, interaction.user.username);
     }
 
-    const user    = getUser(userId);
+    const user = getUser(userId);
     const ratings = getRatings(userId);
+    const streaks = getAllStreaks().filter(s => s.discord_id === userId);
 
     if (!user) {
-      return interaction.reply({
-        embeds: [errorEmbed('No Profile Found', `${target.displayName} hasn't linked any accounts yet.`)],
-        ephemeral: true
+      return interaction.editReply({
+        embeds: [errorEmbed('No Profile Found', `${displayName} hasn't linked any accounts yet.`)]
       });
     }
 
-    const { getPlatformEmojis } = require('../utils/emojis');
     const emojis = await getPlatformEmojis(interaction.guild);
-    const embed = buildProfileEmbed(target, user, ratings, emojis);
-    return interaction.reply({ embeds: [embed] });
+    const embed = buildProfileEmbed(target, user, ratings, emojis, streaks);
+    return interaction.editReply({ embeds: [embed] });
   }
 };

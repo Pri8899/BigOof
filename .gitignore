@@ -1,9 +1,14 @@
 node_modules/
 .env
+data/
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
+*.bak
+*.corrupt-*
+*.restore-*
+*.upload-*.tmp
 *.log
 *.zip
 

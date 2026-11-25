@@ -1,4 +1,6 @@
-// events/interactionCreate.js — Route slash commands and handle reactions
+// events/interactionCreate.js — Centralized router for slash commands, autocomplete, & persistent buttons
+const { getUser } = require('../database/db');
+
 module.exports = {
   name: 'interactionCreate',
 
@@ -20,7 +22,6 @@ module.exports = {
         try {
           await interaction.deferReply({ flags: 64 });
           const { runGitHubFeed } = require('../tasks/githubFeed');
-          const { getUser } = require('../database/db');
           const dbUser = getUser(interaction.user.id);
 
           if (!dbUser || !dbUser.github_handle) {
@@ -38,15 +39,27 @@ module.exports = {
             return interaction.editReply({
               content: `🚀 **Caught up!** Posted **${result.count}** unannounced activities for **${dbUser.github_handle}** to **#github**!`
             });
-          } else {
-            return interaction.editReply({
-              content: `🟢 **Up-to-date!** All recent commits and activities for **${dbUser.github_handle}** are already posted in **#github**.`
-            });
           }
+          return interaction.editReply({
+            content: `🟢 **Up-to-date!** All recent commits and activities for **${dbUser.github_handle}** are already posted in **#github**.`
+          });
         } catch (err) {
           console.error('[GitHub Button Error]', err);
           return interaction.editReply({ content: `❌ Sync error: ${err.message}` }).catch(() => {});
         }
+      }
+
+      if (interaction.customId.startsWith('vc-join-')) {
+        const { handleVCJoinButton } = require('../commands/vc');
+        try {
+          await handleVCJoinButton(interaction);
+        } catch (err) {
+          console.error('[VC Button Error]', err);
+          const reply = { content: `❌ Error: ${err.message}`, flags: 64 };
+          if (interaction.replied || interaction.deferred) await interaction.followUp(reply).catch(() => {});
+          else await interaction.reply(reply).catch(() => {});
+        }
+        return;
       }
 
       if (interaction.customId.startsWith('vs-')) {
@@ -55,13 +68,9 @@ module.exports = {
           await handleVSButton(interaction, client);
         } catch (err) {
           console.error('[VS Button Error]', err);
-          try {
-            if (interaction.replied || interaction.deferred) {
-              await interaction.followUp({ content: `❌ Error: ${err.message}`, flags: 64 });
-            } else {
-              await interaction.reply({ content: `❌ Error: ${err.message}`, flags: 64 });
-            }
-          } catch (_) {}
+          const reply = { content: `❌ Error: ${err.message}`, flags: 64 };
+          if (interaction.replied || interaction.deferred) await interaction.followUp(reply).catch(() => {});
+          else await interaction.reply(reply).catch(() => {});
         }
       }
       return;
@@ -74,18 +83,23 @@ module.exports = {
       return interaction.reply({ content: '❌ Unknown command.', flags: 64 });
     }
 
+    if (command.guildOnly && !interaction.guild) {
+      return interaction.reply({
+        content: '⚠️ This command can only be used inside a Discord server.',
+        flags: 64
+      });
+    }
+
     try {
       await command.execute(interaction);
     } catch (err) {
       console.error(`[interactionCreate] Error in /${interaction.commandName}:`, err);
       const reply = { content: `❌ Error: ${err.message}`, flags: 64 };
-      try {
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(reply);
-        } else {
-          await interaction.reply(reply);
-        }
-      } catch (_) {}
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(reply).catch(() => {});
+      } else {
+        await interaction.reply(reply).catch(() => {});
+      }
     }
   }
 };

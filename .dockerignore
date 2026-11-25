@@ -1,8 +1,17 @@
 node_modules
 .git
 .env
+.env.*
+data
+scratch
 *.db
 *.db-shm
 *.db-wal
+*.sqlite
+*.bak
+*.corrupt-*
+*.restore-*
+*.upload-*.tmp
 *.log
+*.zip
 .DS_Store

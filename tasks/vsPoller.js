@@ -1,35 +1,74 @@
+// tasks/vsPoller.js — Versus match poller, scoring engine, ASCII battle grid, & conclusion flow
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const axios = require('axios');
 const {
-  getActiveVSMatches, getVSParticipants, updateVSMatchStatus,
-  updateVSParticipantScore, updateVSMatchLocks, removeVSMatch, getVSMatch
+  getActiveVSMatches,
+  getVSParticipants,
+  concludeVSMatchIfActive,
+  updateVSParticipantScore,
+  updateVSMatchLocks,
+  removeVSMatch,
+  getVSMatch
 } = require('../database/db');
+const { getCFStatus } = require('../utils/codeforces');
+const { chunkLines } = require('../utils/envHelper');
 
-const CF_BASE = 'https://codeforces.com/api';
+const matchLockPromises = new Map();
+let isPollTickRunning = false;
 
 /**
- * Starts the background loop that polls active versus matches.
+ * Serializes operations on a given matchId.
+ * When `wait = false`, skips if busy; when `wait = true`, queues behind the active run.
  */
+async function withMatchLock(matchId, fn, { wait = false } = {}) {
+  const existing = matchLockPromises.get(matchId);
+  if (existing) {
+    if (!wait) return false;
+    await existing.catch(() => {});
+    // Recurse cleanly in case another waiter ran ahead
+    return withMatchLock(matchId, fn, { wait: true });
+  }
+
+  const runPromise = (async () => {
+    await fn();
+  })();
+  matchLockPromises.set(matchId, runPromise);
+
+  try {
+    await runPromise;
+    return true;
+  } finally {
+    if (matchLockPromises.get(matchId) === runPromise) {
+      matchLockPromises.delete(matchId);
+    }
+  }
+}
+
 function startVSPoller(client) {
   console.log('[VS-Poller] Versus match poller started (polling every 15s).');
   setInterval(async () => {
+    if (isPollTickRunning) return;
+    isPollTickRunning = true;
     try {
       const activeMatches = getActiveVSMatches();
       for (const match of activeMatches) {
-        await processActiveMatch(client, match).catch(err => {
+        await withMatchLock(match.id, () => processActiveMatch(client, match)).catch(err => {
           console.error(`[VS-Poller] Error processing match ${match.id}:`, err.message);
         });
       }
     } catch (err) {
       console.error('[VS-Poller] Error in poll loop:', err.message);
+    } finally {
+      isPollTickRunning = false;
     }
   }, 15000);
 }
 
-/**
- * Check if the match is concluded or needs submission updates.
- */
 async function processActiveMatch(client, match) {
+  // Re-fetch fresh state inside the lock
+  const freshMatch = getVSMatch(match.id);
+  if (!freshMatch || freshMatch.status !== 'active') return;
+  match = freshMatch;
+
   const now = Math.floor(Date.now() / 1000);
   const channel = await client.channels.fetch(match.channel_id).catch(() => null);
   if (!channel) return;
@@ -40,7 +79,6 @@ async function processActiveMatch(client, match) {
     return;
   }
 
-  // ── Case 1: Match Time Expired ───────────────────────────────
   if (now >= match.ends_at) {
     await concludeMatch(client, channel, match, participants, 'Time limit reached!');
     return;
@@ -49,42 +87,31 @@ async function processActiveMatch(client, match) {
   const isGrid = match.mode !== 'classic';
   if (!match.locks) match.locks = {};
 
-  // ── Case 2: Fetch and update submissions ──────────────────────
   let anyUpdates = false;
+  const pendingAnnouncements = [];
 
   for (const p of participants) {
     try {
-      // CF API: fetch recent submissions
-      const res = await axios.get(`${CF_BASE}/user.status?handle=${p.cf_handle}&from=1&count=50`, { timeout: 8000 });
-      if (res.data.status !== 'OK') continue;
-
-      const submissions = res.data.result;
-      // Stagger API calls to prevent Codeforces rate limiting
-      await new Promise(resolve => setTimeout(resolve, 400));
+      const submissions = await getCFStatus(p.cf_handle, 200);
+      if (!submissions) continue;
+      await new Promise(resolve => setTimeout(resolve, 350));
 
       for (const sub of submissions) {
-        // Only look at submissions made DURING the match
-        if (sub.creationTimeSeconds < match.started_at || sub.creationTimeSeconds > match.ends_at) {
-          continue;
-        }
+        if (!sub.problem) continue;
+        if (sub.creationTimeSeconds < match.started_at || sub.creationTimeSeconds > match.ends_at) continue;
 
         const probKey = `${sub.problem.contestId}-${sub.problem.index}`;
-        // Verify this problem is part of the match
         const matchProb = match.problems.find(pr => `${pr.contestId}-${pr.index}` === probKey);
-        if (!matchProb) continue;
+        if (!matchProb || p.solves[probKey]) continue;
 
-        // Skip if THIS participant already solved this problem
-        if (p.solves[probKey]) continue;
-
-        // If not solved yet, analyze verdict
         if (sub.verdict === 'OK') {
           const elapsedSec = sub.creationTimeSeconds - match.started_at;
           const elapsedMin = Math.round((elapsedSec / 60) * 10) / 10;
 
-          // Count wrong attempts before this OK submission
           let wrongCount = 0;
           for (const s of submissions) {
             if (
+              s.problem &&
               s.problem.contestId === sub.problem.contestId &&
               s.problem.index === sub.problem.index &&
               s.creationTimeSeconds >= match.started_at &&
@@ -99,16 +126,9 @@ async function processActiveMatch(client, match) {
           if (isGrid) {
             const basePoints = matchProb.points || 100;
             const isFirst = !match.locks[probKey];
-
-            // Option B: 1st solver gets 100% full points. Subsequent solvers get 1/3 points!
             const awardedPoints = isFirst ? basePoints : Math.round(basePoints / 3);
 
-            p.solves[probKey] = {
-              elapsedMin,
-              points: awardedPoints,
-              isFirst,
-              timestamp: sub.creationTimeSeconds
-            };
+            p.solves[probKey] = { elapsedMin, points: awardedPoints, isFirst, timestamp: sub.creationTimeSeconds };
             p.score += awardedPoints;
             p.wrong_attempts[probKey] = wrongCount;
 
@@ -122,69 +142,48 @@ async function processActiveMatch(client, match) {
                 gridIndex: matchProb.gridIndex || 1,
                 solversCount: 1
               };
+
+              const droppedVal = Math.round(basePoints / 3);
+              const rivalPings = participants.filter(pt => pt.discord_id !== p.discord_id).map(r => `<@${r.discord_id}>`).join(' ');
+              pendingAnnouncements.push(
+                `⚡ **FIRST BLOOD ON [P${matchProb.gridIndex || ''}]!** <@${p.discord_id}> (\`${p.cf_handle}\`) solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}m** and claimed **+${basePoints} pts**!\n🟡 ${rivalPings || 'Rivals'}, Tile #${matchProb.gridIndex || ''} is now downgraded to **${droppedVal} pts** (1/3 value).`
+              );
             } else {
               match.locks[probKey].solversCount = (match.locks[probKey].solversCount || 1) + 1;
+              pendingAnnouncements.push(
+                `🎉 <@${p.discord_id}> (\`${p.cf_handle}\`) also solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}m** for **+${awardedPoints} pts** (1/3 value)!`
+              );
             }
 
             anyUpdates = true;
-
-            // Announce solve in channel!
-            if (isFirst) {
-              const droppedVal = Math.round(basePoints / 3);
-              const rivals = participants.filter(pt => pt.discord_id !== p.discord_id);
-              const rivalPings = rivals.map(r => `<@${r.discord_id}>`).join(' ');
-
-              await channel.send({
-                content: `⚡ **FIRST BLOOD ON [P${matchProb.gridIndex || ''}]!** <@${p.discord_id}> (\`${p.cf_handle}\`) solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}m** and claimed **+${basePoints} pts**!\n🟡 ${rivalPings || 'Rivals'}, Tile #${matchProb.gridIndex || ''} is now downgraded to **${droppedVal} pts** (1/3 value). You can still solve it to score partial points or switch to an open full-value tile!`
-              }).catch(() => {});
-            } else {
-              await channel.send({
-                content: `🎉 <@${p.discord_id}> (\`${p.cf_handle}\`) also solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}m** and cashed in **+${awardedPoints} pts** (1/3 value)!`
-              }).catch(() => {});
-            }
-
           } else {
-            // Classic mode scoring with decay and first blood
-            let isFirstBlood = true;
-            for (const other of participants) {
-              if (other.solves[probKey]) {
-                isFirstBlood = false;
-                break;
-              }
-            }
-
+            const isFirstBlood = !participants.some(other => Boolean(other.solves[probKey]));
             const basePoints = 1000;
             const decay = Math.floor((elapsedMin / match.duration_min) * 400);
             const penalty = wrongCount * 50;
             const bonus = isFirstBlood ? 100 : 0;
             const points = Math.max(100, basePoints - decay - penalty + bonus);
 
-            p.solves[probKey] = {
-              elapsedMin,
-              points,
-              timestamp: sub.creationTimeSeconds,
-              isFirstBlood
-            };
+            p.solves[probKey] = { elapsedMin, points, timestamp: sub.creationTimeSeconds, isFirstBlood };
             p.score += points;
             p.wrong_attempts[probKey] = wrongCount;
-
             anyUpdates = true;
 
             const fbLabel = isFirstBlood ? ' 🩸 **[FIRST BLOOD!]**' : '';
-            await channel.send({
-              content: `🎉 **${p.cf_handle}** (<@${p.discord_id}>) solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}** mins! **+${points} pts**${fbLabel}`
-            }).catch(() => {});
+            pendingAnnouncements.push(
+              `🎉 **${p.cf_handle}** (<@${p.discord_id}>) solved **[${matchProb.name}](${matchProb.url})** in **${Math.round(elapsedMin)}** mins! **+${points} pts**${fbLabel}`
+            );
           }
-
         } else if (sub.verdict !== 'TESTING') {
-          // Track wrong attempts if we don't have them yet
           const currentWrong = p.wrong_attempts[probKey] ?? 0;
           let wrongCount = 0;
           for (const s of submissions) {
             if (
+              s.problem &&
               s.problem.contestId === sub.problem.contestId &&
               s.problem.index === sub.problem.index &&
               s.creationTimeSeconds >= match.started_at &&
+              s.creationTimeSeconds <= match.ends_at &&
               s.verdict !== 'OK' &&
               s.verdict !== 'TESTING'
             ) {
@@ -202,12 +201,9 @@ async function processActiveMatch(client, match) {
     }
   }
 
-  // If there are updates, write to DB and refresh scoreboard embed
   if (anyUpdates) {
-    if (isGrid) {
-      updateVSMatchLocks(match.id, match.locks);
-    }
-
+    // Persist locks & scores atomically BEFORE dispatching channel messages
+    if (isGrid) updateVSMatchLocks(match.id, match.locks);
     for (const p of participants) {
       updateVSParticipantScore(
         match.id,
@@ -218,16 +214,18 @@ async function processActiveMatch(client, match) {
       );
     }
 
-    // ── Check Early Conclude Conditions ─────────────────────────
-    if (isGrid) {
-      const totalProblems = match.problems.length;
-      const allSolvedAll = participants.every(p => Object.keys(p.solves || {}).length === totalProblems);
-      if (allSolvedAll) {
-        await concludeMatch(client, channel, match, participants, 'All contenders solved all 9 problems!');
-        return;
-      }
+    for (const msgText of pendingAnnouncements) {
+      await channel.send({ content: msgText }).catch(() => {});
+    }
 
-      // Mathematical lock: check if leader is uncatchable
+    const totalProblems = match.problems.length;
+    const allSolvedAll = participants.every(p => Object.keys(p.solves || {}).length === totalProblems);
+    if (allSolvedAll) {
+      await concludeMatch(client, channel, match, participants, `All contenders solved all ${totalProblems} problems!`);
+      return;
+    }
+
+    if (isGrid) {
       const sorted = [...participants].sort((a, b) => b.score - a.score);
       const leader = sorted[0];
 
@@ -235,48 +233,32 @@ async function processActiveMatch(client, match) {
         let canAnyoneCatchUp = false;
         for (let i = 1; i < sorted.length; i++) {
           const contender = sorted[i];
-          let maxRemainingForContender = 0;
+          let maxRemaining = 0;
           for (const pr of match.problems) {
             const k = `${pr.contestId}-${pr.index}`;
             if (!contender.solves[k]) {
               const basePts = pr.points || 100;
-              // If already solved by someone, this contender can at most score 1/3
-              if (match.locks && match.locks[k]) {
-                maxRemainingForContender += Math.round(basePts / 3);
-              } else {
-                maxRemainingForContender += basePts;
-              }
+              maxRemaining += (match.locks && match.locks[k]) ? Math.round(basePts / 3) : basePts;
             }
           }
-          if (contender.score + maxRemainingForContender >= leader.score) {
+          if (contender.score + maxRemaining >= leader.score) {
             canAnyoneCatchUp = true;
             break;
           }
         }
-
         if (!canAnyoneCatchUp) {
           await concludeMatch(client, channel, match, participants, 'Decisive Victory! Leader secured an unbeatable point lead.');
           return;
         }
       }
-
-    } else {
-      // Classic Mode: Check if all participants solved all problems
-      const totalProblems = match.problems.length;
-      const allSolvedAll = participants.every(p => Object.keys(p.solves).length === totalProblems);
-      if (allSolvedAll) {
-        await concludeMatch(client, channel, match, participants, 'All contenders solved all problems!');
-        return;
-      }
     }
 
-    // Refresh match message embed and buttons
     await refreshMatchEmbed(client, channel, match, participants);
   }
 }
 
 /**
- * Generates an aligned ASCII table representing the 3x3 Battle Grid.
+ * Generates a strictly fixed-width aligned ASCII table (no wide emojis inside code block cells).
  */
 function renderGridAscii(match, participants = []) {
   const cells = [];
@@ -287,12 +269,10 @@ function renderGridAscii(match, participants = []) {
     const pts = prob?.points || 100;
 
     const totalSolvers = participants.filter(pt => pt.solves && pt.solves[key]).length;
-
     if (totalSolvers >= participants.length && participants.length > 1) {
-      cells.push(`✅Done`);
+      cells.push('[DONE]');
     } else if (lock) {
-      const h = lock.cf_handle.slice(0, 4);
-      cells.push(`⚡${h}`);
+      cells.push(`*${lock.cf_handle.slice(0, 5)}`);
     } else {
       cells.push(`${pts}pt`);
     }
@@ -311,9 +291,6 @@ function renderGridAscii(match, participants = []) {
   ].join('\n');
 }
 
-/**
- * Builds sleek ASCII ratio progress bar between 2 contenders
- */
 function renderTugOfWarBar(score1, score2, totalBlocks = 14) {
   const total = score1 + score2;
   if (total === 0) return '`[══════════════]` (0 - 0)';
@@ -322,9 +299,6 @@ function renderTugOfWarBar(score1, score2, totalBlocks = 14) {
   return `\`[${'█'.repeat(ratio1)}${'░'.repeat(ratio2)}]\``;
 }
 
-/**
- * Formats a problem row line for the grid embed.
- */
 function formatGridProblemLine(p, idx, match, participants) {
   const key = `${p.contestId}-${p.index}`;
   const lock = match.locks && match.locks[key];
@@ -338,15 +312,12 @@ function formatGridProblemLine(p, idx, match, participants) {
 
   const totalSolvers = participants.filter(pt => pt.solves && pt.solves[key]).length;
   if (totalSolvers >= participants.length && participants.length > 1) {
-    return `> \`[${idx + 1}]\` ✅ **${basePts} pts** · ${link} — Solved by All Contenders`;
+    return `> \`[${idx + 1}]\` ✅ **${basePts} pts** · ${link} — Solved by All`;
   }
 
-  return `> \`[${idx + 1}]\` ⚡ **${basePts} pts** · ${link} — 1st AC: <@${lock.discord_id}> (+${basePts} pts) · 🟡 Rival Value: **${droppedPts} pts**`;
+  return `> \`[${idx + 1}]\` ⚡ **${basePts} pts** · ${link} — 1st AC: <@${lock.discord_id}> (+${basePts}) · 🟡 Rival: **${droppedPts} pts**`;
 }
 
-/**
- * Formats match Embed and Standings details.
- */
 function buildVSMatchEmbed(match, participants) {
   const isGrid = match.mode !== 'classic';
   const divLabels = { div1: 'Div. 1', div2: 'Div. 2', div3: 'Div. 3', div4: 'Div. 4' };
@@ -360,21 +331,20 @@ function buildVSMatchEmbed(match, participants) {
     const row2Lines = match.problems.slice(3, 6).map((p, idx) => formatGridProblemLine(p, idx + 3, match, participants)).join('\n');
     const row3Lines = match.problems.slice(6, 9).map((p, idx) => formatGridProblemLine(p, idx + 6, match, participants)).join('\n');
 
-    // Standings text
-    const standingsText = sorted.map((p, idx) => {
+    const standingsLines = sorted.map((p, idx) => {
       const medal = ['🥇', '🥈', '🥉'][idx] ?? `\`#${idx + 1}\``;
       const mySolves = Object.keys(p.solves || {});
       const myFirstBloods = Object.values(p.solves || {}).filter(s => s.isFirst).length;
-      const fbText = myFirstBloods > 0 ? ` · **${myFirstBloods}** ⚡ First Bloods` : '';
-      return `${medal} <@${p.discord_id}> (\`${p.cf_handle}\`): **${p.score} pts** (${mySolves.length}/${match.problems.length} solved${fbText})`;
-    }).join('\n');
+      const fbText = myFirstBloods > 0 ? ` · **${myFirstBloods}** ⚡ 1st AC` : '';
+      return `${medal} <@${p.discord_id}> (\`${p.cf_handle}\`): **${p.score} pts** (${mySolves.length}/${match.problems.length}${fbText})`;
+    });
 
     let duelBar = '';
     if (sorted.length === 2) {
       duelBar = `\n> ⚔️ **Lead Tug-of-War:** ${renderTugOfWarBar(sorted[0].score, sorted[1].score, 14)}`;
     }
 
-    return new EmbedBuilder()
+    const embed = new EmbedBuilder()
       .setColor(0x7C4DFF)
       .setAuthor({
         name: 'Codeforces Duel Arena · Battle Grid',
@@ -382,76 +352,78 @@ function buildVSMatchEmbed(match, participants) {
       })
       .setTitle(`⚔️ 3x3 Grid Battle Active · ID \`${match.id}\``)
       .setDescription([
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
         `> 🏅 **Target Rating:** **${match.rating}**`,
         `> ⏱️ **Time Left:** <t:${match.ends_at}:R> (ends <t:${match.ends_at}:t>)`,
-        `> ⚡ **Scoring Rule:** 1st AC = **100% pts** · Later AC = **1/3 pts** (All tiles solvable)`,
+        '> ⚡ **Scoring Rule:** 1st AC = **100% pts** · Later AC = **1/3 pts**',
         `> 🎯 **First Bloods:** **${firstBloodsTaken}/9** claimed (${totalBoardPoints} max pts)`,
         match.tag ? `> 🏷️ **Tag Filter:** \`${match.tag}\`` : null,
         match.division ? `> 🏆 **Division:** \`${divLabels[match.division] ?? match.division}\`` : null,
         `> 🆔 **Match ID:** \`${match.id}\`${duelBar}`,
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-        `**3x3 Grid State:**`,
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        '**3x3 Grid State:**',
         renderGridAscii(match, participants)
       ].filter(Boolean).join('\n'))
       .addFields(
-        { name: '📋 Row 1 · 100–200 Points', value: row1Lines, inline: false },
-        { name: '📋 Row 2 · 200–300 Points', value: row2Lines, inline: false },
-        { name: '📋 Row 3 · 400–500 Points', value: row3Lines, inline: false },
-        { name: '📊 Live Standings', value: standingsText, inline: false }
+        { name: '📋 Row 1 · 100–200 Points', value: row1Lines.slice(0, 1024), inline: false },
+        { name: '📋 Row 2 · 200–300 Points', value: row2Lines.slice(0, 1024), inline: false },
+        { name: '📋 Row 3 · 400–500 Points', value: row3Lines.slice(0, 1024), inline: false }
       )
       .setFooter({ text: 'BigOof Grid Battle · 1st solve gets 100%, later gets 1/3 value!' })
       .setTimestamp();
+
+    chunkLines(standingsLines, 1000).forEach((chunk, idx) => {
+      embed.addFields({ name: idx === 0 ? '📊 Live Standings' : '📊 Standings (cont.)', value: chunk, inline: false });
+    });
+    return embed;
   }
 
-  // Classic Mode Embed
-  const problemsListText = match.problems.map((p, idx) => {
-    return `**Problem ${idx + 1}**: [${p.name}](${p.url}) (${p.rating}) ${p.tag ? `[${p.tag}]` : ''}`;
-  }).join('\n');
+  // Classic Race Mode
+  const problemLines = match.problems.map((p, idx) =>
+    `**Problem ${idx + 1}**: [${p.name}](${p.url}) (\`${p.rating}\`)`
+  );
 
-  const classicStandingsText = sorted.map((p, idx) => {
+  const classicStandingsLines = sorted.map((p, idx) => {
     const medal = ['🥇', '🥈', '🥉'][idx] ?? `\`#${idx + 1}\``;
     const solvesList = match.problems.map(prob => {
       const key = `${prob.contestId}-${prob.index}`;
       const solved = p.solves[key];
-      if (solved) {
-        return `✅ ${prob.index} (+${solved.points})`;
-      } else {
-        const wrong = p.wrong_attempts[key] ?? 0;
-        return `❌ ${prob.index}${wrong > 0 ? ` (-${wrong})` : ''}`;
-      }
-    }).join('   ');
+      if (solved) return `✅ ${prob.index} (+${solved.points})`;
+      const wrong = p.wrong_attempts[key] ?? 0;
+      return `❌ ${prob.index}${wrong > 0 ? ` (-${wrong})` : ''}`;
+    }).join('  ');
     return `${medal} <@${p.discord_id}> (${p.cf_handle}): **${p.score} pts**\n> ${solvesList}`;
-  }).join('\n');
+  });
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(0x7C4DFF)
     .setAuthor({
       name: 'Codeforces Duel Arena · Classic Race',
       iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
     })
-    .setTitle(`⚡ Versus Clash Active · ID \`${match.id}\``)
+    .setTitle(`⚡ Versus Race Active · ID \`${match.id}\``)
     .setDescription([
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       `> 🏅 **Target Rating:** **${match.rating}**`,
       `> ⏱️ **Time Left:** <t:${match.ends_at}:R> (ends <t:${match.ends_at}:t>)`,
       match.tag ? `> 🏷️ **Tag Filter:** \`${match.tag}\`` : null,
       match.division ? `> 🏆 **Division:** \`${divLabels[match.division] ?? match.division}\`` : null,
       `> 🆔 **Match ID:** \`${match.id}\``,
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     ].filter(Boolean).join('\n'))
-    .addFields(
-      { name: '📋 Contest Problem Set', value: problemsListText, inline: false },
-      { name: '📊 Live Standings', value: classicStandingsText, inline: false }
-    )
     .setFooter({ text: 'BigOof Duel Tracker · Live sync every 15 seconds' })
     .setTimestamp();
+
+  chunkLines(problemLines, 1000).forEach((chunk, idx) => {
+    embed.addFields({ name: idx === 0 ? '📋 Contest Problem Set' : '📋 Problem Set (cont.)', value: chunk, inline: false });
+  });
+  chunkLines(classicStandingsLines, 1000).forEach((chunk, idx) => {
+    embed.addFields({ name: idx === 0 ? '📊 Live Standings' : '📊 Standings (cont.)', value: chunk, inline: false });
+  });
+
+  return embed;
 }
 
-/**
- * Builds interactive button rows for active matches.
- * Features 3 rows of 3 clickable Link buttons + 1 row for actions.
- */
 function buildVSMatchComponents(match, participants = []) {
   const rows = [];
   const isGrid = match.mode !== 'classic';
@@ -467,7 +439,6 @@ function buildVSMatchComponents(match, participants = []) {
         const lock = match.locks && match.locks[key];
         const basePts = prob.points || 100;
         const droppedPts = Math.round(basePts / 3);
-
         const totalSolvers = participants.filter(pt => pt.solves && pt.solves[key]).length;
 
         let label = `[P${idx + 1}] ${basePts} pts`;
@@ -486,9 +457,22 @@ function buildVSMatchComponents(match, participants = []) {
       }
       if (row.components.length > 0) rows.push(row);
     }
+  } else if (match.problems && match.problems.length > 0) {
+    for (let start = 0; start < match.problems.length && rows.length < 4; start += 5) {
+      const slice = match.problems.slice(start, start + 5);
+      const row = new ActionRowBuilder();
+      slice.forEach((prob, offset) => {
+        row.addComponents(
+          new ButtonBuilder()
+            .setLabel(`P${start + offset + 1}: ${prob.contestId}${prob.index}`.slice(0, 80))
+            .setStyle(ButtonStyle.Link)
+            .setURL(prob.url || `https://codeforces.com/contest/${prob.contestId}/problem/${prob.index}`)
+        );
+      });
+      rows.push(row);
+    }
   }
 
-  // Control buttons row
   const actionRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`vs-refresh_${match.id}`)
@@ -504,33 +488,28 @@ function buildVSMatchComponents(match, participants = []) {
   return rows;
 }
 
-/**
- * Refresh the match embed in Discord.
- */
+async function findMatchMessage(client, channel, matchId) {
+  const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  if (!messages) return null;
+  return [...messages.values()].find(m =>
+    m.author.id === client.user.id &&
+    m.embeds.length > 0 &&
+    (m.embeds[0].description?.includes(matchId) || m.embeds[0].title?.includes(matchId))
+  ) || null;
+}
+
 async function refreshMatchEmbed(client, channel, match, participants) {
   const embed = buildVSMatchEmbed(match, participants);
   const components = buildVSMatchComponents(match, participants);
-
-  const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
-  if (!messages) return;
-
-  const matchMsg = [...messages.values()].find(m => 
-    m.author.id === client.user.id && 
-    m.embeds.length > 0 && 
-    ((m.embeds[0].description && m.embeds[0].description.includes(match.id)) ||
-     (m.embeds[0].title && m.embeds[0].title.includes(match.id)))
-  );
-
+  const matchMsg = await findMatchMessage(client, channel, match.id);
   if (matchMsg) {
     await matchMsg.edit({ embeds: [embed], components }).catch(() => {});
   }
 }
 
-/**
- * Conclude the match, write final results, and post a conclusion message.
- */
 async function concludeMatch(client, channel, match, participants, reason) {
-  updateVSMatchStatus(match.id, 'concluded', match.started_at, match.ends_at);
+  // Atomic status guard prevents duplicate conclusion messages from Abort + Poller overlap
+  if (!concludeVSMatchIfActive(match.id, match.started_at, match.ends_at)) return;
 
   const sorted = [...participants].sort((a, b) => b.score - a.score);
   const winner = sorted[0];
@@ -542,43 +521,43 @@ async function concludeMatch(client, channel, match, participants, reason) {
     if (tied.length > 1) {
       winnersText = `🤝 **TIE MATCH!** Co-winners: ${tied.map(p => `<@${p.discord_id}>`).join(' & ')} with **${winner.score} pts**!`;
     } else {
-      winnersText = `👑 **WINNER**: <@${winner.discord_id}> (\`${winner.cf_handle}\`) won the grid battle with **${winner.score} pts**! 🎉`;
+      winnersText = `👑 **WINNER**: <@${winner.discord_id}> (\`${winner.cf_handle}\`) won the ${isGrid ? 'grid battle' : 'race'} with **${winner.score} pts**! 🎉`;
     }
   } else {
     winnersText = '🤷 **No winner** (no one solved any problems!).';
   }
 
-  const finalStandingsText = sorted.map((p, idx) => {
+  const finalLines = sorted.map((p, idx) => {
     const medal = ['🥇', '🥈', '🥉'][idx] ?? `\`#${idx + 1}\``;
     const solveCount = Object.keys(p.solves || {}).length;
     if (isGrid) {
       const myFirstBloods = Object.values(p.solves || {}).filter(s => s.isFirst).length;
       const fbText = myFirstBloods > 0 ? ` · **${myFirstBloods}** ⚡ First Bloods` : '';
       return `${medal} <@${p.discord_id}> (\`${p.cf_handle}\`): **${p.score} pts** (${solveCount}/${match.problems.length} solved${fbText})`;
-    } else {
-      return `${medal} <@${p.discord_id}>: **${p.score} pts** (${solveCount}/${match.problems.length} solved)`;
     }
-  }).join('\n');
+    return `${medal} <@${p.discord_id}> (\`${p.cf_handle}\`): **${p.score} pts** (${solveCount}/${match.problems.length} solved)`;
+  });
 
   const embed = new EmbedBuilder()
-    .setColor(0xFFD700) // Championship Gold
+    .setColor(0xFFD700)
     .setAuthor({
       name: isGrid ? 'Codeforces Battle Grid · Match Over' : 'Codeforces Duel Arena · Match Over',
       iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
     })
-    .setTitle(`🏆 Grid Battle Concluded · ID \`${match.id}\``)
+    .setTitle(isGrid ? `🏆 Grid Battle Concluded · ID \`${match.id}\`` : `🏆 Versus Race Concluded · ID \`${match.id}\``)
     .setDescription([
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       `> 🏁 **Resolution:** \`${reason}\``,
       `> 🆔 **Match ID:** \`${match.id}\``,
       `> 🏆 **Final Verdict:** ${winnersText}`,
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     ].join('\n'))
-    .addFields(
-      { name: '📊 Final Standings', value: finalStandingsText, inline: false }
-    )
     .setFooter({ text: 'BigOof Duel Arena · GG to all participants!' })
     .setTimestamp();
+
+  chunkLines(finalLines, 1000).forEach((chunk, idx) => {
+    embed.addFields({ name: idx === 0 ? '📊 Final Standings' : '📊 Final Standings (cont.)', value: chunk, inline: false });
+  });
 
   if (isGrid && match.problems && match.problems.length >= 9) {
     embed.addFields({
@@ -588,18 +567,9 @@ async function concludeMatch(client, channel, match, participants, reason) {
     });
   }
 
-  // Send conclusion message
-  await channel.send({ embeds: [embed] }).catch(() => {});
-
-  // Update original match message to remove components and show concluding embed
-  const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
-  if (messages) {
-    const matchMsg = [...messages.values()].find(m => 
-      m.author.id === client.user.id && 
-      m.embeds.length > 0 && 
-      ((m.embeds[0].description && m.embeds[0].description.includes(match.id)) ||
-       (m.embeds[0].title && m.embeds[0].title.includes(match.id)))
-    );
+  if (channel) {
+    await channel.send({ embeds: [embed] }).catch(() => {});
+    const matchMsg = await findMatchMessage(client, channel, match.id);
     if (matchMsg) {
       await matchMsg.edit({ embeds: [embed], components: [] }).catch(() => {});
     }
@@ -608,6 +578,7 @@ async function concludeMatch(client, channel, match, participants, reason) {
 
 module.exports = {
   startVSPoller,
+  withMatchLock,
   processActiveMatch,
   buildVSMatchEmbed,
   buildVSMatchComponents,
