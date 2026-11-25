@@ -116,8 +116,24 @@ async function checkAndSendContestReminders(client) {
   }
 }
 
+function isRadarOverviewMessage(msg) {
+  return Boolean(
+    msg.embeds?.length > 0 &&
+    (msg.embeds[0].title?.includes('Upcoming Competitive Programming Contests') ||
+     msg.embeds[0].title?.includes('Upcoming Contests') ||
+     msg.embeds[0].title?.includes('Full Overview'))
+  );
+}
+
+function isContestReminderMessage(msg) {
+  return Boolean(
+    msg.content?.includes('24-Hour Contest Reminder:') ||
+    msg.content?.includes('1-Hour Contest Reminder:')
+  );
+}
+
 /**
- * Deletes old contest radar overview embeds and posts a fresh upcoming contest summary.
+ * Deletes old contest radar/reminder messages, posts the fresh overview 1st, and re-posts active reminders 2nd.
  */
 async function postContestSummary(client, specificGuildId = null) {
   try {
@@ -130,6 +146,7 @@ async function postContestSummary(client, specificGuildId = null) {
     if (targets.length === 0) return;
 
     const { getPlatformEmojis } = require('../utils/emojis');
+    const nowSec = Math.floor(Date.now() / 1000);
 
     for (const { guild_id, channel } of targets) {
       try {
@@ -141,17 +158,41 @@ async function postContestSummary(client, specificGuildId = null) {
           emojis
         );
 
+        // Preserve still-upcoming reminders so they always sit BELOW (2nd) the refreshed radar overview (1st)
+        const activeReminders = [];
+        const seenUrls = new Set();
+        try {
+          const recent = await channel.messages.fetch({ limit: 50 });
+          const sortedDesc = [...recent.values()].sort((a, b) => (b.createdTimestamp || 0) - (a.createdTimestamp || 0));
+          for (const m of sortedDesc) {
+            if (m.author.id !== client.user.id || !isContestReminderMessage(m) || !m.embeds?.length) continue;
+            const e = m.embeds[0];
+            const tsMatch = e.description?.match(/<t:(\d+):R>/);
+            const startTs = tsMatch ? parseInt(tsMatch[1], 10) : 0;
+            if (startTs <= nowSec) continue; // Expired reminder — drop cleanly
+            const dedupKey = e.url || m.content;
+            if (seenUrls.has(dedupKey)) continue;
+            seenUrls.add(dedupKey);
+            activeReminders.push({
+              content: m.content,
+              embeds: m.embeds.map(emb => (typeof emb.toJSON === 'function' ? emb.toJSON() : emb)),
+              createdAt: m.createdTimestamp || 0
+            });
+          }
+          activeReminders.sort((a, b) => a.createdAt - b.createdAt);
+        } catch (_) {}
+
         await replaceChannelBotMessage(client, channel, {
-          matchMessage: (m) =>
-            m.embeds.length > 0 &&
-            (m.embeds[0].title?.includes('Upcoming Competitive Programming Contests') ||
-             m.embeds[0].title?.includes('Upcoming Contests') ||
-             m.embeds[0].title?.includes('Full Overview')),
+          matchMessage: (m) => isRadarOverviewMessage(m) || isContestReminderMessage(m),
           storedConfigKey: 'contest_summary_msg_id',
           guildId: guild_id,
           payload: { embeds: [embed] },
           logLabel: 'ContestFetcher'
         });
+
+        for (const reminder of activeReminders) {
+          await channel.send({ content: reminder.content, embeds: reminder.embeds }).catch(() => {});
+        }
       } catch (guildErr) {
         console.error(`[ContestFetcher] Error updating contest radar in #${channel.name}:`, guildErr.message);
       }
