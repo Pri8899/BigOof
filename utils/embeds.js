@@ -53,7 +53,8 @@ function renderProgressBar(val1, val2, totalBlocks = 12) {
 }
 
 function getStreakBadge(n) {
-  if (!n || n < 1) return '`0d`';
+  if (n === null || n === undefined) return '`N/A`';
+  if (n < 1) return '`0d`';
   if (n >= 30) return `💫 **${n} Days**`;
   if (n >= 15) return `👑 **${n} Days**`;
   if (n >= 7)  return `🔥 **${n} Days**`;
@@ -64,8 +65,8 @@ function successEmbed(title, description) {
   return new EmbedBuilder()
     .setColor(COLORS.Success)
     .setAuthor({ name: 'BigOof · Action Succeeded', iconURL: 'https://cdn-icons-png.flaticon.com/512/190/190411.png' })
-    .setTitle(`✅ ${title}`)
-    .setDescription(description.slice(0, 4096))
+    .setTitle(`✅ ${String(title || 'Success')}`.slice(0, 256))
+    .setDescription(String(description || '').slice(0, 4096))
     .setFooter({ text: 'BigOof · Competitive Programming Companion' })
     .setTimestamp();
 }
@@ -74,8 +75,8 @@ function errorEmbed(title, description) {
   return new EmbedBuilder()
     .setColor(COLORS.Error)
     .setAuthor({ name: 'BigOof · Notice', iconURL: 'https://cdn-icons-png.flaticon.com/512/753/753345.png' })
-    .setTitle(`❌ ${title}`)
-    .setDescription(description.slice(0, 4096))
+    .setTitle(`❌ ${String(title || 'Error')}`.slice(0, 256))
+    .setDescription(String(description || '').slice(0, 4096))
     .setFooter({ text: 'BigOof · Competitive Programming Companion' })
     .setTimestamp();
 }
@@ -334,11 +335,19 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     ].join('\n'));
 
+  const statusIcons = [
+    apiStatus.cf !== false ? '🟢 CF' : '🔴 CF',
+    apiStatus.ac !== false ? '🟢 AC' : '🔴 AC',
+    apiStatus.toph !== false ? '🟢 Toph' : '🔴 Toph'
+  ].join(' · ');
+
   if (filtered.length === 0) {
     embed.addFields({
       name: 'No Contests Scheduled',
       value: '_No upcoming contests found matching your selected platform filter._'
     });
+    embed.setFooter({ text: `BigOof Contest Radar · 0 contests listed · API: ${statusIcons}` });
+    embed.setTimestamp();
     return embed;
   }
 
@@ -377,12 +386,6 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
       });
     }
   }
-
-  const statusIcons = [
-    apiStatus.cf !== false ? '🟢 CF' : '🔴 CF',
-    apiStatus.ac !== false ? '🟢 AC' : '🔴 AC',
-    apiStatus.toph !== false ? '🟢 Toph' : '🔴 Toph'
-  ].join(' · ');
 
   embed.setFooter({ text: `BigOof Contest Radar · ${totalCount} contests listed · API: ${statusIcons}` });
   embed.setTimestamp();
@@ -479,6 +482,12 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains) {
       return `${medal} ${userRef} · \`${s.solved_this_week} problems solved\``;
     });
     embed.addFields({ name: '🎯 Top Problem Solvers This Week', value: lines.join('\n'), inline: false });
+  } else if (!(topClimber && (topClimber.gain > 0 || topClimber.rating_gained > 0)) && !(topGrinder && topGrinder.solved_this_week > 0)) {
+    embed.addFields({
+      name: '🌱 Quiet Week',
+      value: '_No new rating gains or solved problems recorded this week yet — keep grinding!_',
+      inline: false
+    });
   }
 
   embed.setFooter({ text: 'BigOof Weekly Digest · Posted every Sunday at 9:00 PM' });

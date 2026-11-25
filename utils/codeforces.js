@@ -53,20 +53,6 @@ function getCFProblemKey(problem) {
   return problem.name ? `${problem.name.trim().toLowerCase()}_${problem.rating || 0}` : null;
 }
 
-function getRatingTitle(rating) {
-  if (!rating || rating <= 0) return 'Unrated';
-  if (rating >= 3000) return 'Legendary Grandmaster';
-  if (rating >= 2600) return 'International Grandmaster';
-  if (rating >= 2400) return 'Grandmaster';
-  if (rating >= 2300) return 'International Master';
-  if (rating >= 2100) return 'Master';
-  if (rating >= 1900) return 'Candidate Master';
-  if (rating >= 1600) return 'Expert';
-  if (rating >= 1400) return 'Specialist';
-  if (rating >= 1200) return 'Pupil';
-  return 'Newbie';
-}
-
 /**
  * Fetches Codeforces user submissions safely. Returns array on OK, or null if API failed.
  */
@@ -89,7 +75,7 @@ async function getCFStatus(handle, count = 2000, from = 1) {
 /**
  * Fetch user info, solved count, and last rated contest from Codeforces.
  */
-async function getCFUser(handle) {
+async function getCFUser(handle, { includeSolvedSet = false } = {}) {
   try {
     const infoRes = await cfGet(`/user.info?handles=${encodeURIComponent(handle)}`, 8000);
     if (infoRes.data?.status !== 'OK' || !Array.isArray(infoRes.data.result) || !infoRes.data.result[0]) {
@@ -98,9 +84,9 @@ async function getCFUser(handle) {
     const user = infoRes.data.result[0];
 
     let solved = null;
+    const seen = new Set();
     const subs = await getCFStatus(handle, 10000);
     if (subs) {
-      const seen = new Set();
       for (const sub of subs) {
         if (sub.verdict === 'OK' && sub.problem) {
           const key = getCFProblemKey(sub.problem);
@@ -122,7 +108,7 @@ async function getCFUser(handle) {
       }
     } catch (_) {}
 
-    return {
+    const result = {
       rating: user.rating ?? 0,
       max_rating: user.maxRating ?? 0,
       rank_title: user.rank ?? 'Unrated',
@@ -130,6 +116,8 @@ async function getCFUser(handle) {
       acceptance: 0,
       lastContest
     };
+    if (includeSolvedSet) result.solvedSet = seen;
+    return result;
   } catch (err) {
     console.error(`[CF] Error fetching ${handle}:`, err.message);
     return null;
@@ -454,25 +442,7 @@ async function getCFDivisionBreakdown(handle) {
   }
 }
 
-/**
- * Fetches normalized Set (`contestId-index`) of solved problems for a handle.
- */
-async function getCFSolvedSet(handle) {
-  const subs = await getCFStatus(handle, 10000);
-  const solved = new Set();
-  if (!subs) return solved;
-  for (const sub of subs) {
-    if (sub.verdict === 'OK' && sub.problem) {
-      const key = getCFProblemKey(sub.problem);
-      if (key) solved.add(key);
-    }
-  }
-  return solved;
-}
-
 module.exports = {
-  CF_BASE,
-  CF_HEADERS,
   cfGet,
   getCFStatus,
   getCFUser,
@@ -482,7 +452,5 @@ module.exports = {
   getProblemsetCache,
   checkCFSolved,
   initializeProblemCache,
-  getCFDivisionBreakdown,
-  getCFSolvedSet,
-  getRatingTitle
+  getCFDivisionBreakdown
 };

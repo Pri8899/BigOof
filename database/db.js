@@ -193,8 +193,12 @@ function addColumnIfMissing(instance, table, colDef) {
 function runMigrations(instance) {
   ensureSchema(instance);
 
+  addColumnIfMissing(instance, 'users', 'cf_handle TEXT');
+  addColumnIfMissing(instance, 'users', 'lc_handle TEXT');
+  addColumnIfMissing(instance, 'users', 'ac_handle TEXT');
   addColumnIfMissing(instance, 'users', 'toph_handle TEXT');
   addColumnIfMissing(instance, 'users', 'github_handle TEXT');
+  addColumnIfMissing(instance, 'users', 'joined_at INTEGER');
   addColumnIfMissing(instance, 'notified_contests', 'discord_msg_id TEXT');
   addColumnIfMissing(instance, 'notified_contests', 'time_na INTEGER DEFAULT 0');
   addColumnIfMissing(instance, 'virtual_contests', "type TEXT DEFAULT 'individual'");
@@ -264,6 +268,21 @@ const db = new Proxy({}, {
     return typeof val === 'function' ? val.bind(dbInstance) : val;
   }
 });
+
+/**
+ * Wraps a SQLite transaction so it automatically rebinds if `reloadDatabase` swaps `dbInstance`.
+ */
+function makeTransaction(fn) {
+  let cachedInstance = null;
+  let cachedTx = null;
+  return (...args) => {
+    if (cachedInstance !== dbInstance || !cachedTx) {
+      cachedInstance = dbInstance;
+      cachedTx = dbInstance.transaction(fn);
+    }
+    return cachedTx(...args);
+  };
+}
 
 function checkpointWal() {
   if (dbInstance) {
@@ -367,7 +386,7 @@ function linkPlatform(discordId, platform, handle) {
   db.prepare(`UPDATE users SET ${col} = ? WHERE discord_id = ?`).run(handle, discordId);
 }
 
-const unlinkPlatform = db.transaction((discordId, platform) => {
+const unlinkPlatform = makeTransaction((discordId, platform) => {
   assertAllowed(ALLOWED_PLATFORMS, platform, 'platform');
   const col = `${platform}_handle`;
   db.prepare(`UPDATE users SET ${col} = NULL WHERE discord_id = ?`).run(discordId);
@@ -379,7 +398,7 @@ const unlinkPlatform = db.transaction((discordId, platform) => {
   db.prepare('DELETE FROM processed_submissions WHERE id LIKE ?').run(`${platform}_prob_${discordId}_%`);
 });
 
-const purgeUser = db.transaction((discordId) => {
+const purgeUser = makeTransaction((discordId) => {
   const user = getUser(discordId);
   if (!user) return false;
 
@@ -555,17 +574,8 @@ function getVC(id) {
   return parseVC(db.prepare('SELECT * FROM virtual_contests WHERE id = ?').get(id));
 }
 
-function getActiveVCs() {
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare('SELECT * FROM virtual_contests WHERE ended = 0 AND ends_at <= ?').all(now).map(parseVC);
-}
-
 function getAllActiveVCs() {
   return db.prepare('SELECT * FROM virtual_contests WHERE ended = 0').all().map(parseVC);
-}
-
-function endVC(id) {
-  db.prepare('UPDATE virtual_contests SET ended = 1 WHERE id = ?').run(id);
 }
 
 function markVCEndedIfActive(id) {
@@ -614,11 +624,6 @@ function getDailyProblems(dateStr) {
   return db.prepare('SELECT * FROM daily_problems WHERE date_str = ?').get(dateStr);
 }
 
-function setFirstBlood(dateStr, field, discordId) {
-  assertAllowed(ALLOWED_FIRST_BLOOD_FIELDS, field, 'first_blood field');
-  db.prepare(`UPDATE daily_problems SET ${field} = ? WHERE date_str = ?`).run(discordId, dateStr);
-}
-
 function tryClaimFirstBlood(dateStr, field, discordId) {
   assertAllowed(ALLOWED_FIRST_BLOOD_FIELDS, field, 'first_blood field');
   const info = db.prepare(
@@ -627,11 +632,7 @@ function tryClaimFirstBlood(dateStr, field, discordId) {
   return info.changes > 0;
 }
 
-function setSweepAnnounced(dateStr, sweepAnnouncedJson) {
-  db.prepare('UPDATE daily_problems SET sweep_announced = ? WHERE date_str = ?').run(sweepAnnouncedJson, dateStr);
-}
-
-const tryMarkSweepAnnounced = db.transaction((dateStr, discordId) => {
+const tryMarkSweepAnnounced = makeTransaction((dateStr, discordId) => {
   const row = db.prepare('SELECT sweep_announced FROM daily_problems WHERE date_str = ?').get(dateStr);
   if (!row) return false;
   let list = [];
@@ -761,11 +762,6 @@ function getVSMatch(id) {
   return parseVSMatch(db.prepare('SELECT * FROM vs_matches WHERE id = ?').get(id));
 }
 
-function updateVSMatchStatus(id, status, startedAt = null, endsAt = null) {
-  db.prepare('UPDATE vs_matches SET status = ?, started_at = ?, ends_at = ? WHERE id = ?')
-    .run(status, startedAt, endsAt, id);
-}
-
 function claimVSMatchStart(id, problems, startedAt, endsAt) {
   const info = db.prepare(`
     UPDATE vs_matches
@@ -784,10 +780,6 @@ function concludeVSMatchIfActive(id, startedAt = null, endsAt = null) {
     WHERE id = ? AND status = 'active'
   `).run(startedAt, endsAt, id);
   return info.changes > 0;
-}
-
-function updateVSMatchProblems(id, problems) {
-  db.prepare('UPDATE vs_matches SET problems = ? WHERE id = ?').run(JSON.stringify(problems), id);
 }
 
 function updateVSMatchLocks(id, locks) {
@@ -819,7 +811,7 @@ function getActiveVSMatches() {
   return db.prepare("SELECT * FROM vs_matches WHERE status = 'active'").all().map(parseVSMatch);
 }
 
-const removeVSMatch = db.transaction((id) => {
+const removeVSMatch = makeTransaction((id) => {
   db.prepare('DELETE FROM vs_participants WHERE match_id = ?').run(id);
   db.prepare('DELETE FROM vs_matches WHERE id = ?').run(id);
 });
@@ -881,9 +873,7 @@ module.exports = {
   getAllStreaks,
   createVC,
   getVC,
-  getActiveVCs,
   getAllActiveVCs,
-  endVC,
   markVCEndedIfActive,
   joinVC,
   getVCParticipants,
@@ -891,9 +881,7 @@ module.exports = {
   getActiveVCForChannel,
   setDailyProblems,
   getDailyProblems,
-  setFirstBlood,
   tryClaimFirstBlood,
-  setSweepAnnounced,
   tryMarkSweepAnnounced,
   getLastSubmission,
   setLastSubmission,
@@ -906,10 +894,8 @@ module.exports = {
   markContestWrappedUp,
   createVSMatch,
   getVSMatch,
-  updateVSMatchStatus,
   claimVSMatchStart,
   concludeVSMatchIfActive,
-  updateVSMatchProblems,
   updateVSMatchLocks,
   joinVSMatch,
   getVSParticipants,

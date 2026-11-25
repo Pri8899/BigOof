@@ -33,6 +33,7 @@ module.exports = {
       if (attachment) attachments.push(attachment.url);
     }
 
+    const quotedProblem = problem.replace(/\r?\n/g, '\n> ').slice(0, 3500);
     const embed = new EmbedBuilder()
       .setColor(0xFF9800)
       .setAuthor({
@@ -45,10 +46,10 @@ module.exports = {
         '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
         '',
         '**Problem & Context:**',
-        `> ${problem.slice(0, 3500).replace(/\n/g, '\n> ')}`,
+        `> ${quotedProblem}`,
         '',
         '💡 *Got an idea, edge case, or complexity hint? Jump in to discuss!*'
-      ].join('\n'))
+      ].join('\n').slice(0, 4096))
       .setThumbnail(user.displayAvatarURL({ dynamic: true }))
       .setFooter({ text: 'BigOof Peer Support · /ask-help', iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png' })
       .setTimestamp();

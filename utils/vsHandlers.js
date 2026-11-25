@@ -22,7 +22,7 @@ async function handleVSButton(interaction, client) {
   const [action, matchId] = interaction.customId.split('_');
 
   if (action === 'vs-join') return handleVSJoin(interaction, matchId);
-  if (action === 'vs-start') return handleVSStart(interaction, matchId, client);
+  if (action === 'vs-start') return handleVSStart(interaction, matchId);
   if (action === 'vs-cancel') return handleVSCancel(interaction, matchId);
   if (action === 'vs-refresh') return handleVSRefresh(interaction, matchId, client);
   if (action === 'vs-abort') return handleVSAbort(interaction, matchId, client);
@@ -222,14 +222,28 @@ async function handleVSAbort(interaction, matchId, client) {
 
   await interaction.deferReply({ flags: 64 });
 
-  const participants = getVSParticipants(matchId);
+  let concluded = false;
   await withMatchLock(
     matchId,
-    () => concludeMatch(client, interaction.channel, match, participants, `Aborted by host (<@${match.creator_id}>)`),
+    async () => {
+      const freshMatch = getVSMatch(matchId);
+      if (!freshMatch || freshMatch.status !== 'active') return;
+      const freshParticipants = getVSParticipants(matchId);
+      await concludeMatch(
+        client,
+        interaction.channel,
+        freshMatch,
+        freshParticipants,
+        `Aborted by host (<@${freshMatch.creator_id}>)`
+      );
+      concluded = true;
+    },
     { wait: true }
   );
 
-  await interaction.editReply({ content: '✅ Match aborted successfully.' });
+  await interaction.editReply({
+    content: concluded ? '✅ Match aborted successfully.' : '❌ This match has already concluded.'
+  });
 }
 
 function buildLobbyEmbed(match, participants) {

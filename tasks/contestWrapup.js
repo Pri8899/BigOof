@@ -17,10 +17,16 @@ const { getTimeZone, getLocalParts } = require('../utils/time');
 function getWrapupChannel(guild) {
   if (!guild) return null;
   const me = guild.members.me;
-  const isWritable = (ch) =>
-    ch &&
-    ch.isTextBased() &&
-    (!me || ch.permissionsFor(me)?.has(PermissionFlagsBits.SendMessages));
+  const isWritable = (ch) => {
+    if (!ch || !ch.isTextBased() || ch.isVoiceBased?.()) return false;
+    if (!me) return true;
+    const perms = ch.permissionsFor(me);
+    return Boolean(
+      perms?.has(PermissionFlagsBits.ViewChannel) &&
+      perms?.has(PermissionFlagsBits.SendMessages) &&
+      perms?.has(PermissionFlagsBits.EmbedLinks)
+    );
+  };
 
   const wrapupChannelId = getConfig('wrapup_channel_id', guild.id);
   if (wrapupChannelId) {

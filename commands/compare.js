@@ -1,7 +1,7 @@
 // commands/compare.js — Head-to-head Codeforces comparison across members or arbitrary handles
 const { SlashCommandBuilder } = require('discord.js');
 const { getUser, getStreak, getHeadToHeadVersus } = require('../database/db');
-const { getCFUser, getCFSolvedSet } = require('../utils/codeforces');
+const { getCFUser } = require('../utils/codeforces');
 const { buildCompareEmbed, errorEmbed } = require('../utils/embeds');
 
 const CF_ICON = 'https://codeforces.org/s/0/images/codeforces-telegram-square.png';
@@ -128,11 +128,9 @@ module.exports = {
       });
     }
 
-    const [cfData1, cfData2, solvedSet1, solvedSet2] = await Promise.all([
-      getCFUser(cfHandle1),
-      getCFUser(cfHandle2),
-      getCFSolvedSet(cfHandle1),
-      getCFSolvedSet(cfHandle2)
+    const [cfData1, cfData2] = await Promise.all([
+      getCFUser(cfHandle1, { includeSolvedSet: true }),
+      getCFUser(cfHandle2, { includeSolvedSet: true })
     ]);
 
     if (!cfData1) {
@@ -145,6 +143,9 @@ module.exports = {
         embeds: [errorEmbed('Codeforces Lookup Error', `Could not find Codeforces profile for \`${cfHandle2}\`.`)]
       });
     }
+
+    const solvedSet1 = cfData1.solvedSet || new Set();
+    const solvedSet2 = cfData2.solvedSet || new Set();
 
     let commonCount = 0;
     for (const p of solvedSet1) {

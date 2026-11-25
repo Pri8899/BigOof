@@ -96,7 +96,9 @@ async function processActiveMatch(client, match) {
       if (!submissions) continue;
       await new Promise(resolve => setTimeout(resolve, 350));
 
-      for (const sub of submissions) {
+      // Codeforces returns newest-first; iterate chronologically so earliest AC & attempts win
+      const chronological = [...submissions].reverse();
+      for (const sub of chronological) {
         if (!sub.problem) continue;
         if (sub.creationTimeSeconds < match.started_at || sub.creationTimeSeconds > match.ends_at) continue;
 

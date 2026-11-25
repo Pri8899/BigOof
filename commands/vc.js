@@ -304,6 +304,8 @@ async function handleVCJoinButton(interaction) {
     });
   }
 
+  await interaction.deferReply({ flags: 64 });
+
   let teamVal = null;
   if (vc.type && vc.type.startsWith('team')) {
     const teamsCount = vc.type.startsWith('team_') ? (parseInt(vc.type.split('_')[1], 10) || 2) : 2;
@@ -332,9 +334,8 @@ async function handleVCJoinButton(interaction) {
   const updatedEmbed = buildVCEmbed(vc, vc.problems || [], updatedParts, false);
 
   await interaction.message.edit({ embeds: [updatedEmbed] }).catch(() => {});
-  return interaction.reply({
-    content: `✅ Joined! ${teamVal ? `Assigned to **${teamVal}**.` : ''} Solve on Codeforces during the round window!`,
-    flags: 64
+  return interaction.editReply({
+    content: `✅ Joined! ${teamVal ? `Assigned to **${teamVal}**.` : ''} Solve on Codeforces during the round window!`
   });
 }
 

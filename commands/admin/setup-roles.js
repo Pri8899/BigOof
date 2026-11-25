@@ -1,26 +1,8 @@
 // commands/admin/setup-roles.js — Create and configure CP, Rank, and Streak roles safely
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { setConfig, getAllUsers, getRatings, getAllStreaks } = require('../../database/db');
+const { CF_ROLES, STREAK_ROLES } = require('../../tasks/ratingSync');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
-
-const CF_ROLES = [
-  { name: 'Legendary Grandmaster', color: 0xFF0000 },
-  { name: 'International Grandmaster', color: 0xFF0000 },
-  { name: 'Grandmaster', color: 0xFF0000 },
-  { name: 'International Master', color: 0xFF8C00 },
-  { name: 'Master', color: 0xFF8C00 },
-  { name: 'Candidate Master', color: 0xAA00AA },
-  { name: 'Expert', color: 0x0000FF },
-  { name: 'Specialist', color: 0x03A89E },
-  { name: 'Pupil', color: 0x008000 },
-  { name: 'Newbie', color: 0x808080 }
-];
-
-const STREAK_ROLES = [
-  { name: '💫 30+ Day Streak', min: 30, color: 0xE0115F },
-  { name: '👑 15+ Day Streak', min: 15, color: 0xF1C40F },
-  { name: '🔥 7+ Day Streak',  min: 7,  color: 0xE67E22 }
-];
 
 module.exports = {
   guildOnly: true,
@@ -106,13 +88,21 @@ module.exports = {
           const member = members.get(user.discord_id);
           if (!member) continue;
 
-          // Sync CF Rank role
+          // Sync CF Rank role consistently with ratingSync (unrated -> Newbie)
           const cf = getRatings(user.discord_id).find(r => r.platform === 'cf');
-          if (cf && cf.rating !== null) {
-            const roleName = (cf.rank_title || 'Newbie').toLowerCase();
-            const targetRole = guild.roles.cache.find(r => r.name.toLowerCase() === roleName);
+          if (cf && cf.rating !== null && cf.rating !== undefined) {
+            const targetRoleDef = CF_ROLES.find(r => cf.rating >= r.min) || CF_ROLES[CF_ROLES.length - 1];
+            const targetRole = guild.roles.cache.find(r => r.name.toLowerCase() === targetRoleDef.name.toLowerCase());
             if (targetRole && targetRole.editable && targetRole.position < me.roles.highest.position && !member.roles.cache.has(targetRole.id)) {
               await member.roles.add(targetRole).catch(() => {});
+            }
+            for (const rDef of CF_ROLES) {
+              if (rDef.name.toLowerCase() !== targetRoleDef.name.toLowerCase()) {
+                const stale = guild.roles.cache.find(r => r.name.toLowerCase() === rDef.name.toLowerCase());
+                if (stale && stale.editable && stale.position < me.roles.highest.position && member.roles.cache.has(stale.id)) {
+                  await member.roles.remove(stale).catch(() => {});
+                }
+              }
             }
           }
 
@@ -123,6 +113,14 @@ module.exports = {
             const streakRole = guild.roles.cache.find(r => r.name === targetStreakDef.name);
             if (streakRole && streakRole.editable && streakRole.position < me.roles.highest.position && !member.roles.cache.has(streakRole.id)) {
               await member.roles.add(streakRole).catch(() => {});
+            }
+          }
+          for (const sDef of STREAK_ROLES) {
+            if (!targetStreakDef || sDef.name !== targetStreakDef.name) {
+              const stale = guild.roles.cache.find(r => r.name === sDef.name);
+              if (stale && stale.editable && stale.position < me.roles.highest.position && member.roles.cache.has(stale.id)) {
+                await member.roles.remove(stale).catch(() => {});
+              }
             }
           }
         }

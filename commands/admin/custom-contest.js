@@ -162,6 +162,13 @@ module.exports = {
       }
 
       const durationSec = parseDuration(durationStr);
+      const isDurationNA = ['n/a', 'na'].includes(durationStr.trim().toLowerCase());
+      if (!isDurationNA && durationSec === null) {
+        return interaction.reply({
+          embeds: [errorEmbed('Invalid Duration', 'Use a format like `2h`, `120m`, `2h 30m`, or `N/A`.')],
+          flags: 64
+        });
+      }
       const contestId = `custom_${Date.now()}`;
 
       db.prepare(`
@@ -213,6 +220,12 @@ module.exports = {
           const existingParts = getLocalParts(new Date(contest.start_time * 1000), TZ);
           effectiveDate = existingParts.isoDate;
         }
+        if (effectiveDate === null && effectiveTime !== null && !['n/a', 'na'].includes(effectiveTime.trim().toLowerCase())) {
+          return interaction.reply({
+            embeds: [errorEmbed('Date Required', 'This contest currently has `Date: N/A`. Please also pass `date` when setting a specific `time`.')],
+            flags: 64
+          });
+        }
         if (effectiveTime === null) {
           if (contest.time_na === 1 || !contest.start_time) {
             effectiveTime = 'N/A';
@@ -231,7 +244,17 @@ module.exports = {
       }
 
       const durationStr = interaction.options.getString('duration');
-      const newDuration = durationStr !== null ? parseDuration(durationStr) : contest.duration_sec;
+      let newDuration = contest.duration_sec;
+      if (durationStr !== null) {
+        const isDurationNA = ['n/a', 'na'].includes(durationStr.trim().toLowerCase());
+        newDuration = parseDuration(durationStr);
+        if (!isDurationNA && newDuration === null) {
+          return interaction.reply({
+            embeds: [errorEmbed('Invalid Duration', 'Use a format like `2h`, `120m`, `2h 30m`, or `N/A`.')],
+            flags: 64
+          });
+        }
+      }
 
       db.prepare(`
         UPDATE notified_contests
