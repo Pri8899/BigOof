@@ -13,7 +13,14 @@ const {
   updateVCSolved,
   getRatings
 } = require('../database/db');
-const { getCFProblems, getCFStatus } = require('../utils/codeforces');
+const {
+  CF_TAGS,
+  DIV_CHOICES,
+  getCFProblems,
+  getCFStatus,
+  extractSolvedIds,
+  respondRatingAutocomplete
+} = require('../utils/codeforces');
 const { chunkLines } = require('../utils/envHelper');
 const { errorEmbed, successEmbed } = require('../utils/embeds');
 
@@ -30,19 +37,6 @@ const TEAM_NAMES = [
   { name: 'Team H', emoji: '⚫' },
   { name: 'Team I', emoji: '⚪' },
   { name: 'Team J', emoji: '🟩' }
-];
-
-const CF_TAGS = [
-  'implementation', 'math', 'greedy', 'dp', 'data structures',
-  'graphs', 'strings', 'binary search', 'constructive algorithms',
-  'number theory'
-];
-
-const DIV_CHOICES = [
-  { name: 'Div. 1', value: 'div1' },
-  { name: 'Div. 2', value: 'div2' },
-  { name: 'Div. 3', value: 'div3' },
-  { name: 'Div. 4', value: 'div4' }
 ];
 
 /**
@@ -408,30 +402,7 @@ module.exports = {
     ),
 
   async autocomplete(interaction) {
-    const focusedValue = interaction.options.getFocused();
-    let cfRating = 1200;
-    try {
-      cfRating = getRatings(interaction.user.id).find(r => r.platform === 'cf')?.rating ?? 1200;
-    } catch (_) {}
-
-    const allRatings = [];
-    for (let r = 800; r <= 3500; r += 100) allRatings.push(r);
-
-    let choices = [];
-    if (focusedValue) {
-      choices = allRatings
-        .map(r => r.toString())
-        .filter(c => c.startsWith(focusedValue))
-        .slice(0, 25)
-        .map(c => ({ name: c, value: parseInt(c, 10) }));
-    } else {
-      const targetRating = Math.max(800, Math.min(3500, Math.round(cfRating / 100) * 100));
-      const targetIndex = allRatings.indexOf(targetRating);
-      const startIndex = Math.max(0, targetIndex - 12);
-      const endIndex = Math.min(allRatings.length - 1, startIndex + 24);
-      choices = allRatings.slice(startIndex, endIndex + 1).map(r => ({ name: r.toString(), value: r }));
-    }
-    await interaction.respond(choices).catch(() => {});
+    return respondRatingAutocomplete(interaction, getRatings);
   },
 
   async execute(interaction) {
@@ -497,14 +468,7 @@ module.exports = {
       const creator = getUser(userId);
       const excludeIds = new Set();
       if (creator?.cf_handle) {
-        const subs = await getCFStatus(creator.cf_handle, 5000);
-        if (subs) {
-          for (const sub of subs) {
-            if (sub.verdict === 'OK' && sub.problem) {
-              excludeIds.add(`${sub.problem.contestId}${sub.problem.index}`);
-            }
-          }
-        }
+        extractSolvedIds(await getCFStatus(creator.cf_handle, 5000), excludeIds);
       }
 
       let problems = await getCFProblems({

@@ -1,5 +1,6 @@
 // utils/atcoder.js — AtCoder API wrapper (Kenkoooo API + official atcoder.jp fallback)
 const axios = require('axios');
+const { calculateStreakFromTimestamps } = require('./time');
 
 async function axiosGetWithRetry(url, options = {}, retries = 3, backoff = 1500) {
   for (let i = 0; i < retries; i++) {
@@ -135,10 +136,9 @@ async function scrapeAtCoderContests() {
 }
 
 /**
- * Fetches total distinct AC problems solved by an AtCoder handle (up to 50 pages / 25k subs).
+ * Iterates Kenkoooo user submission pages (up to 50 pages / 25k submissions).
  */
-async function getACSolvedCount(handle) {
-  const solvedProblems = new Set();
+async function forEachACSubmissionPage(handle, onPage, timeout = 15000) {
   let fromSecond = 0;
   let pagesFetched = 0;
   const encoded = encodeURIComponent(handle);
@@ -146,13 +146,11 @@ async function getACSolvedCount(handle) {
   while (pagesFetched < 50) {
     const res = await axiosGetWithRetry(
       `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${encoded}&from_second=${fromSecond}`,
-      { timeout: 15000, headers: KENKOOOO_HEADERS }
+      { timeout, headers: KENKOOOO_HEADERS }
     );
     if (!Array.isArray(res.data) || res.data.length === 0) break;
 
-    for (const s of res.data) {
-      if (s.result === 'AC') solvedProblems.add(s.problem_id);
-    }
+    onPage(res.data);
     if (res.data.length < 500) break;
 
     const maxEpoch = Math.max(...res.data.map(s => s.epoch_second));
@@ -160,7 +158,38 @@ async function getACSolvedCount(handle) {
     fromSecond = maxEpoch + 1;
     pagesFetched++;
   }
+}
+
+/**
+ * Fetches total distinct AC problems solved by an AtCoder handle (up to 50 pages / 25k subs).
+ */
+async function getACSolvedCount(handle) {
+  const solvedProblems = new Set();
+  await forEachACSubmissionPage(handle, (page) => {
+    for (const s of page) {
+      if (s.result === 'AC') solvedProblems.add(s.problem_id);
+    }
+  });
   return solvedProblems.size;
+}
+
+/**
+ * Computes current and max daily solving streak for an AtCoder handle.
+ */
+async function calculateACStreak(handle) {
+  try {
+    const timestamps = [];
+    await forEachACSubmissionPage(handle, (page) => {
+      for (const s of page) {
+        if (s.epoch_second) timestamps.push(s.epoch_second);
+      }
+    }, 12000);
+    const { current, max } = calculateStreakFromTimestamps(timestamps);
+    return { current, max };
+  } catch (err) {
+    console.error(`[StreakCalc] AC streak error for ${handle}:`, err.message);
+    return { current: 0, max: 0 };
+  }
 }
 
 /**
@@ -266,4 +295,12 @@ function getACRankTitle(rating) {
   return 'Unrated';
 }
 
-module.exports = { getACUser, getACContests, validateACHandle, getACSolvedCount };
+module.exports = {
+  axiosGetWithRetry,
+  KENKOOOO_HEADERS,
+  getACUser,
+  getACContests,
+  validateACHandle,
+  getACSolvedCount,
+  calculateACStreak
+};

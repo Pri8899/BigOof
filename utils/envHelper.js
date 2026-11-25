@@ -1,5 +1,5 @@
 // utils/envHelper.js — Environment validation, owner checks, and guild-isolated channel routing
-const { getConfig } = require('../database/db');
+const { getConfig, setConfig } = require('../database/db');
 
 function getValidId(val, fallback = null) {
   if (val && typeof val === 'string' && !val.includes('your_') && /^\d+$/.test(val.trim())) {
@@ -82,6 +82,84 @@ async function resolveChannelChain(client, candidates, guildId = null) {
 }
 
 /**
+ * Resolves unique `{ guild_id, channel }` targets across guilds (or for a single guild).
+ */
+async function getGuildTargetChannels(client, configKey, envVarName = null, specificGuildId = null) {
+  const targets = [];
+  const seenChannelIds = new Set();
+
+  if (specificGuildId) {
+    const ch = await getTargetChannel(client, configKey, envVarName, specificGuildId);
+    if (ch) targets.push({ guild_id: specificGuildId, channel: ch });
+    return targets;
+  }
+
+  for (const guild of client.guilds.cache.values()) {
+    const ch = await getTargetChannel(client, configKey, envVarName, guild.id);
+    if (ch && !seenChannelIds.has(ch.id)) {
+      seenChannelIds.add(ch.id);
+      targets.push({ guild_id: guild.id, channel: ch });
+    }
+  }
+
+  if (targets.length === 0) {
+    const globalCh = await getTargetChannel(client, configKey, envVarName);
+    if (globalCh) targets.push({ guild_id: 'global', channel: globalCh });
+  }
+
+  return targets;
+}
+
+/**
+ * Deletes previous matching bot messages in a channel and posts a fresh replacement message.
+ */
+async function replaceChannelBotMessage(
+  client,
+  channel,
+  { matchMessage, storedConfigKey = null, guildId = null, payload, fallbackPayload = null, logLabel = 'Bot' }
+) {
+  const deletedIds = new Set();
+
+  try {
+    const messages = await channel.messages.fetch({ limit: 50 });
+    for (const msg of messages.values()) {
+      if (msg.author.id === client.user.id && matchMessage(msg)) {
+        deletedIds.add(msg.id);
+        await msg.delete().catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn(`[${logLabel}] Failed fetching messages in #${channel.name}:`, err.message);
+  }
+
+  if (storedConfigKey && guildId) {
+    const storedId = getConfig(storedConfigKey, guildId);
+    if (storedId && !deletedIds.has(storedId)) {
+      const oldMsg = await channel.messages.fetch(storedId).catch(() => null);
+      if (oldMsg && oldMsg.author.id === client.user.id) {
+        await oldMsg.delete().catch(() => {});
+      }
+    }
+  }
+
+  let newMsg = await channel.send(payload).catch(async err => {
+    if (fallbackPayload) {
+      return channel.send(fallbackPayload).catch(err2 => {
+        console.warn(`[${logLabel}] Failed sending fallback message to #${channel.name}:`, err2.message);
+        return null;
+      });
+    }
+    console.warn(`[${logLabel}] Failed sending message to #${channel.name}:`, err.message);
+    return null;
+  });
+
+  if (newMsg && storedConfigKey && guildId) {
+    setConfig(storedConfigKey, newMsg.id, guildId);
+  }
+  return newMsg;
+}
+
+/**
  * Splits a list of lines into safe embed field values <= maxLen characters.
  */
 function chunkLines(lines, maxLen = 1000, separator = '\n') {
@@ -110,5 +188,7 @@ module.exports = {
   isBotOwner,
   getTargetChannel,
   resolveChannelChain,
+  getGuildTargetChannels,
+  replaceChannelBotMessage,
   chunkLines
 };

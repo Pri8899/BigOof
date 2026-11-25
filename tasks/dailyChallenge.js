@@ -11,8 +11,8 @@ const {
   getAllUsers,
   getRatings
 } = require('../database/db');
-const { getCFProblems, getCFStatus, getProblemsetCache } = require('../utils/codeforces');
-const { getTargetChannel, resolveChannelChain } = require('../utils/envHelper');
+const { getCFProblems, getCFStatus, getProblemsetCache, extractSolvedIds } = require('../utils/codeforces');
+const { resolveChannelChain, getGuildTargetChannels, replaceChannelBotMessage } = require('../utils/envHelper');
 const { getTimeZone, getLocalParts, zonedDateTimeToUnix } = require('../utils/time');
 
 let isFirstBloodRunning = false;
@@ -37,13 +37,7 @@ async function getMergedSolvedSet() {
 
   for (const user of users) {
     const subs = await getCFStatus(user.cf_handle, 2000);
-    if (subs) {
-      for (const sub of subs) {
-        if (sub.verdict === 'OK' && sub.problem) {
-          solvedSet.add(`${sub.problem.contestId}${sub.problem.index}`);
-        }
-      }
-    }
+    extractSolvedIds(subs, solvedSet);
     await new Promise(r => setTimeout(r, 2000));
   }
   return solvedSet;
@@ -167,52 +161,29 @@ async function postDailySuggestions(client, targetDate = null) {
   if (p4) cfEmbed.addFields(formatProbField('Level 4 (Expert)', '⚡', p4));
   if (p5) cfEmbed.addFields(formatProbField('Level 5 (Master)', '👑', p5));
 
-  const targetChannels = [];
-  const seenChannelIds = new Set();
-  for (const guild of client.guilds.cache.values()) {
-    const ch = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID', guild.id);
-    if (ch && !seenChannelIds.has(ch.id)) {
-      seenChannelIds.add(ch.id);
-      targetChannels.push(ch);
-    }
-  }
-
-  if (targetChannels.length === 0) {
-    const globalFallback = await getTargetChannel(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID');
-    if (globalFallback) targetChannels.push(globalFallback);
-  }
-
-  if (targetChannels.length === 0) {
+  const targets = await getGuildTargetChannels(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID');
+  if (targets.length === 0) {
     console.log('[Daily] No suggest channels configured across guilds.');
     return false;
   }
 
   let postedAny = false;
-  for (const channel of targetChannels) {
-    try {
-      const messages = await channel.messages.fetch({ limit: 50 });
-      const oldMessages = [...messages.values()].filter(m =>
-        m.author.id === client.user.id &&
+  for (const { channel } of targets) {
+    const sent = await replaceChannelBotMessage(client, channel, {
+      matchMessage: (m) =>
         m.embeds.length > 0 &&
         (m.embeds[0].title?.includes('Daily Coding Quests') ||
          m.embeds[0].title?.includes('Daily Problem Suggestions') ||
-         m.embeds[0].description?.includes('Daily Problem Suggestions'))
-      );
-      for (const msg of oldMessages) {
-        await msg.delete().catch(() => {});
-      }
-    } catch (err) {
-      console.warn(`[Daily] Old message cleanup warning in #${channel.name}:`, err.message);
-    }
-
-    const sent = await channel.send({ content: '@everyone', embeds: [cfEmbed] }).catch(() =>
-      channel.send({ embeds: [cfEmbed] }).catch(() => null)
-    );
+         m.embeds[0].description?.includes('Daily Problem Suggestions')),
+      payload: { content: '@everyone', embeds: [cfEmbed] },
+      fallbackPayload: { embeds: [cfEmbed] },
+      logLabel: 'Daily'
+    });
     if (sent) postedAny = true;
   }
 
   if (postedAny) {
-    console.log(`[Daily] Posted daily challenges to ${targetChannels.length} channel(s).`);
+    console.log(`[Daily] Posted daily challenges to ${targets.length} channel(s).`);
   }
   return postedAny;
 }

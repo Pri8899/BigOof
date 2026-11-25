@@ -12,7 +12,7 @@ const CHANNEL_DEFS = [
   { key: 'wrapup_channel_id', label: '🌅 Contest Wrap-up', desc: 'Next-day 9AM recap & upsolve radar' },
   { key: 'github_channel_id', label: '🐙 GitHub Activity Feed', desc: 'Commits, releases, PRs, and new repos' },
   { key: 'announcement_channel_id', label: '📢 Announcements', desc: 'Channel used by /announce' },
-  { key: 'general_channel_id', label: '💬 General Channel', desc: 'General chat, first blood & sweep alerts' }
+  { key: 'general_channel_id', label: '💬 General Channel', desc: 'Submissions, weekly digest, first blood & sweep alerts' }
 ];
 
 module.exports = {

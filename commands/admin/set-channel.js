@@ -14,7 +14,7 @@ const FEATURES = [
   { name: '🌅 Contest Wrap-up (Next-day 9AM contest recap & upsolve)', value: 'wrapup_channel_id', label: 'Contest Wrap-up' },
   { name: '🐙 GitHub Activity Feed (Commits, PRs, and repositories)', value: 'github_channel_id', label: 'GitHub Activity Feed' },
   { name: '📢 Announcements (Broadcast channel for /announce)', value: 'announcement_channel_id', label: 'Announcements' },
-  { name: '💬 General Channel (General chat, first blood & sweep alerts)', value: 'general_channel_id', label: 'General Channel' },
+  { name: '💬 General Channel (Submissions, weekly digest, first blood & sweep)', value: 'general_channel_id', label: 'General Channel' },
   { name: '💾 Database Backups (Bot Host only)', value: 'backup_channel_id', label: 'Database Backups' }
 ];
 

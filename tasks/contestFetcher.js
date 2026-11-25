@@ -12,40 +12,14 @@ const { getCFContests } = require('../utils/codeforces');
 const { getACContests } = require('../utils/atcoder');
 const { getTophContests } = require('../utils/toph');
 const { buildContestEmbed, buildContestListEmbed } = require('../utils/embeds');
-const { getTargetChannel } = require('../utils/envHelper');
+const { getGuildTargetChannels, replaceChannelBotMessage } = require('../utils/envHelper');
 const { getTimeZone } = require('../utils/time');
 
 let isRefreshing = false;
 let isCheckingReminders = false;
 
 async function getRadarTargets(client, specificGuildId = null) {
-  const targets = [];
-  const seenChannelIds = new Set();
-
-  if (specificGuildId) {
-    const ch = await getTargetChannel(client, 'contest_channel_id', 'CONTEST_CHANNEL_ID', specificGuildId);
-    if (ch) {
-      targets.push({ guild_id: specificGuildId, channel: ch });
-    }
-    return targets;
-  }
-
-  for (const guild of client.guilds.cache.values()) {
-    const ch = await getTargetChannel(client, 'contest_channel_id', 'CONTEST_CHANNEL_ID', guild.id);
-    if (ch && !seenChannelIds.has(ch.id)) {
-      seenChannelIds.add(ch.id);
-      targets.push({ guild_id: guild.id, channel: ch });
-    }
-  }
-
-  if (targets.length === 0) {
-    const globalCh = await getTargetChannel(client, 'contest_channel_id', 'CONTEST_CHANNEL_ID');
-    if (globalCh) {
-      targets.push({ guild_id: 'global', channel: globalCh });
-    }
-  }
-
-  return targets;
+  return getGuildTargetChannels(client, 'contest_channel_id', 'CONTEST_CHANNEL_ID', specificGuildId);
 }
 
 /**
@@ -143,7 +117,7 @@ async function checkAndSendContestReminders(client) {
 }
 
 /**
- * Updates or posts the grouped upcoming contest overview silently (edits in-place when possible).
+ * Deletes old contest radar overview embeds and posts a fresh upcoming contest summary.
  */
 async function postContestSummary(client, specificGuildId = null) {
   try {
@@ -167,54 +141,17 @@ async function postContestSummary(client, specificGuildId = null) {
           emojis
         );
 
-        let existingMessages = [];
-        try {
-          const messages = await channel.messages.fetch({ limit: 25 });
-          existingMessages = [...messages.values()].filter(m =>
-            m.author.id === client.user.id &&
+        await replaceChannelBotMessage(client, channel, {
+          matchMessage: (m) =>
             m.embeds.length > 0 &&
             (m.embeds[0].title?.includes('Upcoming Competitive Programming Contests') ||
              m.embeds[0].title?.includes('Upcoming Contests') ||
-             m.embeds[0].title?.includes('Full Overview'))
-          );
-        } catch (err) {
-          console.warn(`[ContestFetcher] Failed fetching messages in #${channel.name}:`, err.message);
-        }
-
-        // Cleanly delete old radar embeds (preserving clean single post) and post/edit silently without @everyone spam
-        const storedMsgId = getConfig('contest_summary_msg_id', guild_id);
-        let edited = false;
-
-        if (existingMessages.length === 1) {
-          const msgToEdit = existingMessages[0];
-          const res = await msgToEdit.edit({ content: null, embeds: [embed] }).catch(() => null);
-          if (res) {
-            edited = true;
-            setConfig('contest_summary_msg_id', res.id, guild_id);
-          }
-        } else if (storedMsgId && existingMessages.length === 0) {
-          const cachedMsg = await channel.messages.fetch(storedMsgId).catch(() => null);
-          if (cachedMsg && cachedMsg.author.id === client.user.id) {
-            const res = await cachedMsg.edit({ content: null, embeds: [embed] }).catch(() => null);
-            if (res) {
-              edited = true;
-              setConfig('contest_summary_msg_id', res.id, guild_id);
-            }
-          }
-        }
-
-        if (!edited) {
-          for (const oldMsg of existingMessages) {
-            await oldMsg.delete().catch(() => {});
-          }
-          const newMsg = await channel.send({ embeds: [embed] }).catch(err => {
-            console.warn(`[ContestFetcher] Failed sending overview to #${channel.name}:`, err.message);
-            return null;
-          });
-          if (newMsg) {
-            setConfig('contest_summary_msg_id', newMsg.id, guild_id);
-          }
-        }
+             m.embeds[0].title?.includes('Full Overview')),
+          storedConfigKey: 'contest_summary_msg_id',
+          guildId: guild_id,
+          payload: { embeds: [embed] },
+          logLabel: 'ContestFetcher'
+        });
       } catch (guildErr) {
         console.error(`[ContestFetcher] Error updating contest radar in #${channel.name}:`, guildErr.message);
       }

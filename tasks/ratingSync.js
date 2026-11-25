@@ -1,15 +1,12 @@
 // tasks/ratingSync.js — Rating/streak sync, role sync, dashboard updater, and rank alerts
 const cron = require('node-cron');
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const axios = require('axios');
 const {
   getAllUsers,
   getUser,
   upsertRating,
   getAllRatings,
   getRatings,
-  getConfig,
-  setConfig,
   insertRatingHistory,
   upsertStreak,
   getAllStreaks,
@@ -17,18 +14,12 @@ const {
   setWeeklySnapshot
 } = require('../database/db');
 const { getCFUser, getCFStatus } = require('../utils/codeforces');
-const { getTargetChannel } = require('../utils/envHelper');
-const { getACUser } = require('../utils/atcoder');
+const { getTargetChannel, getGuildTargetChannels, replaceChannelBotMessage } = require('../utils/envHelper');
+const { getACUser, calculateACStreak } = require('../utils/atcoder');
 const { getTophUser, calculateTophStreak } = require('../utils/toph');
 const { buildDashboardEmbed } = require('../utils/embeds');
 const { computeLeaderboard } = require('../commands/leaderboard');
 const { getTimeZone, getLocalParts, calculateStreakFromTimestamps } = require('../utils/time');
-
-const KENKOOOO_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
-  'Origin': 'https://kenkoooo.com',
-  'Referer': 'https://kenkoooo.com/atcoder/'
-};
 
 const STREAK_ROLES = [
   { name: '💫 30+ Day Streak', min: 30, color: 0xE0115F },
@@ -387,7 +378,7 @@ async function syncAllRatings(client) {
   }
 }
 
-// ─── Update Dashboard ────────────────────────────────────────
+// ─── Update Dashboard (deletes old embed and posts fresh one) ─
 async function updateDashboard(client, specificGuildId = null) {
   try {
     const allUsers = getAllUsers();
@@ -395,26 +386,7 @@ async function updateDashboard(client, specificGuildId = null) {
     const streaks = getAllStreaks();
     const { getPlatformEmojis } = require('../utils/emojis');
 
-    const targets = [];
-    const seenChannels = new Set();
-
-    if (specificGuildId) {
-      const ch = await getTargetChannel(client, 'dashboard_channel_id', 'DASHBOARD_CHANNEL_ID', specificGuildId);
-      if (ch) targets.push({ guild_id: specificGuildId, channel: ch });
-    } else {
-      for (const guild of client.guilds.cache.values()) {
-        const ch = await getTargetChannel(client, 'dashboard_channel_id', 'DASHBOARD_CHANNEL_ID', guild.id);
-        if (ch && !seenChannels.has(ch.id)) {
-          seenChannels.add(ch.id);
-          targets.push({ guild_id: guild.id, channel: ch });
-        }
-      }
-      if (targets.length === 0) {
-        const globalCh = await getTargetChannel(client, 'dashboard_channel_id', 'DASHBOARD_CHANNEL_ID');
-        if (globalCh) targets.push({ guild_id: 'global', channel: globalCh });
-      }
-    }
-
+    const targets = await getGuildTargetChannels(client, 'dashboard_channel_id', 'DASHBOARD_CHANNEL_ID', specificGuildId);
     if (targets.length === 0) return;
 
     for (const { guild_id, channel } of targets) {
@@ -430,52 +402,17 @@ async function updateDashboard(client, specificGuildId = null) {
         const emojis = await getPlatformEmojis(channel.guild);
         const embed = buildDashboardEmbed(rows, streaks, emojis);
 
-        let existingMessages = [];
-        try {
-          const messages = await channel.messages.fetch({ limit: 25 });
-          existingMessages = [...messages.values()].filter(m =>
-            m.author.id === client.user.id &&
+        await replaceChannelBotMessage(client, channel, {
+          matchMessage: (m) =>
             m.embeds.length > 0 &&
             (m.embeds[0].title?.includes('Leaderboard') ||
              m.embeds[0].title?.includes('Community Standings') ||
-             m.embeds[0].author?.name?.includes('Leaderboard'))
-          );
-        } catch (err) {
-          console.warn(`[Dashboard] Failed to fetch messages in #${channel.name}:`, err.message);
-        }
-
-        const storedId = getConfig('dashboard_message_id', guild_id);
-        let updated = false;
-
-        if (existingMessages.length === 1) {
-          const res = await existingMessages[0].edit({ embeds: [embed] }).catch(() => null);
-          if (res) {
-            updated = true;
-            setConfig('dashboard_message_id', res.id, guild_id);
-          }
-        } else if (storedId && existingMessages.length === 0) {
-          const oldMsg = await channel.messages.fetch(storedId).catch(() => null);
-          if (oldMsg && oldMsg.author.id === client.user.id) {
-            const res = await oldMsg.edit({ embeds: [embed] }).catch(() => null);
-            if (res) {
-              updated = true;
-              setConfig('dashboard_message_id', res.id, guild_id);
-            }
-          }
-        }
-
-        if (!updated) {
-          for (const oldMsg of existingMessages) {
-            await oldMsg.delete().catch(() => {});
-          }
-          const newMsg = await channel.send({ embeds: [embed] }).catch(err => {
-            console.warn(`[Dashboard] Failed to send dashboard to #${channel.name}:`, err.message);
-            return null;
-          });
-          if (newMsg) {
-            setConfig('dashboard_message_id', newMsg.id, guild_id);
-          }
-        }
+             m.embeds[0].author?.name?.includes('Leaderboard')),
+          storedConfigKey: 'dashboard_message_id',
+          guildId: guild_id,
+          payload: { embeds: [embed] },
+          logLabel: 'Dashboard'
+        });
       } catch (guildErr) {
         console.error(`[Dashboard] Error updating #${channel.name}:`, guildErr.message);
       }
@@ -533,44 +470,12 @@ async function calculateCFStreak(handle) {
   return { current, max };
 }
 
-async function calculateACStreak(handle) {
-  try {
-    const encoded = encodeURIComponent(handle);
-    const timestamps = [];
-    let fromSecond = 0;
-    let pagesFetched = 0;
-
-    while (pagesFetched < 50) {
-      const res = await axios.get(
-        `https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions?user=${encoded}&from_second=${fromSecond}`,
-        { timeout: 12000, headers: KENKOOOO_HEADERS }
-      );
-      if (!Array.isArray(res.data) || res.data.length === 0) break;
-      for (const s of res.data) {
-        if (s.epoch_second) timestamps.push(s.epoch_second);
-      }
-      if (res.data.length < 500) break;
-      const maxEpoch = Math.max(...res.data.map(s => s.epoch_second));
-      if (maxEpoch + 1 <= fromSecond) break;
-      fromSecond = maxEpoch + 1;
-      pagesFetched++;
-    }
-
-    const { current, max } = calculateStreakFromTimestamps(timestamps);
-    return { current, max };
-  } catch (err) {
-    console.error(`[StreakCalc] AC streak error for ${handle}:`, err.message);
-    return { current: 0, max: 0 };
-  }
-}
-
 module.exports = {
   startRatingSync,
   syncAllRatings,
   syncSingleUser,
   updateDashboard,
   calculateCFStreak,
-  calculateACStreak,
   postRatingChange,
   STREAK_ROLES,
   CF_ROLES

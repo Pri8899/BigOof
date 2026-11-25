@@ -109,6 +109,12 @@ function computeStats(userList) {
   return { allSolved, allRatingGains };
 }
 
+const WEEKLY_CHANNEL_CHAIN = [
+  { key: 'general_channel_id', env: 'GENERAL_CHANNEL_ID' },
+  { key: 'rating_channel_id', env: 'RATING_CHANNEL_ID' },
+  { key: 'dashboard_channel_id', env: 'DASHBOARD_CHANNEL_ID' }
+];
+
 async function runWeeklyWrapup(client, updateSnapshots = false) {
   const users = getAllUsers();
   const { dateStr: todayStr } = getLocalParts(new Date(), getTimeZone());
@@ -119,14 +125,7 @@ async function runWeeklyWrapup(client, updateSnapshots = false) {
   // Compute and post per guild using EXISTING baseline snapshots BEFORE overwriting them
   for (const guild of client.guilds.cache.values()) {
     try {
-      const channel = await resolveChannelChain(
-        client,
-        [
-          { key: 'rating_channel_id', env: 'RATING_CHANNEL_ID' },
-          { key: 'dashboard_channel_id', env: 'DASHBOARD_CHANNEL_ID' }
-        ],
-        guild.id
-      );
+      const channel = await resolveChannelChain(client, WEEKLY_CHANNEL_CHAIN, guild.id);
 
       if (!channel || sentChannels.has(channel.id)) continue;
 
@@ -153,13 +152,7 @@ async function runWeeklyWrapup(client, updateSnapshots = false) {
   }
 
   if (postedCount === 0) {
-    const globalChannel = await resolveChannelChain(
-      client,
-      [
-        { key: 'rating_channel_id', env: 'RATING_CHANNEL_ID' },
-        { key: 'dashboard_channel_id', env: 'DASHBOARD_CHANNEL_ID' }
-      ]
-    );
+    const globalChannel = await resolveChannelChain(client, WEEKLY_CHANNEL_CHAIN);
 
     if (globalChannel) {
       const { allSolved, allRatingGains } = computeStats(users);

@@ -9,7 +9,7 @@ const {
   getUser,
   db
 } = require('../database/db');
-const { getCFProblems, getCFStatus } = require('./codeforces');
+const { getCFProblems, getCFStatus, extractSolvedIds } = require('./codeforces');
 const {
   withMatchLock,
   processActiveMatch,
@@ -102,14 +102,7 @@ async function handleVSStart(interaction, matchId) {
   // Gather solved problems across all contenders so match serves fresh problems
   const excludeSet = new Set();
   for (const p of participants) {
-    const subs = await getCFStatus(p.cf_handle, 10000);
-    if (subs) {
-      for (const sub of subs) {
-        if (sub.verdict === 'OK' && sub.problem) {
-          excludeSet.add(`${sub.problem.contestId}${sub.problem.index}`);
-        }
-      }
-    }
+    extractSolvedIds(await getCFStatus(p.cf_handle, 10000), excludeSet);
     await new Promise(r => setTimeout(r, 300));
   }
 

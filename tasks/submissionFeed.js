@@ -12,37 +12,14 @@ const {
   db
 } = require('../database/db');
 const { cfGet, getCFStatus, getCFUser } = require('../utils/codeforces');
-const { getACUser } = require('../utils/atcoder');
+const { axiosGetWithRetry, KENKOOOO_HEADERS, getACUser, calculateACStreak } = require('../utils/atcoder');
 const { fetchTophSubmissions, getTophUser, calculateTophStreak } = require('../utils/toph');
 const { buildSubmissionEmbed } = require('../utils/embeds');
 const { resolveChannelChain } = require('../utils/envHelper');
 const { getTimeZone, getLocalParts } = require('../utils/time');
 
-const KENKOOOO_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',
-  'Origin': 'https://kenkoooo.com',
-  'Referer': 'https://kenkoooo.com/atcoder/'
-};
-
 let contestListCache = null;
 let lastContestListFetchTime = 0;
-
-async function axiosGetWithRetry(url, options = {}, retries = 3, backoff = 1500) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await axios.get(url, options);
-    } catch (err) {
-      const status = err.response?.status;
-      const retryable = status === 429 || (status && status >= 500) || err.code === 'ECONNABORTED' || err.message?.includes('timeout');
-      if (retryable && i < retries - 1) {
-        const delay = backoff * Math.pow(2, i);
-        await new Promise(r => setTimeout(r, delay));
-        continue;
-      }
-      throw err;
-    }
-  }
-}
 
 function extractACIndex(problemId) {
   const parts = String(problemId || '').split('_');
@@ -240,6 +217,7 @@ async function broadcastSubmission(client, user, sub, platform) {
       const targetChannel = await resolveChannelChain(
         client,
         [
+          { key: 'general_channel_id', env: 'GENERAL_CHANNEL_ID' },
           { key: 'feed_channel_id', env: 'FEED_CHANNEL_ID' },
           { key: 'dashboard_channel_id', env: 'DASHBOARD_CHANNEL_ID' },
           { key: 'rating_channel_id', env: 'RATING_CHANNEL_ID' }
@@ -320,7 +298,6 @@ async function runSubmissionFeed(client) {
           if (acStats.rating === 0 && (prevAc?.rating ?? 0) > 0) acStats.rating = prevAc.rating;
           upsertRating(user.discord_id, 'ac', acStats);
         }
-        const { calculateACStreak } = require('./ratingSync');
         const streakInfo = await calculateACStreak(user.ac_handle);
         upsertStreak(user.discord_id, 'ac', streakInfo.current, streakInfo.max, isoToday);
         shouldUpdateDashboard = true;

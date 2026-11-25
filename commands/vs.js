@@ -1,13 +1,8 @@
 // commands/vs.js — Create a 1v1 or multiplayer Codeforces Battle Grid or Classic Race
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { getUser, createVSMatch, joinVSMatch, getVSParticipants, db, getRatings } = require('../database/db');
+const { CF_TAGS, DIV_CHOICES, respondRatingAutocomplete } = require('../utils/codeforces');
 const { buildLobbyEmbed } = require('../utils/vsHandlers');
-
-const CF_TAGS = [
-  'implementation', 'math', 'greedy', 'dp', 'data structures',
-  'graphs', 'strings', 'binary search', 'constructive algorithms',
-  'number theory'
-];
 
 module.exports = {
   guildOnly: true,
@@ -55,41 +50,11 @@ module.exports = {
       opt.setName('division')
         .setDescription('Optional Codeforces division filter')
         .setRequired(false)
-        .addChoices(
-          { name: 'Div. 1', value: 'div1' },
-          { name: 'Div. 2', value: 'div2' },
-          { name: 'Div. 3', value: 'div3' },
-          { name: 'Div. 4', value: 'div4' }
-        )
+        .addChoices(...DIV_CHOICES)
     ),
 
   async autocomplete(interaction) {
-    const focusedValue = interaction.options.getFocused();
-    let cfRating = 1200;
-    try {
-      cfRating = getRatings(interaction.user.id).find(r => r.platform === 'cf')?.rating ?? 1200;
-    } catch (_) {}
-
-    const allRatings = [];
-    for (let r = 800; r <= 3500; r += 100) allRatings.push(r);
-
-    let choices = [];
-    if (focusedValue) {
-      choices = allRatings
-        .map(r => r.toString())
-        .filter(c => c.startsWith(focusedValue))
-        .slice(0, 25)
-        .map(c => ({ name: c, value: parseInt(c, 10) }));
-    } else {
-      const targetRating = Math.max(800, Math.min(3500, Math.round(cfRating / 100) * 100));
-      const targetIndex = allRatings.indexOf(targetRating);
-      let startIndex = Math.max(0, targetIndex - 12);
-      const endIndex = Math.min(allRatings.length - 1, startIndex + 24);
-      startIndex = Math.max(0, endIndex - 24);
-      choices = allRatings.slice(startIndex, endIndex + 1).map(r => ({ name: r.toString(), value: r }));
-    }
-
-    await interaction.respond(choices).catch(() => {});
+    return respondRatingAutocomplete(interaction, getRatings);
   },
 
   async execute(interaction) {
