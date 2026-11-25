@@ -9,12 +9,12 @@ const FEATURES = [
   { name: '🏆 Contest Radar (Upcoming contests & reminders)', value: 'contest_channel_id', label: 'Contest Radar' },
   { name: '📊 Leaderboard Dashboard (Auto-updating rankings)', value: 'dashboard_channel_id', label: 'Leaderboard Dashboard' },
   { name: '📈 Rating Updates (Rating change & rank alerts)', value: 'rating_channel_id', label: 'Rating Updates' },
-  { name: '💡 Daily Challenges (Daily problem suggestions & first blood)', value: 'suggest_channel_id', label: 'Daily Challenges' },
+  { name: '💡 Daily Challenges (Daily problem suggestions)', value: 'suggest_channel_id', label: 'Daily Challenges' },
   { name: '⚡ Live Submissions Feed (Real-time accepted solves)', value: 'feed_channel_id', label: 'Live Submissions Feed' },
   { name: '🌅 Contest Wrap-up (Next-day 9AM contest recap & upsolve)', value: 'wrapup_channel_id', label: 'Contest Wrap-up' },
   { name: '🐙 GitHub Activity Feed (Commits, PRs, and repositories)', value: 'github_channel_id', label: 'GitHub Activity Feed' },
   { name: '📢 Announcements (Broadcast channel for /announce)', value: 'announcement_channel_id', label: 'Announcements' },
-  { name: '💬 General Channel (General fallback alerts & wrap-ups)', value: 'general_channel_id', label: 'General Channel' },
+  { name: '💬 General Channel (General chat, first blood & sweep alerts)', value: 'general_channel_id', label: 'General Channel' },
   { name: '💾 Database Backups (Bot Host only)', value: 'backup_channel_id', label: 'Database Backups' }
 ];
 

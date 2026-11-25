@@ -7,12 +7,12 @@ const CHANNEL_DEFS = [
   { key: 'contest_channel_id', label: '🏆 Contest Radar', desc: 'Upcoming contests & reminders' },
   { key: 'dashboard_channel_id', label: '📊 Leaderboard Dashboard', desc: 'Live auto-updating member rankings' },
   { key: 'rating_channel_id', label: '📈 Rating Updates', desc: 'Rating change & tier promotion alerts' },
-  { key: 'suggest_channel_id', label: '💡 Daily Challenges', desc: 'Daily algorithmic challenges & first blood' },
+  { key: 'suggest_channel_id', label: '💡 Daily Challenges', desc: 'Daily algorithmic challenges' },
   { key: 'feed_channel_id', label: '⚡ Live Submissions Feed', desc: 'Accepted solves posted as they happen' },
   { key: 'wrapup_channel_id', label: '🌅 Contest Wrap-up', desc: 'Next-day 9AM recap & upsolve radar' },
   { key: 'github_channel_id', label: '🐙 GitHub Activity Feed', desc: 'Commits, releases, PRs, and new repos' },
   { key: 'announcement_channel_id', label: '📢 Announcements', desc: 'Channel used by /announce' },
-  { key: 'general_channel_id', label: '💬 General Channel', desc: 'General server fallback channel' }
+  { key: 'general_channel_id', label: '💬 General Channel', desc: 'General chat, first blood & sweep alerts' }
 ];
 
 module.exports = {

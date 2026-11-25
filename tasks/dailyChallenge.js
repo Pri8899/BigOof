@@ -226,8 +226,9 @@ async function broadcastToUserGuilds(client, discordId, payloadBuilder) {
       const targetChannel = await resolveChannelChain(
         client,
         [
-          { key: 'suggest_channel_id', env: 'SUGGEST_CHANNEL_ID' },
-          { key: 'feed_channel_id', env: 'FEED_CHANNEL_ID' }
+          { key: 'general_channel_id', env: 'GENERAL_CHANNEL_ID' },
+          { key: 'feed_channel_id', env: 'FEED_CHANNEL_ID' },
+          { key: 'suggest_channel_id', env: 'SUGGEST_CHANNEL_ID' }
         ],
         guild.id
       );
