@@ -153,15 +153,17 @@ function buildProfileEmbed(target, user, ratings, emojis = { cf: '🔵', ac: '�
 
   if (user?.cf_handle) {
     const st = streakMap.cf?.current_streak || 0;
+    const cfUrl = `https://codeforces.com/profile/${encodeURIComponent(user.cf_handle)}`;
     embed.addFields({
-      name: `${emojis.cf || '🔵'} Codeforces: [${user.cf_handle}](https://codeforces.com/profile/${encodeURIComponent(user.cf_handle)})`,
+      name: `${emojis.cf || '🔵'} Codeforces`,
       value: cf
         ? [
+            `> 🔗 **Handle:** [\`${user.cf_handle}\`](${cfUrl})`,
             `> 🏆 **Rating:** **${cf.rating}** · *(Max: ${cf.max_rating})*`,
             `> 🎖️ **Rank Tier:** ${cf.rank_title}`,
             `> 🧩 **Solved:** **\`${cf.solved}\`** problems · 🔥 **Streak:** ${getStreakBadge(st)}`
           ].join('\n')
-        : `> Handle: \`${user.cf_handle}\`\n> _Stats syncing..._`,
+        : `> 🔗 **Handle:** [\`${user.cf_handle}\`](${cfUrl})\n> _Stats syncing..._`,
       inline: false
     });
   } else {
@@ -174,38 +176,46 @@ function buildProfileEmbed(target, user, ratings, emojis = { cf: '🔵', ac: '�
 
   if (user?.ac_handle) {
     const st = streakMap.ac?.current_streak || 0;
+    const acUrl = `https://atcoder.jp/users/${encodeURIComponent(user.ac_handle)}`;
     embed.addFields({
-      name: `${emojis.ac || '🔴'} AtCoder: [${user.ac_handle}](https://atcoder.jp/users/${encodeURIComponent(user.ac_handle)})`,
+      name: `${emojis.ac || '🔴'} AtCoder`,
       value: ac
         ? [
+            `> 🔗 **Handle:** [\`${user.ac_handle}\`](${acUrl})`,
             `> 🎯 **Rating:** **${ac.rating}** · *(Max: ${ac.max_rating})*`,
             `> 🎖️ **Rank:** ${ac.rank_title}`,
             `> 🧩 **Solved:** **\`${ac.solved}\`** problems · 🔥 **Streak:** ${getStreakBadge(st)}`
           ].join('\n')
-        : `> Handle: \`${user.ac_handle}\`\n> _Stats syncing..._`,
+        : `> 🔗 **Handle:** [\`${user.ac_handle}\`](${acUrl})\n> _Stats syncing..._`,
       inline: true
     });
   }
 
   if (user?.toph_handle) {
     const st = streakMap.toph?.current_streak || 0;
+    const tophUrl = `https://toph.co/u/${encodeURIComponent(user.toph_handle)}`;
     embed.addFields({
-      name: `${emojis.toph || '🟣'} Toph: [${user.toph_handle}](https://toph.co/u/${encodeURIComponent(user.toph_handle)})`,
+      name: `${emojis.toph || '🟣'} Toph`,
       value: toph
         ? [
+            `> 🔗 **Handle:** [\`${user.toph_handle}\`](${tophUrl})`,
             `> ⚡ **Rating:** **${toph.rating}**`,
             `> 🎖️ **Rank:** ${toph.rank_title}`,
             `> 🧩 **Solved:** **\`${toph.solved}\`** problems · 🔥 **Streak:** ${getStreakBadge(st)}`
           ].join('\n')
-        : `> Handle: \`${user.toph_handle}\`\n> _Stats syncing..._`,
+        : `> 🔗 **Handle:** [\`${user.toph_handle}\`](${tophUrl})\n> _Stats syncing..._`,
       inline: true
     });
   }
 
   if (user?.github_handle) {
+    const ghUrl = `https://github.com/${encodeURIComponent(user.github_handle)}`;
     embed.addFields({
-      name: `🐙 GitHub: [${user.github_handle}](https://github.com/${encodeURIComponent(user.github_handle)})`,
-      value: '> Public commits, PRs, releases, and repositories tracked in real time.',
+      name: '🐙 GitHub',
+      value: [
+        `> 🔗 **Account:** [\`${user.github_handle}\`](${ghUrl})`,
+        '> Public commits, PRs, releases, and repositories tracked in real time.'
+      ].join('\n'),
       inline: false
     });
   }
