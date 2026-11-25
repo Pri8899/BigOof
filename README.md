@@ -166,13 +166,30 @@ flowchart TD
 - **Node.js** `>= 18.0.0` (LTS v20/v22 recommended)
 - **Git**
 
-### Step 1: Discord Developer Portal
-1. Create a new application at [discord.com/developers/applications](https://discord.com/developers/applications).
-2. Under **General Information**, copy the **Application ID** (`CLIENT_ID`).
-3. Under **Bot**, generate/copy your **Token** (`DISCORD_TOKEN`) and enable **Server Members Intent** under **Privileged Gateway Intents**.
-4. Under **OAuth2 → URL Generator**, select scopes `bot` + `applications.commands` and invite the bot to your server.
+### Step 1: Discord Developer Portal & Bot Setup
 
-### Step 2: Install & Configure
+1. **Create the App & Copy `CLIENT_ID`:**
+   - Go to [discord.com/developers/applications](https://discord.com/developers/applications) and click **New Application**.
+   - Under **General Information**, copy the **Application ID** (this is your `CLIENT_ID`).
+   - *(Optional)* Upload `assets/bot-avatar.png` as the App Icon, add a **Description** (up to 400 chars — supports `[Add Bot](invite_url)` masked links), and add up to 5 **Tags**.
+2. **Configure the Bot & Copy `DISCORD_TOKEN` (Required):**
+   - Open **Bot** in the left sidebar → click **Reset Token** and copy your token (this is your `DISCORD_TOKEN` — keep it secret and never share it in screenshots or commits).
+   - Scroll down to **Privileged Gateway Intents** and turn **ON** **Server Members Intent**, then click **Save Changes** *(required — without this, the bot crashes on login)*.
+3. **Configure Native Profile "Add App" Button *(Optional)*:**
+   - Open **Installation** → under *Installation Contexts*, keep **Guild Install** enabled and uncheck **User Install** (BigOof is a server bot).
+   - Keep **Install Link** set to **Discord Provided Link**.
+   - Under **Default Install Settings → Guild Install**, add Scopes `bot` + `applications.commands`, select **Administrator** (or the permissions below) under **Permissions**, and click **Save Changes**.
+4. **Invite the Bot to Your Server:**
+   - Open **OAuth2 → URL Generator**.
+   - Under **Scopes**, check both `bot` and `applications.commands`.
+   - Keep **Integration Type** as `Guild Install`.
+   - Under **Bot Permissions**, check **Administrator** *(easiest for club servers)*, or select minimal permissions: `View Channels`, `Manage Roles`, `Send Messages`, `Embed Links`, `Attach Files`, `Read Message History`, `Manage Messages`, `Mention Everyone`, and *(optional)* `Create Expressions` / `Manage Expressions`.
+   - Open the generated URL at the bottom, pick your server, and click **Authorize**.
+5. **Copy Your `OWNER_ID`:**
+   - In Discord, open **User Settings → Advanced** and turn **ON** **Developer Mode**.
+   - Close Settings (`Esc`), click your avatar/username at the **bottom-left** of Discord (or right-click yourself in a server's member list) → **Copy User ID**.
+
+### Step 2: Install & Configure Environment Variables
 
 ```bash
 git clone https://github.com/Pri8899/BigOof.git
@@ -181,26 +198,58 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env`:
-- Set `DISCORD_TOKEN`, `CLIENT_ID`, and `OWNER_ID`.
-- Optionally set `GITHUB_TOKEN` (increases GitHub API limit from 60 to 5,000 req/hr), `TIMEZONE` (e.g., `Asia/Dhaka`, `Asia/Kolkata`, `UTC`), and `GUILD_ID` (for instant guild command registration).
+Edit `.env` (or your host's environment variables):
 
-### Step 3: Deploy Commands & Start
+- **Required before boot** *(the bot cannot start or locate persistent storage without these)*:
+  - `DISCORD_TOKEN` — bot token from Step 1
+  - `CLIENT_ID` — Application ID from Step 1
+  - `OWNER_ID` — your Discord User ID (enables `/backupdb`, `/restoredb`, `/set-bot`, and backup channel config)
+  - `DATABASE_PATH` — custom SQLite path if using a persistent volume (e.g. `/data/bigoof.db`)
+  - `TIMEZONE` — IANA timezone such as `UTC`, `Asia/Dhaka`, or `Asia/Kolkata` *(controls 9:00 AM / 9:00 PM cron schedules, midnight streak rollovers, and `/custom-contest` inputs; platform contest countdowns always use Discord Unix timestamps so every user sees their own local time)*
+- **Optional** *(leave blank if not needed — all `*_CHANNEL_ID` settings can be configured inside Discord via `/set-channel`)*:
+  - `GITHUB_TOKEN` — increases GitHub API limit from 60 to 5,000 req/hr
+  - `GUILD_ID` — register slash commands to a single server instantly during testing (leave blank for global registration)
+
+### Step 3: Deploy Commands, Start & Configure in Discord
 
 ```bash
 npm run deploy
 npm start
 ```
 
-Inside Discord:
-1. Drag the **BigOof** bot role above rank/streak roles in **Server Settings → Roles**.
-2. Run `/setup-roles`.
-3. Run `/set-channel feature:All Features channel:#cp-bot` (or configure dedicated channels individually).
-4. Link your account with `/link platform:Codeforces handle:your_handle`.
+> `npm start` runs `node deploy-commands.js && node index.js`, so slash commands stay synced on every start.
+
+Inside your Discord server:
+1. Open **Server Settings → Roles** and make sure the **BigOof** bot role sits **above** `CP`, Codeforces rank, and streak roles so role assignment succeeds.
+2. Run `/set-channel feature:All Features channel:#cp-bot` (or bind individual channels per feature).
+3. Run `/setup-roles` to create and sync `CP`, rank, and streak roles.
+4. Link your profiles with `/link platform:Codeforces handle:your_handle` (plus `AtCoder`, `Toph`, and `GitHub`).
+   - *Migrating an existing database?* Run `/restoredb source:Upload a .db file manually` and attach your `.db` file directly in Discord.
 
 ---
 
 ## ☁️ 24/7 Production Deployment
+
+### Railway (Cloud Hosting with Persistent Volume)
+
+1. Create a new project on [Railway](https://railway.com/) from your GitHub repo (Railway automatically builds using `Dockerfile`).
+2. Right-click the service canvas (or open service settings) and attach a **Volume**:
+   - **Mount Path:** `/data`
+   - **Size:** `500 MB` is plenty for SQLite + WAL files
+   - **Replicas:** Keep at `1 Replica` (enforced for attached volumes and required by SQLite)
+3. Open **Variables** and configure your startup variables:
+   - **Important:** Mounting `/data` alone does **not** move the database — you must set `DATABASE_PATH=/data/bigoof.db` or SQLite will write to ephemeral container storage and reset on redeploy.
+   - Use **`{} Raw Editor`** (recommended — Railway's *Suggested Variables* scanned from `.env.example` are unsaved drafts until confirmed with **`✓ Add`**, and placeholder `your_...` text will crash startup):
+     ```env
+     DISCORD_TOKEN=your_bot_token
+     CLIENT_ID=your_application_id
+     OWNER_ID=your_discord_user_id
+     DATABASE_PATH=/data/bigoof.db
+     TIMEZONE=UTC
+     ```
+     *(Replace `UTC` with your IANA timezone such as `Asia/Dhaka` if desired. All `*_CHANNEL_ID` variables can be omitted and configured later in Discord with `/set-channel`.)*
+4. Click **Update Variables**, then click **Deploy** in the top banner.
+5. Open **Deployments → View Logs** and verify you see `Total: 27 command(s)` and `✅ Bot online as ...`.
 
 ### Docker & Docker Compose
 
@@ -244,9 +293,12 @@ BigOof persists state in SQLite (`bigoof.db` by default, or `DATABASE_PATH`) usi
 
 ## ❓ Frequently Asked Questions & Troubleshooting
 
-- **Slash commands don't appear immediately:** Set `GUILD_ID` in `.env` during testing and run `npm run deploy`; global command propagation on Discord can take up to an hour.
-- **Role assignment fails (`Missing Permissions`):** Ensure the bot has **Manage Roles** and its role sits higher in **Server Settings → Roles** than `CP`, rank, and streak roles.
-- **GitHub feed stops updating (`403`):** Add a personal access token to `GITHUB_TOKEN` in `.env` to raise limits from 60 to 5,000 requests/hour.
+- **Container crashes on boot with `DISCORD_TOKEN is missing or invalid`:** Ensure `DISCORD_TOKEN` and `CLIENT_ID` are saved under **Service Variables** (not left as `your_...` placeholders or unsaved *Suggested Variables*) and keep the token on a single line with no quotes.
+- **Login fails with `DisallowedIntents`:** Enable **Server Members Intent** under **Discord Developer Portal → Bot → Privileged Gateway Intents** and click **Save Changes**.
+- **Data resets after a Railway redeploy:** Confirm your Volume is mounted at `/data` AND `DATABASE_PATH=/data/bigoof.db` is saved in Railway **Variables**.
+- **Slash commands don't appear immediately:** Leave `GUILD_ID` blank for global commands (first propagation on Discord can take up to ~1 hour), or set `GUILD_ID` to your server ID for instant registration.
+- **Role assignment fails (`Missing Permissions`):** Ensure the bot has **Manage Roles** and the **BigOof** role sits above `CP`, rank, and streak roles in **Server Settings → Roles**.
+- **GitHub feed stops updating (`403`):** Add a personal access token to `GITHUB_TOKEN` to raise limits from 60 to 5,000 requests/hour.
 
 ---
 
