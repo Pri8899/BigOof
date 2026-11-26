@@ -873,14 +873,6 @@ function getStudyForm(id) {
   return db.prepare('SELECT * FROM study_forms WHERE id = ?').get(id);
 }
 
-function getStudyFormForDate(guildId, dateStr) {
-  return db.prepare(`
-    SELECT * FROM study_forms
-    WHERE guild_id = ? AND date_str = ?
-    ORDER BY created_at DESC LIMIT 1
-  `).get(String(guildId), dateStr);
-}
-
 function getActiveStudyForms(guildId = null) {
   if (guildId) {
     return db.prepare('SELECT * FROM study_forms WHERE guild_id = ? AND completed = 0 ORDER BY created_at ASC').all(String(guildId));
@@ -1016,7 +1008,6 @@ module.exports = {
   getHeadToHeadVersus,
   createStudyForm,
   getStudyForm,
-  getStudyFormForDate,
   getActiveStudyForms,
   updateStudyFormMessage,
   completeAndClearStudyForm,

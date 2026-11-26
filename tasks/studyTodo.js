@@ -1,5 +1,4 @@
-// tasks/studyTodo.js — Daily 9 AM Study To-Do board with unlimited tasks, per-user side ticks, & auto-removal on 100% completion
-const cron = require('node-cron');
+// tasks/studyTodo.js — Continuous Study To-Do board with unlimited tasks, per-user ticks, & instant reset at 100%
 const crypto = require('crypto');
 const {
   EmbedBuilder,
@@ -15,7 +14,6 @@ const {
 const {
   createStudyForm,
   getStudyForm,
-  getStudyFormForDate,
   getActiveStudyForms,
   updateStudyFormMessage,
   completeAndClearStudyForm,
@@ -83,7 +81,7 @@ function formatStudyDateLabel(dateStr) {
   const [mm, dd, yyyy] = parts.map(Number);
   const utc = new Date(Date.UTC(yyyy, mm - 1, dd, 12, 0, 0));
   return utc.toLocaleDateString('en-US', {
-    weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC'
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
   });
 }
 
@@ -116,22 +114,19 @@ function formatItemBlock(item, idx, tickMap, trackedMembers) {
 function buildStudyFormEmbed(form, items, ticks, trackedMembers) {
   const tickMap = buildTickMap(ticks);
   const dateLabel = formatStudyDateLabel(form.date_str);
-  const TZ = getTimeZone();
-  const todayStr = getLocalParts(new Date(), TZ).dateStr;
-  const isToday = form.date_str === todayStr;
 
   const embed = new EmbedBuilder()
-    .setColor(isToday ? 0x00E676 : 0xFFAB00)
+    .setColor(0x00E676)
     .setAuthor({
-      name: isToday ? 'BigOof · Daily Study To-Do Form' : 'BigOof · Pending Study To-Do (Carryover)',
+      name: 'BigOof · Active Study To-Do Board',
       iconURL: 'https://cdn-icons-png.flaticon.com/512/2232/2232688.png'
     })
-    .setTitle(`✅ Study Checklist — ${dateLabel}`.slice(0, 256))
+    .setTitle(`✅ Study Checklist · Started ${dateLabel}`.slice(0, 256))
     .setDescription([
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       '> ➕ Add **Subject + How Much to Study** *(unlimited tasks)*',
       '> ✅ Tick off what **you** finish *(locked once completed for you)*',
-      '> ✏️ Anyone can edit items while pending · Auto-removes at **100%**!',
+      '> ✏️ Anyone can edit items · Clears at **100%** & posts a **new form instantly**!',
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     ].join('\n'))
     .setTimestamp();
@@ -190,7 +185,7 @@ function buildStudyFormEmbed(form, items, ticks, trackedMembers) {
   embed.setFooter({
     text: overflowed
       ? `Form ID: ${form.id} · Large list truncated — click 📋 View All (${items.length}) to see all`
-      : `Form ID: ${form.id} · New form daily at 9:00 AM (${TZ}) · Unfinished stays until 100%`
+      : `Form ID: ${form.id} · Stays active until everyone hits 100%, then instantly resets`
   });
 
   return { embed, overflowed };
@@ -241,16 +236,50 @@ async function fetchFormMessage(client, form) {
 }
 
 /**
- * Refreshes an active study form message, OR deletes & completes it immediately if 100% of users ticked every item.
- * Returns { completed: boolean, formRemoved: boolean }.
+ * Ensures the guild has an active Study To-Do form when `study_channel_id` is configured.
+ * If an active form already exists, returns null without posting a duplicate.
+ */
+async function ensureActiveStudyFormForGuild(client, guildId) {
+  return withKeyLock(guildCreateLocks, guildId, async () => {
+    const existingActive = getActiveStudyForms(guildId);
+    if (existingActive.length > 0) return null;
+
+    const channel = await getStudyChannelForGuild(client, guildId);
+    if (!channel) return null;
+
+    const TZ = getTimeZone();
+    const dateStr = getLocalParts(new Date(), TZ).dateStr;
+    const formId = crypto.randomBytes(4).toString('hex');
+    const trackedMembers = await getChannelStudyMembers(channel.guild, channel);
+    const stubForm = { id: formId, guild_id: guildId, channel_id: channel.id, date_str: dateStr };
+    const { embed, overflowed } = buildStudyFormEmbed(stubForm, [], [], trackedMembers);
+    const components = buildStudyFormComponents(formId, [], overflowed);
+
+    const sent = await channel.send({ embeds: [embed], components }).catch(err => {
+      console.warn(`[StudyTodo] Failed posting form in #${channel.name}:`, err.message);
+      return null;
+    });
+    if (!sent) return null;
+
+    createStudyForm(formId, guildId, channel.id, sent.id, dateStr);
+    console.log(`[StudyTodo] Posted fresh Study To-Do form (${formId}) in ${channel.guild.name} -> #${channel.name}`);
+    return formId;
+  });
+}
+
+/**
+ * Refreshes an active study form message, OR deletes it immediately if 100% of users ticked every item
+ * and spawns a brand-new Study To-Do form right away.
+ * Returns { completed: boolean, formRemoved: boolean, newFormId: string|null }.
  */
 async function refreshOrCompleteStudyForm(client, formId) {
-  return withKeyLock(formLocks, formId, async () => {
+  let completedGuildId = null;
+  let result = await withKeyLock(formLocks, formId, async () => {
     const form = getStudyForm(formId);
-    if (!form || form.completed === 1) return { completed: true, formRemoved: false };
+    if (!form || form.completed === 1) return { completed: true, formRemoved: false, newFormId: null };
 
     const { channel, msg } = await fetchFormMessage(client, form);
-    if (!channel) return { completed: false, formRemoved: false };
+    if (!channel) return { completed: false, formRemoved: false, newFormId: null };
 
     const items = getStudyItems(formId);
     const ticks = getStudyTicksForForm(formId);
@@ -258,13 +287,14 @@ async function refreshOrCompleteStudyForm(client, formId) {
 
     if (isStudyFormFullyCompleted(items, ticks, trackedMembers)) {
       if (!completeAndClearStudyForm(formId)) {
-        return { completed: true, formRemoved: false };
+        return { completed: true, formRemoved: false, newFormId: null };
       }
       if (msg) {
         await msg.delete().catch(() => {});
       }
+      completedGuildId = form.guild_id;
       console.log(`[StudyTodo] Form ${formId} reached 100% completion across ${trackedMembers.length} member(s) and was removed.`);
-      return { completed: true, formRemoved: true };
+      return { completed: true, formRemoved: true, newFormId: null };
     }
 
     const { embed, overflowed } = buildStudyFormEmbed(form, items, ticks, trackedMembers);
@@ -282,60 +312,24 @@ async function refreshOrCompleteStudyForm(client, formId) {
       if (repost) updateStudyFormMessage(formId, repost.id);
     }
 
-    return { completed: false, formRemoved: false };
+    return { completed: false, formRemoved: false, newFormId: null };
   });
-}
 
-/**
- * Posts today's 9:00 AM Study To-Do Form if not yet created for `targetDateStr`, leaving any non-empty
- * unfinished older forms untouched in the channel.
- */
-async function ensureTodayStudyFormForGuild(client, guildId, targetDateStr = null) {
-  const TZ = getTimeZone();
-  const dateStr = targetDateStr || getLocalParts(new Date(), TZ).dateStr;
-
-  return withKeyLock(guildCreateLocks, `${guildId}_${dateStr}`, async () => {
-    if (getStudyFormForDate(guildId, dateStr)) return null;
-
-    const channel = await getStudyChannelForGuild(client, guildId);
-    if (!channel) return null;
-
-    // Clean up older empty forms (0 items added) so blank forms don't stack up; keep all non-empty unfinished forms!
-    const existingActive = getActiveStudyForms(guildId);
-    for (const oldForm of existingActive) {
-      const oldItems = getStudyItems(oldForm.id);
-      if (oldItems.length === 0) {
-        const { msg } = await fetchFormMessage(client, oldForm);
-        if (msg) await msg.delete().catch(() => {});
-        completeAndClearStudyForm(oldForm.id);
-      }
-    }
-
-    const formId = crypto.randomBytes(4).toString('hex');
-    const trackedMembers = await getChannelStudyMembers(channel.guild, channel);
-    const stubForm = { id: formId, guild_id: guildId, channel_id: channel.id, date_str: dateStr };
-    const { embed, overflowed } = buildStudyFormEmbed(stubForm, [], [], trackedMembers);
-    const components = buildStudyFormComponents(formId, [], overflowed);
-
-    const sent = await channel.send({ embeds: [embed], components }).catch(err => {
-      console.warn(`[StudyTodo] Failed posting form in #${channel.name}:`, err.message);
+  if (result.formRemoved && completedGuildId) {
+    const newFormId = await ensureActiveStudyFormForGuild(client, completedGuildId).catch(err => {
+      console.error(`[StudyTodo] Failed spawning replacement form in guild ${completedGuildId}:`, err.message);
       return null;
     });
-    if (!sent) return null;
+    result = { ...result, newFormId };
+  }
 
-    createStudyForm(formId, guildId, channel.id, sent.id, dateStr);
-    console.log(`[StudyTodo] Posted new daily Study To-Do form (${formId} · ${dateStr}) in ${channel.guild.name} -> #${channel.name}`);
-    return formId;
-  });
+  return result;
 }
 
-async function postDailyStudyForms(client) {
-  const TZ = getTimeZone();
-  const dateStr = getLocalParts(new Date(), TZ).dateStr;
-
+async function ensureActiveStudyFormsAllGuilds(client) {
   for (const guild of client.guilds.cache.values()) {
-    await ensureTodayStudyFormForGuild(client, guild.id, dateStr).catch(err =>
-      console.error(`[StudyTodo] Error creating form for ${guild.name}:`, err.message)
+    await ensureActiveStudyFormForGuild(client, guild.id).catch(err =>
+      console.error(`[StudyTodo] Error ensuring form for ${guild.name}:`, err.message)
     );
   }
 }
@@ -485,7 +479,7 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   const form = getStudyForm(formId);
   if (!form || form.completed === 1) {
     const expired = {
-      embeds: [errorEmbed('Form Completed / Expired', 'All members have completed this study form, so it has already been removed.')],
+      embeds: [errorEmbed('Form Already Replaced', 'Everyone finished that study form — use the newly posted form in the channel!')],
       components: [],
       flags: 64
     };
@@ -495,7 +489,6 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
     return;
   }
 
-  // ── Buttons opening Modals (cannot defer before showModal) ──
   if (interaction.isButton() && action === 'study-add') {
     return openStudyItemModal(interaction, {
       customId: `study-add-modal_${formId}`,
@@ -503,7 +496,6 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
     });
   }
 
-  // ── Button / Pagination for Tick Done ──
   if (interaction.isButton() && (action === 'study-tick' || action === 'study-tick-page')) {
     const page = action === 'study-tick-page' ? (parseInt(extra, 10) || 0) : 0;
     const items = getStudyItems(formId);
@@ -546,7 +538,6 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
       : interaction.reply({ ...payload, flags: 64 });
   }
 
-  // ── Button / Pagination for Edit ──
   if (interaction.isButton() && (action === 'study-edit' || action === 'study-edit-page')) {
     const page = action === 'study-edit-page' ? (parseInt(extra, 10) || 0) : 0;
     const items = getStudyItems(formId);
@@ -570,7 +561,6 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
       : interaction.reply({ ...payload, flags: 64 });
   }
 
-  // ── Button / Pagination for Remove ──
   if (interaction.isButton() && (action === 'study-remove' || action === 'study-remove-page')) {
     const page = action === 'study-remove-page' ? (parseInt(extra, 10) || 0) : 0;
     const items = getStudyItems(formId);
@@ -594,7 +584,6 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
       : interaction.reply({ ...payload, flags: 64 });
   }
 
-  // ── Button / Pagination for View All ──
   if (interaction.isButton() && (action === 'study-view' || action === 'study-view-page')) {
     const page = action === 'study-view-page' ? (parseInt(extra, 10) || 0) : 0;
     const items = getStudyItems(formId);
@@ -606,7 +595,6 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
       : interaction.reply({ ...payload, flags: 64 });
   }
 
-  // ── Select Menu: Edit -> open Modal (cannot defer before showModal) ──
   if (interaction.isStringSelectMenu() && action === 'study-edit-select') {
     const itemId = interaction.values[0];
     const item = getStudyItem(itemId);
@@ -621,7 +609,6 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
     });
   }
 
-  // ── Select Menu: Tick Done ──
   if (interaction.isStringSelectMenu() && action === 'study-tick-select') {
     await interaction.deferUpdate();
     const selectedIds = interaction.values.map(Number).filter(Number.isFinite);
@@ -635,7 +622,7 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
 
     if (status.formRemoved) {
       return interaction.editReply({
-        content: '🎉 **100% Complete!** You finished the last pending study item — every member has now ticked everything, so this form has been removed!\n*Next daily form arrives at 9:00 AM.*',
+        content: '🎉 **100% Complete!** Every member finished this study form — removed it and posted a **brand-new form** immediately!',
         components: []
       });
     }
@@ -665,7 +652,6 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
     return interaction.editReply(nextPayload);
   }
 
-  // ── Select Menu: Remove Item(s) ──
   if (interaction.isStringSelectMenu() && action === 'study-remove-select') {
     await interaction.deferUpdate();
     const selectedIds = interaction.values.map(Number).filter(Number.isFinite);
@@ -678,7 +664,7 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
     const status = await refreshOrCompleteStudyForm(client, formId);
     if (status.formRemoved) {
       return interaction.editReply({
-        content: `🗑️ Removed **${removed}** item(s). Remaining items are now 100% completed by everyone — form removed!`,
+        content: `🗑️ Removed **${removed}** item(s). Remaining items hit 100% — form cleared & a **brand-new form** was posted!`,
         components: []
       });
     }
@@ -689,7 +675,6 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
     });
   }
 
-  // ── Modal Submit: Add Study Item ──
   if (interaction.isModalSubmit() && action === 'study-add-modal') {
     await interaction.deferReply({ flags: 64 });
     const subject = interaction.fields.getTextInputValue('studySubject').trim();
@@ -703,7 +688,6 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
     });
   }
 
-  // ── Modal Submit: Edit Study Item ──
   if (interaction.isModalSubmit() && action === 'study-edit-modal') {
     await interaction.deferReply({ flags: 64 });
     const itemId = Number(extra);
@@ -724,40 +708,25 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   }
 }
 
-// ─── Scheduler ───────────────────────────────────────────────
+// ─── Startup Bootstrap ────────────────────────────────────────
 
 function startStudyTodo(client) {
-  const TZ = getTimeZone();
-
-  cron.schedule('0 9 * * *', async () => {
-    try {
-      console.log(`[StudyTodo] 9:00 AM daily trigger (${TZ}). Posting new Study To-Do forms...`);
-      await postDailyStudyForms(client);
-    } catch (err) {
-      console.error('[StudyTodo] 9 AM cron error:', err.message);
-    }
-  }, { timezone: TZ, noOverlap: true });
-
   setTimeout(async () => {
     try {
       await recheckActiveStudyForms(client);
-      const { hour } = getLocalParts(new Date(), TZ);
-      if (hour >= 9) {
-        console.log(`[StudyTodo] Startup catch-up: past 9:00 AM (${TZ}). Ensuring today's forms exist...`);
-        await postDailyStudyForms(client);
-      }
+      await ensureActiveStudyFormsAllGuilds(client);
     } catch (err) {
-      console.error('[StudyTodo] Startup catch-up error:', err.message);
+      console.error('[StudyTodo] Startup sync error:', err.message);
     }
   }, 8000);
 
-  console.log(`[StudyTodo] Daily 9:00 AM Study To-Do scheduler started (${TZ}).`);
+  console.log('[StudyTodo] Instant-reset Study To-Do manager initialized.');
 }
 
 module.exports = {
   startStudyTodo,
-  postDailyStudyForms,
-  ensureTodayStudyFormForGuild,
+  ensureActiveStudyFormForGuild,
+  ensureActiveStudyFormsAllGuilds,
   recheckActiveStudyForms,
   refreshOrCompleteStudyForm,
   handleStudyInteraction,

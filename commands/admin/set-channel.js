@@ -69,8 +69,8 @@ module.exports = {
       setConfig('dashboard_message_id', '', guildId);
       setConfig('contest_summary_msg_id', '', guildId);
 
-      const { ensureTodayStudyFormForGuild } = require('../../tasks/studyTodo');
-      ensureTodayStudyFormForGuild(interaction.client, guildId).catch(() => {});
+      const { ensureActiveStudyFormForGuild } = require('../../tasks/studyTodo');
+      ensureActiveStudyFormForGuild(interaction.client, guildId).catch(() => {});
 
       return interaction.reply({
         embeds: [successEmbed(
@@ -88,8 +88,8 @@ module.exports = {
     if (featureKey === 'dashboard_channel_id') setConfig('dashboard_message_id', '', guildId);
     if (featureKey === 'contest_channel_id') setConfig('contest_summary_msg_id', '', guildId);
     if (featureKey === 'study_channel_id') {
-      const { ensureTodayStudyFormForGuild } = require('../../tasks/studyTodo');
-      ensureTodayStudyFormForGuild(interaction.client, guildId).catch(() => {});
+      const { ensureActiveStudyFormForGuild } = require('../../tasks/studyTodo');
+      ensureActiveStudyFormForGuild(interaction.client, guildId).catch(() => {});
     }
 
     return interaction.reply({
