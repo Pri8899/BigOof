@@ -59,7 +59,7 @@ flowchart TD
             DailyTask["Daily Challenges & First Blood (21:00 / 5m)"]
             RatingTask["Rating Sync & Dashboard (5m / 1h Streaks / 09:00)"]
             WrapupTask["Morning Contest & Weekly Wrap-Ups"]
-            StudyTask["Study To-Do Board (Instant 100% Reset)"]
+            StudyTask["Study To-Do Board (9 AM Rollover + 100% Reset)"]
             GitHubTask["GitHub Stream (Every 2 min)"]
             BackupTask["Automated WAL-Safe DB Backups (Hourly)"]
         end
@@ -102,7 +102,7 @@ flowchart TD
 - **⚡ Live Submission Tracker:** Polls Codeforces, AtCoder, and Toph every 60s (chained safely to prevent overlaps) and posts solved embeds permanently to your General/Feed channel with problem tags, difficulty, and Codeforces/AtCoder execution telemetry.
 - **📊 Dynamic Dashboard & Leaderboard:** Replaces the leaderboard embed with a fresh snapshot whenever ratings/solves change (plus 9:00 AM daily), alongside automatic **CP**, Codeforces Rank tier (`Newbie` → `Legendary Grandmaster`), and Streak milestone (`7d` → `2+ yr`) roles.
 - **🩸 Daily Challenges & First Blood:** Replaces yesterday's daily quest embed with 5 fresh progressive challenges at 9:00 PM local time, and posts First Blood / Daily Sweep celebrations permanently in your General channel.
-- **✅ Interactive Study To-Do Board:** Maintains a live Study To-Do form in your `#study-todo` channel (`/set-channel feature:✅ Study To-Do`) where any member can add unlimited subjects with study details (*how much to study*), edit items, and side-tick (`✅`) what they complete (locking finished items per user; removing items is Admin-only). The live date auto-updates at midnight without wiping pending items, and once everyone hits 100%, the form is deleted and a brand-new blank form posts **immediately**.
+- **✅ Interactive Study To-Do Board:** Maintains a live Study To-Do form in your `#study-todo` channel (`/set-channel feature:✅ Study To-Do`) where any member can add unlimited subjects with study details (*how much to study*), edit items, and side-tick (`✅`) what they complete (locking finished items per user; removing items is Admin-only). Finishing a form at 100% deletes it and spawns a fresh form immediately; if any member still hasn't completed it by **9:00 AM** the next day, the old form remains with **only `✅ Tick Done` allowed** (`Add`/`Edit`/`Remove` locked) while a brand-new form posts at **9:00 AM**.
 - **🌅 Contest Wrap-up & Upsolve Radar:** At 9:00 AM daily, recaps finished Codeforces rounds in your server's wrapup/general channel and identifies each contender's exact upsolve roadblock (e.g., `WA on test 4`, `TLE on test 2`). On-demand `/wrapup` also supported.
 - **📅 Contest Radar & 24h/1h Reminders:** Aggregates upcoming contests across Codeforces, AtCoder, Toph, and server custom contests (`/custom-contest`), replacing the old radar overview with a fresh embed every 12 hours and sending 24-hour and 1-hour alerts.
 - **⚔️ 3x3 Battle Grid & Duels (`/vs`):** Real-time 1v1 or multiplayer 9-problem Battle Grid (1st AC scores 100%, later solves score 1/3) or Classic time-decay race, synced every 15 seconds with lock protection.

@@ -862,11 +862,12 @@ function getHeadToHeadVersus(discordId1, discordId2) {
 }
 
 // ─── Study To-Do Helpers ─────────────────────────────────────
-function createStudyForm(id, guildId, channelId, messageId, dateStr) {
+function createStudyForm(id, guildId, channelId, messageId, dateStr, createdAt = null) {
+  const ts = createdAt !== null ? Number(createdAt) : Math.floor(Date.now() / 1000);
   db.prepare(`
-    INSERT INTO study_forms (id, guild_id, channel_id, message_id, date_str, completed)
-    VALUES (?, ?, ?, ?, ?, 0)
-  `).run(id, String(guildId), String(channelId), messageId || null, dateStr);
+    INSERT INTO study_forms (id, guild_id, channel_id, message_id, date_str, created_at, completed)
+    VALUES (?, ?, ?, ?, ?, ?, 0)
+  `).run(id, String(guildId), String(channelId), messageId || null, dateStr, ts);
 }
 
 function getStudyForm(id) {

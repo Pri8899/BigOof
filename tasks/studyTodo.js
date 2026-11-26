@@ -1,4 +1,4 @@
-// tasks/studyTodo.js — Continuous Study To-Do board with unlimited tasks, per-user ticks, & instant reset at 100%
+// tasks/studyTodo.js — Study To-Do board: 9 AM daily rollover, instant 100% reset, & tick-only lock on past forms
 const cron = require('node-cron');
 const crypto = require('crypto');
 const {
@@ -28,7 +28,10 @@ const {
 } = require('../database/db');
 const { getTargetChannel, chunkLines, isBotOwner } = require('../utils/envHelper');
 const { errorEmbed } = require('../utils/embeds');
-const { getTimeZone, getLocalParts } = require('../utils/time');
+const { getTimeZone, getLocalParts, zonedDateTimeToUnix } = require('../utils/time');
+
+const formLocks = new Map();
+const guildCreateLocks = new Map();
 
 function canRemoveStudyItems(interaction) {
   return Boolean(
@@ -38,8 +41,32 @@ function canRemoveStudyItems(interaction) {
   );
 }
 
-const formLocks = new Map();
-const guildCreateLocks = new Map();
+/**
+ * Returns the Unix epoch (seconds) when the current 9:00 AM daily study cycle began.
+ */
+function getLatest9AmCycleStartUnix(now = new Date(), tz = getTimeZone()) {
+  const nowSec = Math.floor(now.getTime() / 1000);
+  const p = getLocalParts(now, tz);
+  const today9Am = zonedDateTimeToUnix(p.year, p.month, p.day, 9, 0, 0, tz);
+  if (nowSec >= today9Am) return today9Am;
+
+  const yesterday = new Date(Date.UTC(p.year, p.month - 1, p.day, 12, 0, 0));
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  return zonedDateTimeToUnix(
+    yesterday.getUTCFullYear(),
+    yesterday.getUTCMonth() + 1,
+    yesterday.getUTCDate(),
+    9,
+    0,
+    0,
+    tz
+  );
+}
+
+function isOldStudyForm(form, now = new Date(), tz = getTimeZone()) {
+  if (!form || !form.created_at) return false;
+  return Number(form.created_at) < getLatest9AmCycleStartUnix(now, tz);
+}
 
 async function withKeyLock(map, key, fn) {
   const prev = map.get(key) || Promise.resolve();
@@ -120,25 +147,38 @@ function formatItemBlock(item, idx, tickMap, trackedMembers) {
   ].join('\n');
 }
 
-function buildStudyFormEmbed(form, items, ticks, trackedMembers) {
+function buildStudyFormEmbed(form, items, ticks, trackedMembers, now = new Date()) {
   const tickMap = buildTickMap(ticks);
   const TZ = getTimeZone();
-  const todayLabel = formatStudyDateLabel(getLocalParts(new Date(), TZ).dateStr);
+  const isOld = isOldStudyForm(form, now, TZ);
+  const displayDateLabel = isOld
+    ? formatStudyDateLabel(form.date_str)
+    : formatStudyDateLabel(getLocalParts(now, TZ).dateStr);
 
   const embed = new EmbedBuilder()
-    .setColor(0x00E676)
+    .setColor(isOld ? 0xFFAB00 : 0x00E676)
     .setAuthor({
-      name: 'BigOof · Active Study To-Do Board',
+      name: isOld ? 'BigOof · Pending Previous Study Form' : 'BigOof · Active Study To-Do Board',
       iconURL: 'https://cdn-icons-png.flaticon.com/512/2232/2232688.png'
     })
-    .setTitle('✅ Study Checklist')
-    .setDescription([
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      `> 📅 **Date:** **${todayLabel}**`,
-      '> ➕ **Add / ✏️ Edit / ✅ Tick:** Anyone · **🗑️ Remove:** Admin only',
-      '> 🔒 Completed items lock per user · Clears at **100%** & starts a **fresh form**!',
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-    ].join('\n'))
+    .setTitle(isOld ? `🔒 Pending Study Checklist · ${displayDateLabel}`.slice(0, 256) : '✅ Study Checklist')
+    .setDescription(
+      isOld
+        ? [
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            `> 📅 **From:** **${displayDateLabel}**`,
+            '> 🔒 **Day Passed:** Add, Edit & Remove are locked — only **✅ Tick Done** is allowed!',
+            '> 🧹 Auto-removes as soon as everyone ticks **100%** of remaining items.',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+          ].join('\n')
+        : [
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            `> 📅 **Date:** **${displayDateLabel}**`,
+            '> ➕ **Add / ✏️ Edit / ✅ Tick:** Anyone · **🗑️ Remove:** Admin only',
+            '> 🔒 Completed items lock per user · Clears at **100%** *(or new form at 9:00 AM)*!',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+          ].join('\n')
+    )
     .setTimestamp();
 
   let overflowed = false;
@@ -195,18 +235,21 @@ function buildStudyFormEmbed(form, items, ticks, trackedMembers) {
   embed.setFooter({
     text: overflowed
       ? `Form ID: ${form.id} · Large list truncated — click 📋 View All (${items.length}) to see all`
-      : `Form ID: ${form.id} · Stays active until everyone hits 100%, then instantly resets`
+      : isOld
+        ? `Form ID: ${form.id} · Old form locked (Tick only) · Auto-clears at 100%`
+        : `Form ID: ${form.id} · New form daily at 9:00 AM (${TZ}) or instant on 100%`
   });
 
   return { embed, overflowed };
 }
 
-function buildStudyFormComponents(formId, items, overflowed = false) {
+function buildStudyFormComponents(formId, items, { overflowed = false, isOld = false } = {}) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`study-add_${formId}`)
       .setLabel('➕ Add Study')
-      .setStyle(ButtonStyle.Success),
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(isOld),
     new ButtonBuilder()
       .setCustomId(`study-tick_${formId}`)
       .setLabel('✅ Tick Done')
@@ -216,12 +259,12 @@ function buildStudyFormComponents(formId, items, overflowed = false) {
       .setCustomId(`study-edit_${formId}`)
       .setLabel('✏️ Edit Study')
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(items.length === 0),
+      .setDisabled(isOld || items.length === 0),
     new ButtonBuilder()
       .setCustomId(`study-remove_${formId}`)
       .setLabel('🗑️ Remove')
       .setStyle(ButtonStyle.Danger)
-      .setDisabled(items.length === 0)
+      .setDisabled(isOld || items.length === 0)
   );
 
   if (overflowed) {
@@ -246,24 +289,38 @@ async function fetchFormMessage(client, form) {
 }
 
 /**
- * Ensures the guild has an active Study To-Do form when `study_channel_id` is configured.
- * If an active form already exists, returns null without posting a duplicate.
+ * Ensures the guild has an active current-cycle Study To-Do form when `study_channel_id` is configured.
+ * Cleans up empty 0-item old forms while preserving all non-empty older pending forms cleanly.
  */
-async function ensureActiveStudyFormForGuild(client, guildId) {
+async function ensureCurrentStudyFormForGuild(client, guildId, now = new Date()) {
   return withKeyLock(guildCreateLocks, guildId, async () => {
-    const existingActive = getActiveStudyForms(guildId);
-    if (existingActive.length > 0) return null;
-
+    const TZ = getTimeZone();
     const channel = await getStudyChannelForGuild(client, guildId);
     if (!channel) return null;
 
-    const TZ = getTimeZone();
-    const dateStr = getLocalParts(new Date(), TZ).dateStr;
+    const existingActive = getActiveStudyForms(guildId);
+
+    // Clean up older empty forms (0 items added) so blank forms don't stack up; keep all non-empty old forms!
+    let hasCurrentCycleForm = false;
+    for (const oldForm of existingActive) {
+      if (!isOldStudyForm(oldForm, now, TZ)) {
+        hasCurrentCycleForm = true;
+      } else if (getStudyItems(oldForm.id).length === 0) {
+        const { msg } = await fetchFormMessage(client, oldForm);
+        if (msg) await msg.delete().catch(() => {});
+        completeAndClearStudyForm(oldForm.id);
+      }
+    }
+
+    if (hasCurrentCycleForm) return null;
+
+    const dateStr = getLocalParts(now, TZ).dateStr;
+    const nowSec = Math.floor(now.getTime() / 1000);
     const formId = crypto.randomBytes(4).toString('hex');
     const trackedMembers = await getChannelStudyMembers(channel.guild, channel);
-    const stubForm = { id: formId, guild_id: guildId, channel_id: channel.id, date_str: dateStr };
-    const { embed, overflowed } = buildStudyFormEmbed(stubForm, [], [], trackedMembers);
-    const components = buildStudyFormComponents(formId, [], overflowed);
+    const stubForm = { id: formId, guild_id: guildId, channel_id: channel.id, date_str: dateStr, created_at: nowSec };
+    const { embed, overflowed } = buildStudyFormEmbed(stubForm, [], [], trackedMembers, now);
+    const components = buildStudyFormComponents(formId, [], { overflowed, isOld: false });
 
     const sent = await channel.send({ embeds: [embed], components }).catch(err => {
       console.warn(`[StudyTodo] Failed posting form in #${channel.name}:`, err.message);
@@ -271,19 +328,20 @@ async function ensureActiveStudyFormForGuild(client, guildId) {
     });
     if (!sent) return null;
 
-    createStudyForm(formId, guildId, channel.id, sent.id, dateStr);
+    createStudyForm(formId, guildId, channel.id, sent.id, dateStr, nowSec);
     console.log(`[StudyTodo] Posted fresh Study To-Do form (${formId}) in ${channel.guild.name} -> #${channel.name}`);
     return formId;
   });
 }
 
 /**
- * Refreshes an active study form message, OR deletes it immediately if 100% of users ticked every item
- * and spawns a brand-new Study To-Do form right away.
- * Returns { completed: boolean, formRemoved: boolean, newFormId: string|null }.
+ * Refreshes an active study form message, OR deletes it immediately if 100% of users ticked every item.
+ * Only spawns an instant replacement form when no current-cycle active form already exists in that guild.
  */
-async function refreshOrCompleteStudyForm(client, formId) {
+async function refreshOrCompleteStudyForm(client, formId, now = new Date()) {
+  const TZ = getTimeZone();
   let completedGuildId = null;
+
   let result = await withKeyLock(formLocks, formId, async () => {
     const form = getStudyForm(formId);
     if (!form || form.completed === 1) return { completed: true, formRemoved: false, newFormId: null };
@@ -307,8 +365,9 @@ async function refreshOrCompleteStudyForm(client, formId) {
       return { completed: true, formRemoved: true, newFormId: null };
     }
 
-    const { embed, overflowed } = buildStudyFormEmbed(form, items, ticks, trackedMembers);
-    const components = buildStudyFormComponents(formId, items, overflowed);
+    const isOld = isOldStudyForm(form, now, TZ);
+    const { embed, overflowed } = buildStudyFormEmbed(form, items, ticks, trackedMembers, now);
+    const components = buildStudyFormComponents(formId, items, { overflowed, isOld });
 
     if (msg) {
       await msg.edit({ embeds: [embed], components }).catch(async err => {
@@ -326,7 +385,7 @@ async function refreshOrCompleteStudyForm(client, formId) {
   });
 
   if (result.formRemoved && completedGuildId) {
-    const newFormId = await ensureActiveStudyFormForGuild(client, completedGuildId).catch(err => {
+    const newFormId = await ensureCurrentStudyFormForGuild(client, completedGuildId, now).catch(err => {
       console.error(`[StudyTodo] Failed spawning replacement form in guild ${completedGuildId}:`, err.message);
       return null;
     });
@@ -336,19 +395,20 @@ async function refreshOrCompleteStudyForm(client, formId) {
   return result;
 }
 
-async function ensureActiveStudyFormsAllGuilds(client) {
-  for (const guild of client.guilds.cache.values()) {
-    await ensureActiveStudyFormForGuild(client, guild.id).catch(err =>
-      console.error(`[StudyTodo] Error ensuring form for ${guild.name}:`, err.message)
+async function recheckActiveStudyForms(client, guildId = null, now = new Date()) {
+  const forms = getActiveStudyForms(guildId);
+  for (const f of forms) {
+    await refreshOrCompleteStudyForm(client, f.id, now).catch(err =>
+      console.warn(`[StudyTodo] Recheck failed for ${f.id}:`, err.message)
     );
   }
 }
 
-async function recheckActiveStudyForms(client, guildId = null) {
-  const forms = getActiveStudyForms(guildId);
-  for (const f of forms) {
-    await refreshOrCompleteStudyForm(client, f.id).catch(err =>
-      console.warn(`[StudyTodo] Recheck failed for ${f.id}:`, err.message)
+async function runStudyRolloverAndSync(client, now = new Date()) {
+  for (const guild of client.guilds.cache.values()) {
+    await recheckActiveStudyForms(client, guild.id, now);
+    await ensureCurrentStudyFormForGuild(client, guild.id, now).catch(err =>
+      console.error(`[StudyTodo] Rollover error in ${guild.name}:`, err.message)
     );
   }
 }
@@ -480,7 +540,7 @@ function openStudyItemModal(interaction, { customId, title, subjectValue = '', d
 
 // ─── Central Interaction Router ───────────────────────────────
 
-async function handleStudyInteraction(interaction, client = interaction.client) {
+async function handleStudyInteraction(interaction, client = interaction.client, now = new Date()) {
   const parts = interaction.customId.split('_');
   const action = parts[0];
   const formId = parts[1];
@@ -489,7 +549,7 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   const form = getStudyForm(formId);
   if (!form || form.completed === 1) {
     const expired = {
-      embeds: [errorEmbed('Form Already Replaced', 'Everyone finished that study form — use the newly posted form in the channel!')],
+      embeds: [errorEmbed('Form Completed', 'Everyone finished that study form, so it has already been removed!')],
       components: [],
       flags: 64
     };
@@ -499,7 +559,13 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
     return;
   }
 
+  const isOld = isOldStudyForm(form, now, getTimeZone());
+  const oldFormLockedMsg = 'This study form is from a previous day and is now locked.\nOnly **✅ Tick Done** is allowed here — use the new active form for adding or editing tasks!';
+
   if (interaction.isButton() && action === 'study-add') {
+    if (isOld) {
+      return interaction.reply({ embeds: [errorEmbed('Old Form Locked', oldFormLockedMsg)], flags: 64 });
+    }
     return openStudyItemModal(interaction, {
       customId: `study-add-modal_${formId}`,
       title: 'Add Study Goal'
@@ -549,6 +615,9 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   }
 
   if (interaction.isButton() && (action === 'study-edit' || action === 'study-edit-page')) {
+    if (isOld) {
+      return interaction.reply({ embeds: [errorEmbed('Old Form Locked', oldFormLockedMsg)], flags: 64 });
+    }
     const page = action === 'study-edit-page' ? (parseInt(extra, 10) || 0) : 0;
     const items = getStudyItems(formId);
     if (items.length === 0) {
@@ -572,6 +641,9 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   }
 
   if (interaction.isButton() && (action === 'study-remove' || action === 'study-remove-page')) {
+    if (isOld) {
+      return interaction.reply({ embeds: [errorEmbed('Old Form Locked', oldFormLockedMsg)], flags: 64 });
+    }
     if (!canRemoveStudyItems(interaction)) {
       return interaction.reply({
         embeds: [errorEmbed('Admin Only', 'Only server administrators can remove items from the Study To-Do form.\nAnyone can still **Add**, **Edit**, and **Tick Done**!')],
@@ -613,6 +685,9 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   }
 
   if (interaction.isStringSelectMenu() && action === 'study-edit-select') {
+    if (isOld) {
+      return interaction.reply({ embeds: [errorEmbed('Old Form Locked', oldFormLockedMsg)], flags: 64 });
+    }
     const itemId = interaction.values[0];
     const item = getStudyItem(itemId);
     if (!item || item.form_id !== formId) {
@@ -635,11 +710,13 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
     }
 
     addStudyTicks(validIds, interaction.user.id);
-    const status = await refreshOrCompleteStudyForm(client, formId);
+    const status = await refreshOrCompleteStudyForm(client, formId, now);
 
     if (status.formRemoved) {
       return interaction.editReply({
-        content: '🎉 **100% Complete!** Every member finished this study form — removed it and posted a **brand-new form** immediately!',
+        content: status.newFormId
+          ? '🎉 **100% Complete!** Every member finished this study form — removed it and posted a **brand-new form**!'
+          : '🎉 **100% Complete!** Every member finished this pending study form, so it has been removed!',
         components: []
       });
     }
@@ -670,6 +747,9 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   }
 
   if (interaction.isStringSelectMenu() && action === 'study-remove-select') {
+    if (isOld) {
+      return interaction.reply({ embeds: [errorEmbed('Old Form Locked', oldFormLockedMsg)], flags: 64 });
+    }
     if (!canRemoveStudyItems(interaction)) {
       return interaction.reply({
         embeds: [errorEmbed('Admin Only', 'Only server administrators can remove items from the Study To-Do form.')],
@@ -685,10 +765,12 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
       if (item && item.form_id === formId && deleteStudyItem(id)) removed++;
     }
 
-    const status = await refreshOrCompleteStudyForm(client, formId);
+    const status = await refreshOrCompleteStudyForm(client, formId, now);
     if (status.formRemoved) {
       return interaction.editReply({
-        content: `🗑️ Removed **${removed}** item(s). Remaining items hit 100% — form cleared & a **brand-new form** was posted!`,
+        content: status.newFormId
+          ? `🗑️ Removed **${removed}** item(s). Remaining items hit 100% — form cleared & a **brand-new form** was posted!`
+          : `🗑️ Removed **${removed}** item(s). Remaining items hit 100% — form removed!`,
         components: []
       });
     }
@@ -700,12 +782,15 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   }
 
   if (interaction.isModalSubmit() && action === 'study-add-modal') {
+    if (isOld) {
+      return interaction.reply({ embeds: [errorEmbed('Old Form Locked', oldFormLockedMsg)], flags: 64 });
+    }
     await interaction.deferReply({ flags: 64 });
     const subject = interaction.fields.getTextInputValue('studySubject').trim();
     const details = interaction.fields.getTextInputValue('studyDetails').trim();
 
     addStudyItem(formId, subject, details, interaction.user.id);
-    await refreshOrCompleteStudyForm(client, formId);
+    await refreshOrCompleteStudyForm(client, formId, now);
 
     return interaction.editReply({
       content: `✅ Added **${subject}** (*${details}*) to the Study To-Do form!`
@@ -713,6 +798,9 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   }
 
   if (interaction.isModalSubmit() && action === 'study-edit-modal') {
+    if (isOld) {
+      return interaction.reply({ embeds: [errorEmbed('Old Form Locked', oldFormLockedMsg)], flags: 64 });
+    }
     await interaction.deferReply({ flags: 64 });
     const itemId = Number(extra);
     const existing = getStudyItem(itemId);
@@ -724,7 +812,7 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
     const details = interaction.fields.getTextInputValue('studyDetails').trim();
 
     updateStudyItem(itemId, subject, details, interaction.user.id);
-    await refreshOrCompleteStudyForm(client, formId);
+    await refreshOrCompleteStudyForm(client, formId, now);
 
     return interaction.editReply({
       content: `✏️ Updated item to **${subject}** (*${details}*)!`
@@ -732,21 +820,30 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   }
 }
 
-// ─── Startup Bootstrap ────────────────────────────────────────
+// ─── Scheduler ───────────────────────────────────────────────
 
 function startStudyTodo(client) {
   const TZ = getTimeZone();
 
   setTimeout(async () => {
     try {
-      await recheckActiveStudyForms(client);
-      await ensureActiveStudyFormsAllGuilds(client);
+      await runStudyRolloverAndSync(client);
     } catch (err) {
       console.error('[StudyTodo] Startup sync error:', err.message);
     }
   }, 8000);
 
-  // Auto-update the displayed date at midnight without wiping any pending items
+  // Daily 9:00 AM rollover: lock unfinished prior forms (Tick-only) and post today's fresh form
+  cron.schedule('0 9 * * *', async () => {
+    try {
+      console.log(`[StudyTodo] 9:00 AM daily trigger (${TZ}). Checking pending forms & posting today's form...`);
+      await runStudyRolloverAndSync(client);
+    } catch (err) {
+      console.error('[StudyTodo] 9 AM rollover error:', err.message);
+    }
+  }, { timezone: TZ, noOverlap: true });
+
+  // Midnight date display refresh for active forms
   cron.schedule('0 0 * * *', async () => {
     try {
       await recheckActiveStudyForms(client);
@@ -755,16 +852,18 @@ function startStudyTodo(client) {
     }
   }, { timezone: TZ, noOverlap: true });
 
-  console.log(`[StudyTodo] Instant-reset Study To-Do manager initialized (date auto-refreshes at midnight ${TZ}).`);
+  console.log(`[StudyTodo] Study To-Do manager initialized (9 AM rollover + instant 100% reset, TZ: ${TZ}).`);
 }
 
 module.exports = {
   startStudyTodo,
-  ensureActiveStudyFormForGuild,
-  ensureActiveStudyFormsAllGuilds,
+  ensureCurrentStudyFormForGuild,
   recheckActiveStudyForms,
+  runStudyRolloverAndSync,
   refreshOrCompleteStudyForm,
   handleStudyInteraction,
   buildStudyFormEmbed,
+  isOldStudyForm,
+  getLatest9AmCycleStartUnix,
   isStudyFormFullyCompleted
 };
