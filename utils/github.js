@@ -2,6 +2,16 @@
 const axios = require('axios');
 
 const GITHUB_API = 'https://api.github.com';
+const eventEtagCache = new Map();
+
+const SUPPORTED_EVENT_TYPES = new Set([
+  'PushEvent',
+  'CreateEvent',
+  'PullRequestEvent',
+  'IssuesEvent',
+  'ReleaseEvent',
+  'ForkEvent'
+]);
 
 function getGitHubHeaders() {
   const headers = {
@@ -59,27 +69,41 @@ async function getGitHubUser(username) {
 }
 
 /**
- * Fetch recent public GitHub events for a user.
+ * Fetch recent public GitHub events for a user (supports conditional ETag requests to avoid burning rate limits).
  */
-async function getUserRecentEvents(username) {
+async function getUserRecentEvents(username, { useETag = false, withMeta = false, etagKey = null } = {}) {
+  const cacheKey = String(etagKey || username).toLowerCase();
+  const headers = getGitHubHeaders();
+  if (useETag) {
+    const cachedEtag = eventEtagCache.get(cacheKey);
+    if (cachedEtag) headers['If-None-Match'] = cachedEtag;
+  }
+
   try {
     const res = await axios.get(`${GITHUB_API}/users/${encodeURIComponent(username)}/events/public`, {
-      headers: getGitHubHeaders(),
-      timeout: 10000
+      params: { per_page: 30 },
+      headers,
+      timeout: 10000,
+      validateStatus: status => status === 200 || status === 304
     });
-    if (res.status !== 200 || !Array.isArray(res.data)) return [];
-    const supportedTypes = new Set([
-      'PushEvent',
-      'CreateEvent',
-      'PullRequestEvent',
-      'IssuesEvent',
-      'ReleaseEvent',
-      'ForkEvent'
-    ]);
-    return res.data.filter(event => supportedTypes.has(event.type));
+
+    if (res.status === 304) {
+      return withMeta ? { events: [], notModified: true, rateLimited: false } : [];
+    }
+
+    if (res.headers?.etag) {
+      eventEtagCache.set(cacheKey, res.headers.etag);
+    }
+
+    const filtered = Array.isArray(res.data)
+      ? res.data.filter(event => SUPPORTED_EVENT_TYPES.has(event.type))
+      : [];
+    return withMeta ? { events: filtered, notModified: false, rateLimited: false } : filtered;
   } catch (err) {
+    const status = err.response?.status;
+    const rateLimited = status === 403 || status === 429;
     console.error(`[GitHub] Error fetching events for ${username}:`, err.message);
-    return [];
+    return withMeta ? { events: [], notModified: false, rateLimited } : [];
   }
 }
 

@@ -1,6 +1,12 @@
 // tasks/githubFeed.js — Live feed for GitHub commits, PRs, releases, and repositories
 const cron = require('node-cron');
-const { getAllUsers, getUser, db } = require('../database/db');
+const {
+  getAllUsers,
+  getUser,
+  getLastSubmission,
+  setLastSubmission,
+  db
+} = require('../database/db');
 const { getUserRecentEvents, getCommitDetails } = require('../utils/github');
 const { buildGitHubActivityEmbed, successEmbed, errorEmbed } = require('../utils/embeds');
 const { getTargetChannel } = require('../utils/envHelper');
@@ -8,6 +14,29 @@ const { getTimeZone } = require('../utils/time');
 
 let isGlobalPolling = false;
 const activeUserSyncs = new Set();
+
+const LIVE_LOOKBACK_SEC = 3600;       // Live background polling never posts events older than 1h
+const MANUAL_SYNC_LOOKBACK_SEC = 86400; // Manual /github sync capped at last 24h
+
+function getEventDedupKeys(event) {
+  const keys = [`gh_event_${event.id}`];
+  if (event.type === 'PushEvent' && event.payload?.head) {
+    keys.push(event.payload.head);
+  }
+  return keys;
+}
+
+function isEventProcessed(keys) {
+  const stmt = db.prepare('SELECT 1 FROM processed_github_commits WHERE sha = ?');
+  return keys.some(k => Boolean(stmt.get(k)));
+}
+
+function markEventProcessed(keys, repo, author) {
+  const stmt = db.prepare('INSERT OR IGNORE INTO processed_github_commits (sha, repo, author) VALUES (?, ?, ?)');
+  for (const k of keys) {
+    stmt.run(k, repo || 'GitHub', author);
+  }
+}
 
 async function resolveGitHubChannelsForUser(client, discordId) {
   const channels = [];
@@ -45,7 +74,7 @@ async function broadcastToChannels(channels, embed) {
   return sentCount > 0;
 }
 
-async function syncUserGitHub(client, user) {
+async function syncUserGitHub(client, user, { manualSync = false, seedOnly = false } = {}) {
   if (activeUserSyncs.has(user.discord_id)) {
     return { count: 0, skippedReason: 'Sync already in progress for this user.' };
   }
@@ -55,28 +84,55 @@ async function syncUserGitHub(client, user) {
 
   try {
     const channels = await resolveGitHubChannelsForUser(client, user.discord_id);
-    if (channels.length === 0) {
+    if (channels.length === 0 && !seedOnly) {
       return { count: 0, noChannels: true };
     }
 
-    const events = await getUserRecentEvents(user.github_handle);
-    if (!events || events.length === 0) {
+    const res = await getUserRecentEvents(user.github_handle, {
+      useETag: !manualSync && !seedOnly,
+      withMeta: true,
+      etagKey: `${user.discord_id}:${user.github_handle}`
+    });
+    if (res.notModified || res.rateLimited) {
       return { count: 0 };
     }
 
-    const minTime = Math.floor(Date.now() / 1000) - (90 * 86400);
-    const sortedEvents = [...events].reverse();
+    const events = res.events || [];
+    const nowSec = Math.floor(Date.now() / 1000);
+    const prevCursorTime = getLastSubmission(user.discord_id, 'github');
+    const isInitialBaseline = seedOnly || (prevCursorTime === null && !manualSync);
+
+    let highestSeenTime = prevCursorTime || 0;
+    const sortedEvents = [...events].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+    if (isInitialBaseline) {
+      for (const event of sortedEvents) {
+        const eventTime = Math.floor(new Date(event.created_at).getTime() / 1000);
+        if (Number.isFinite(eventTime) && eventTime > highestSeenTime) {
+          highestSeenTime = eventTime;
+        }
+        markEventProcessed(getEventDedupKeys(event), event.repo?.name, user.github_handle);
+      }
+      setLastSubmission(user.discord_id, 'github', Math.max(nowSec, highestSeenTime));
+      console.log(`[GitHubFeed] Seeded baseline cursor for ${user.github_handle} (${sortedEvents.length} historical event(s) marked read).`);
+      return { count: 0, seeded: true };
+    }
+
+    const lookbackSec = manualSync ? MANUAL_SYNC_LOOKBACK_SEC : LIVE_LOOKBACK_SEC;
+    const minTime = prevCursorTime
+      ? Math.max(prevCursorTime - 1, nowSec - lookbackSec)
+      : (nowSec - lookbackSec);
 
     for (const event of sortedEvents) {
       const eventTime = Math.floor(new Date(event.created_at).getTime() / 1000);
+      if (!Number.isFinite(eventTime) || eventTime <= 0) continue;
+      if (eventTime > highestSeenTime) highestSeenTime = eventTime;
       if (eventTime < minTime) continue;
 
-      const dedupKey = event.type === 'PushEvent' && event.payload?.head
-        ? event.payload.head
-        : `gh_event_${event.id}`;
-
-      const alreadyProcessed = db.prepare('SELECT 1 FROM processed_github_commits WHERE sha = ?').get(dedupKey);
-      if (alreadyProcessed) continue;
+      const keys = getEventDedupKeys(event);
+      if (isEventProcessed(keys)) continue;
 
       let extraDetails = null;
       if (event.type === 'PushEvent' && event.payload?.head && event.repo?.name) {
@@ -88,12 +144,15 @@ async function syncUserGitHub(client, user) {
 
       if (sent) {
         postedCount++;
-        db.prepare('INSERT OR IGNORE INTO processed_github_commits (sha, repo, author) VALUES (?, ?, ?)')
-          .run(dedupKey, event.repo?.name || 'GitHub', user.github_handle);
+        markEventProcessed(keys, event.repo?.name, user.github_handle);
         console.log(`[GitHubFeed] Posted ${event.type} for ${user.github_handle} (${event.repo?.name || 'GitHub'})`);
       }
 
       await new Promise(r => setTimeout(r, 600));
+    }
+
+    if (highestSeenTime > (prevCursorTime || 0)) {
+      setLastSubmission(user.discord_id, 'github', highestSeenTime);
     }
 
     return { count: postedCount };
@@ -102,7 +161,7 @@ async function syncUserGitHub(client, user) {
   }
 }
 
-async function runGitHubFeed(client, specificDiscordId = null) {
+async function runGitHubFeed(client, specificDiscordId = null, options = {}) {
   if (!specificDiscordId && isGlobalPolling) {
     return { success: false, count: 0, reason: 'Already polling' };
   }
@@ -121,7 +180,7 @@ async function runGitHubFeed(client, specificDiscordId = null) {
 
     for (const user of users) {
       try {
-        const res = await syncUserGitHub(client, user);
+        const res = await syncUserGitHub(client, user, options);
         totalPosted += res.count;
         if (specificDiscordId && res.noChannels) {
           return {
@@ -171,7 +230,7 @@ async function handleGitHubSyncInteraction(interaction, client = interaction.cli
     });
   }
 
-  const result = await runGitHubFeed(client, interaction.user.id);
+  const result = await runGitHubFeed(client, interaction.user.id, { manualSync: true });
   if (!result.success && result.reason) {
     return interaction.editReply({
       embeds: [errorEmbed('Sync Failed', result.reason)]

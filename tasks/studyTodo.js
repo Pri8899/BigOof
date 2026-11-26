@@ -147,13 +147,14 @@ function formatItemBlock(item, idx, tickMap, trackedMembers) {
   ].join('\n');
 }
 
-function buildStudyFormEmbed(form, items, ticks, trackedMembers, now = new Date()) {
+function buildStudyFormEmbed(form, items, ticks, trackedMembers, now = new Date(), { touchTimestamp = false } = {}) {
   const tickMap = buildTickMap(ticks);
   const TZ = getTimeZone();
   const isOld = isOldStudyForm(form, now, TZ);
-  const displayDateLabel = isOld
-    ? formatStudyDateLabel(form.date_str)
-    : formatStudyDateLabel(getLocalParts(now, TZ).dateStr);
+  const displayDateLabel = formatStudyDateLabel(form.date_str || getLocalParts(now, TZ).dateStr);
+  const embedTimestamp = touchTimestamp
+    ? now
+    : new Date((Number(form.created_at) || Math.floor(now.getTime() / 1000)) * 1000);
 
   const embed = new EmbedBuilder()
     .setColor(isOld ? 0xFFAB00 : 0x00E676)
@@ -166,20 +167,20 @@ function buildStudyFormEmbed(form, items, ticks, trackedMembers, now = new Date(
       isOld
         ? [
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-            `> 📅 **From:** **${displayDateLabel}**`,
+            `> 🕒 **From:** **${displayDateLabel}**`,
             '> 🔒 **Day Passed:** Add, Edit & Remove are locked — only **✅ Tick Done** is allowed!',
             '> 🧹 Auto-removes as soon as everyone ticks **100%** of remaining items.',
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
           ].join('\n')
         : [
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-            `> 📅 **Date:** **${displayDateLabel}**`,
+            `> 🕒 **Date:** **${displayDateLabel}**`,
             '> ➕ **Add / ✏️ Edit / ✅ Tick:** Anyone · **🗑️ Remove:** Admin only',
             '> 🔒 Completed items lock per user · Clears at **100%** *(or new form at 9:00 AM)*!',
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
           ].join('\n')
     )
-    .setTimestamp();
+    .setTimestamp(embedTimestamp);
 
   let overflowed = false;
 
@@ -334,11 +335,42 @@ async function ensureCurrentStudyFormForGuild(client, guildId, now = new Date())
   });
 }
 
+function studyMessageNeedsEdit(msg, newEmbed, newComponents) {
+  const oldEmbed = msg?.embeds?.[0];
+  if (!oldEmbed) return true;
+
+  const newData = typeof newEmbed.toJSON === 'function' ? newEmbed.toJSON() : (newEmbed.data || {});
+  if ((oldEmbed.title || '') !== (newData.title || '')) return true;
+  if ((oldEmbed.description || '') !== (newData.description || '')) return true;
+  if ((oldEmbed.footer?.text || '') !== (newData.footer?.text || '')) return true;
+
+  const oldFields = oldEmbed.fields || [];
+  const newFields = newData.fields || [];
+  if (oldFields.length !== newFields.length) return true;
+  for (let i = 0; i < newFields.length; i++) {
+    if ((oldFields[i].name || '') !== (newFields[i].name || '')) return true;
+    if ((oldFields[i].value || '') !== (newFields[i].value || '')) return true;
+  }
+
+  const oldBtns = msg.components?.[0]?.components || [];
+  const newBtns = newComponents?.[0]?.components?.map(c => (typeof c.toJSON === 'function' ? c.toJSON() : c.data)) || [];
+  if (oldBtns.length !== newBtns.length) return true;
+  for (let i = 0; i < newBtns.length; i++) {
+    const o = oldBtns[i]?.data || oldBtns[i] || {};
+    const n = newBtns[i] || {};
+    if (Boolean(o.disabled) !== Boolean(n.disabled)) return true;
+    if ((o.label || '') !== (n.label || '')) return true;
+    if ((o.custom_id || o.customId || '') !== (n.custom_id || n.customId || '')) return true;
+  }
+
+  return false;
+}
+
 /**
  * Refreshes an active study form message, OR deletes it immediately if 100% of users ticked every item.
- * Only spawns an instant replacement form when no current-cycle active form already exists in that guild.
+ * Skips no-op edits during background rechecks so fresh messages never show a spurious "(edited)" tag.
  */
-async function refreshOrCompleteStudyForm(client, formId, now = new Date()) {
+async function refreshOrCompleteStudyForm(client, formId, now = new Date(), { forceEdit = false } = {}) {
   const TZ = getTimeZone();
   let completedGuildId = null;
 
@@ -350,6 +382,16 @@ async function refreshOrCompleteStudyForm(client, formId, now = new Date()) {
     if (!channel) return { completed: false, formRemoved: false, newFormId: null };
 
     const items = getStudyItems(formId);
+    const isOld = isOldStudyForm(form, now, TZ);
+
+    // Discard empty old-cycle forms cleanly without editing them first
+    if (isOld && items.length === 0) {
+      if (completeAndClearStudyForm(formId) && msg) {
+        await msg.delete().catch(() => {});
+      }
+      return { completed: true, formRemoved: false, newFormId: null };
+    }
+
     const ticks = getStudyTicksForForm(formId);
     const trackedMembers = await getChannelStudyMembers(channel.guild, channel);
 
@@ -365,17 +407,20 @@ async function refreshOrCompleteStudyForm(client, formId, now = new Date()) {
       return { completed: true, formRemoved: true, newFormId: null };
     }
 
-    const isOld = isOldStudyForm(form, now, TZ);
-    const { embed, overflowed } = buildStudyFormEmbed(form, items, ticks, trackedMembers, now);
+    const { embed, overflowed } = buildStudyFormEmbed(form, items, ticks, trackedMembers, now, {
+      touchTimestamp: forceEdit
+    });
     const components = buildStudyFormComponents(formId, items, { overflowed, isOld });
 
     if (msg) {
-      await msg.edit({ embeds: [embed], components }).catch(async err => {
-        if (err.code === 10008) {
-          const repost = await channel.send({ embeds: [embed], components }).catch(() => null);
-          if (repost) updateStudyFormMessage(formId, repost.id);
-        }
-      });
+      if (forceEdit || studyMessageNeedsEdit(msg, embed, components)) {
+        await msg.edit({ embeds: [embed], components }).catch(async err => {
+          if (err.code === 10008) {
+            const repost = await channel.send({ embeds: [embed], components }).catch(() => null);
+            if (repost) updateStudyFormMessage(formId, repost.id);
+          }
+        });
+      }
     } else {
       const repost = await channel.send({ embeds: [embed], components }).catch(() => null);
       if (repost) updateStudyFormMessage(formId, repost.id);
@@ -710,7 +755,7 @@ async function handleStudyInteraction(interaction, client = interaction.client, 
     }
 
     addStudyTicks(validIds, interaction.user.id);
-    const status = await refreshOrCompleteStudyForm(client, formId, now);
+    const status = await refreshOrCompleteStudyForm(client, formId, now, { forceEdit: true });
 
     if (status.formRemoved) {
       return interaction.editReply({
@@ -765,7 +810,7 @@ async function handleStudyInteraction(interaction, client = interaction.client, 
       if (item && item.form_id === formId && deleteStudyItem(id)) removed++;
     }
 
-    const status = await refreshOrCompleteStudyForm(client, formId, now);
+    const status = await refreshOrCompleteStudyForm(client, formId, now, { forceEdit: true });
     if (status.formRemoved) {
       return interaction.editReply({
         content: status.newFormId
@@ -790,7 +835,7 @@ async function handleStudyInteraction(interaction, client = interaction.client, 
     const details = interaction.fields.getTextInputValue('studyDetails').trim();
 
     addStudyItem(formId, subject, details, interaction.user.id);
-    await refreshOrCompleteStudyForm(client, formId, now);
+    await refreshOrCompleteStudyForm(client, formId, now, { forceEdit: true });
 
     return interaction.editReply({
       content: `✅ Added **${subject}** (*${details}*) to the Study To-Do form!`
@@ -812,7 +857,7 @@ async function handleStudyInteraction(interaction, client = interaction.client, 
     const details = interaction.fields.getTextInputValue('studyDetails').trim();
 
     updateStudyItem(itemId, subject, details, interaction.user.id);
-    await refreshOrCompleteStudyForm(client, formId, now);
+    await refreshOrCompleteStudyForm(client, formId, now, { forceEdit: true });
 
     return interaction.editReply({
       content: `✏️ Updated item to **${subject}** (*${details}*)!`
@@ -840,15 +885,6 @@ function startStudyTodo(client) {
       await runStudyRolloverAndSync(client);
     } catch (err) {
       console.error('[StudyTodo] 9 AM rollover error:', err.message);
-    }
-  }, { timezone: TZ, noOverlap: true });
-
-  // Midnight date display refresh for active forms
-  cron.schedule('0 0 * * *', async () => {
-    try {
-      await recheckActiveStudyForms(client);
-    } catch (err) {
-      console.error('[StudyTodo] Midnight date refresh error:', err.message);
     }
   }, { timezone: TZ, noOverlap: true });
 

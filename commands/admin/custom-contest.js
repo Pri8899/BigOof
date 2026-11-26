@@ -1,7 +1,7 @@
 // commands/admin/custom-contest.js — Add, edit, list, or delete custom contests cleanly
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { db } = require('../../database/db');
-const { postContestSummary } = require('../../tasks/contestFetcher');
+const { postContestSummary, deleteContestRemindersFromDiscord } = require('../../tasks/contestFetcher');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
 const { chunkLines } = require('../../utils/envHelper');
 const { getTimeZone, getLocalParts, zonedDateTimeToUnix, isValidCalendarDate } = require('../../utils/time');
@@ -264,6 +264,14 @@ module.exports = {
         WHERE contest_id = ?
       `).run(newName, newLink, newStartTime, newDuration, newTimeNA, newStartTime, newStartTime, contestId);
 
+      if (newStartTime !== contest.start_time) {
+        deleteContestRemindersFromDiscord(interaction.client, contestId).catch(() => {});
+      } else if (newStartTime && newDuration !== contest.duration_sec) {
+        const dur = Number(newDuration) > 0 ? Number(newDuration) : 3600;
+        db.prepare('UPDATE contest_reminder_messages SET expires_at = ? WHERE contest_id = ?')
+          .run(Number(newStartTime) + dur, contestId);
+      }
+
       postContestSummary(interaction.client, interaction.guildId).catch(() => {});
 
       return interaction.reply({
@@ -280,6 +288,7 @@ module.exports = {
         return interaction.reply({ embeds: [errorEmbed('Not Found', 'Custom contest not found.')], flags: 64 });
       }
 
+      await deleteContestRemindersFromDiscord(interaction.client, contestId).catch(() => {});
       db.prepare('DELETE FROM notified_contests WHERE contest_id = ?').run(contestId);
       postContestSummary(interaction.client, interaction.guildId).catch(() => {});
 
@@ -295,12 +304,12 @@ module.exports = {
       `).all();
 
       if (contests.length === 0) {
-        return interaction.reply({ content: '📅 No custom contests are currently scheduled.', flags: 64 });
+        return interaction.reply({ content: '⏰ No custom contests are currently scheduled.', flags: 64 });
       }
 
       const lines = contests.map((c, i) => {
         const timeLabel = c.start_time ? `<t:${c.start_time}:F>` : 'Date: N/A';
-        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n     🗓️ ${timeLabel}`;
+        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n     🕒 ${timeLabel}`;
       });
 
       const embed = successEmbed('Custom Contests', 'Scheduled custom contests in this radar:');

@@ -56,7 +56,7 @@ module.exports = {
     linkPlatform(userId, platform, handle);
 
     const syncNote = platform === 'github'
-      ? "Scanning your recent GitHub activity now... commits, PRs, and releases will post to your GitHub channel shortly."
+      ? 'Live GitHub stream activated! Any new commits, PRs, and releases from now on will post automatically (use `/github sync` anytime for recent 24h activity).'
       : "Fetching your stats now... they'll appear on your profile and leaderboard shortly.";
 
     await interaction.editReply({
@@ -69,7 +69,7 @@ module.exports = {
     try {
       if (platform === 'github') {
         const { runGitHubFeed } = require('../tasks/githubFeed');
-        await runGitHubFeed(interaction.client, userId).catch(() => {});
+        await runGitHubFeed(interaction.client, userId, { seedOnly: true }).catch(() => {});
       } else {
         const existing = getRatings(userId).find(r => r.platform === platform);
         let stats = null;

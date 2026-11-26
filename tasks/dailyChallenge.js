@@ -135,7 +135,7 @@ async function postDailySuggestions(client, targetDate = null) {
       name: 'Codeforces Daily Arena',
       iconURL: 'https://codeforces.org/s/0/images/codeforces-telegram-square.png'
     })
-    .setTitle(`🗓️ Daily Coding Quests — ${todayDisplay}`)
+    .setTitle(`🎯 Daily Coding Quests — ${todayDisplay}`)
     .setDescription(
       '> 🎯 **Sharpen your algorithms with 5 tiered challenges for today!**\n' +
       '> 🩸 **First Blood**: Be the very first coder in the server to solve any level!\n' +

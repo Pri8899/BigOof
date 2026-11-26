@@ -54,6 +54,15 @@ function ensureSchema(instance) {
       time_na        INTEGER DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS contest_reminder_messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      contest_id TEXT NOT NULL,
+      guild_id   TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS guild_config (
       guild_id TEXT NOT NULL DEFAULT 'global',
       key      TEXT NOT NULL,
@@ -486,7 +495,7 @@ function getAllRatings() {
 
 // ─── Contest Helpers ──────────────────────────────────────────
 function upsertContest(contestId, platform, name, startTime, durationSec, url) {
-  const existing = db.prepare('SELECT start_time FROM notified_contests WHERE contest_id = ?').get(contestId);
+  const existing = db.prepare('SELECT start_time, duration_sec FROM notified_contests WHERE contest_id = ?').get(contestId);
 
   if (existing) {
     let query = 'UPDATE notified_contests SET name = ?, start_time = ?, duration_sec = ?, url = ?';
@@ -497,6 +506,12 @@ function upsertContest(contestId, platform, name, startTime, durationSec, url) {
     query += ' WHERE contest_id = ?';
     params.push(contestId);
     db.prepare(query).run(...params);
+
+    if (startTime && (existing.start_time !== startTime || existing.duration_sec !== durationSec)) {
+      const dur = Number(durationSec) > 0 ? Number(durationSec) : 3600;
+      db.prepare('UPDATE contest_reminder_messages SET expires_at = ? WHERE contest_id = ?')
+        .run(Number(startTime) + dur, contestId);
+    }
   } else {
     db.prepare(`
       INSERT INTO notified_contests (contest_id, platform, name, start_time, duration_sec, url)
@@ -530,6 +545,42 @@ function getContestsNeedingReminders() {
 function markContestNotified(contestId, field) {
   assertAllowed(ALLOWED_CONTEST_NOTIFY_FIELDS, field, 'notification field');
   db.prepare(`UPDATE notified_contests SET ${field} = 1 WHERE contest_id = ?`).run(contestId);
+}
+
+function addContestReminderMessage(contestId, guildId, channelId, messageId, expiresAt) {
+  db.prepare(`
+    INSERT INTO contest_reminder_messages (contest_id, guild_id, channel_id, message_id, expires_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(contestId, String(guildId), String(channelId), String(messageId), Number(expiresAt));
+}
+
+function getExpiredContestReminderMessages(nowSec = Math.floor(Date.now() / 1000)) {
+  return db.prepare('SELECT * FROM contest_reminder_messages WHERE expires_at <= ?').all(Number(nowSec));
+}
+
+function getContestReminderMessagesByHorizon(maxExpiresAt) {
+  return db.prepare('SELECT * FROM contest_reminder_messages WHERE expires_at <= ?').all(Number(maxExpiresAt));
+}
+
+function getContestReminderMessagesByContest(contestId) {
+  return db.prepare('SELECT * FROM contest_reminder_messages WHERE contest_id = ?').all(contestId);
+}
+
+function deleteContestReminderMessageRecord(id) {
+  db.prepare('DELETE FROM contest_reminder_messages WHERE id = ?').run(Number(id));
+}
+
+function deleteContestReminderMessagesByContest(contestId) {
+  db.prepare('DELETE FROM contest_reminder_messages WHERE contest_id = ?').run(contestId);
+}
+
+function deleteContestReminderMessagesByChannel(channelId) {
+  db.prepare('DELETE FROM contest_reminder_messages WHERE channel_id = ?').run(String(channelId));
+}
+
+function getContestByUrl(url) {
+  if (!url) return null;
+  return db.prepare('SELECT * FROM notified_contests WHERE url = ? LIMIT 1').get(url);
 }
 
 // ─── Rating History Helpers ──────────────────────────────────
@@ -966,6 +1017,14 @@ module.exports = {
   getUpcomingContests,
   getContestsNeedingReminders,
   markContestNotified,
+  addContestReminderMessage,
+  getExpiredContestReminderMessages,
+  getContestReminderMessagesByHorizon,
+  getContestReminderMessagesByContest,
+  deleteContestReminderMessageRecord,
+  deleteContestReminderMessagesByContest,
+  deleteContestReminderMessagesByChannel,
+  getContestByUrl,
   getConfig,
   setConfig,
   deleteConfig,

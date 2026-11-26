@@ -140,7 +140,7 @@ function buildContestEmbed(contest, timeUntilLabel) {
     .setDescription([
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       `> ⏳ **Countdown:** ${startTime ? `<t:${startTime}:R>` : 'Starting Soon!'}`,
-      `> 📅 **Starts At:** ${startTime ? `<t:${startTime}:F>` : 'TBD'}`,
+      `> 🕒 **Starts At:** ${startTime ? `<t:${startTime}:F>` : 'TBD'}`,
       `> ⏱️ **Duration:** \`${durationStr.trim()}\``,
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       `🔗 [**Click here to open contest & register →**](${url})`
@@ -361,7 +361,7 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
       name: 'Autonomous Contest Radar',
       iconURL: 'https://cdn-icons-png.flaticon.com/512/833/833472.png'
     })
-    .setTitle('📅 Upcoming Competitive Programming Contests')
+    .setTitle('🏁 Upcoming Competitive Programming Contests')
     .setDescription([
       'Live contest schedule with real-time countdowns and 24h / 1h reminder alerts.',
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
@@ -697,6 +697,13 @@ function buildGitHubActivityEmbed(user, event, commitDetails = null) {
   const actor = event.actor?.login || user.github_handle || user.username || 'Developer';
   const actorMention = user.discord_id ? `<@${user.discord_id}>` : `**${actor}**`;
 
+  const eventDate = event?.created_at ? new Date(event.created_at) : null;
+  const eventUnix = eventDate && !Number.isNaN(eventDate.getTime())
+    ? Math.floor(eventDate.getTime() / 1000)
+    : null;
+  const footerTimestamp = eventUnix ? eventDate : new Date();
+  const timeSuffix = eventUnix ? ` · 🕒 <t:${eventUnix}:R>` : '';
+
   if (event.type === 'PushEvent') {
     const branch = event.payload?.ref?.replace('refs/heads/', '') || 'main';
     const commitUrl = commitDetails?.commitUrl || repoUrl;
@@ -712,7 +719,7 @@ function buildGitHubActivityEmbed(user, event, commitDetails = null) {
       `🚀 ${actorMention} pushed to **\`${repoName}\`**`,
       '',
       `> **${commitMsg}**`,
-      `🌿 **Branch:** \`${branch}\` · 📁 **Files:** \`${filesCount}\`${stats ? ` · \`+${stats.additions}/-${stats.deletions}\`` : ''}${lang ? ` · ${lang.emoji} ${lang.name}` : ''}`,
+      `🌿 **Branch:** \`${branch}\` · 📁 **Files:** \`${filesCount}\`${stats ? ` · \`+${stats.additions}/-${stats.deletions}\`` : ''}${lang ? ` · ${lang.emoji} ${lang.name}` : ''}${timeSuffix}`,
       `[**Inspect Commit [${shortSha}] on GitHub ↗️**](${commitUrl})`
     ];
 
@@ -723,7 +730,7 @@ function buildGitHubActivityEmbed(user, event, commitDetails = null) {
       .setURL(commitUrl)
       .setDescription(lines.join('\n'))
       .setFooter({ text: 'BigOof GitHub Stream' })
-      .setTimestamp();
+      .setTimestamp(footerTimestamp);
   }
 
   let title = `📦 Activity in ${repoName}`;
@@ -758,9 +765,9 @@ function buildGitHubActivityEmbed(user, event, commitDetails = null) {
     .setAuthor({ name: `${actor} on GitHub`, iconURL: event.actor?.avatar_url, url: repoUrl })
     .setTitle(title.slice(0, 256))
     .setURL(repoUrl)
-    .setDescription(`${summary}\n\n[**Open ${repoName} on GitHub ↗️**](${repoUrl})`)
+    .setDescription(`${summary}${timeSuffix ? `\n🕒 **Occurred:** <t:${eventUnix}:f> (<t:${eventUnix}:R>)` : ''}\n\n[**Open ${repoName} on GitHub ↗️**](${repoUrl})`)
     .setFooter({ text: 'BigOof GitHub Stream' })
-    .setTimestamp();
+    .setTimestamp(footerTimestamp);
 }
 
 module.exports = {
