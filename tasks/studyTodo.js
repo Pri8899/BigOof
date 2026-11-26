@@ -1,4 +1,5 @@
 // tasks/studyTodo.js — Continuous Study To-Do board with unlimited tasks, per-user ticks, & instant reset at 100%
+const cron = require('node-cron');
 const crypto = require('crypto');
 const {
   EmbedBuilder,
@@ -25,9 +26,17 @@ const {
   addStudyTicks,
   getStudyTicksForForm
 } = require('../database/db');
-const { getTargetChannel, chunkLines } = require('../utils/envHelper');
+const { getTargetChannel, chunkLines, isBotOwner } = require('../utils/envHelper');
 const { errorEmbed } = require('../utils/embeds');
 const { getTimeZone, getLocalParts } = require('../utils/time');
+
+function canRemoveStudyItems(interaction) {
+  return Boolean(
+    interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) ||
+    interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+    isBotOwner(interaction)
+  );
+}
 
 const formLocks = new Map();
 const guildCreateLocks = new Map();
@@ -113,7 +122,8 @@ function formatItemBlock(item, idx, tickMap, trackedMembers) {
 
 function buildStudyFormEmbed(form, items, ticks, trackedMembers) {
   const tickMap = buildTickMap(ticks);
-  const dateLabel = formatStudyDateLabel(form.date_str);
+  const TZ = getTimeZone();
+  const todayLabel = formatStudyDateLabel(getLocalParts(new Date(), TZ).dateStr);
 
   const embed = new EmbedBuilder()
     .setColor(0x00E676)
@@ -121,12 +131,12 @@ function buildStudyFormEmbed(form, items, ticks, trackedMembers) {
       name: 'BigOof · Active Study To-Do Board',
       iconURL: 'https://cdn-icons-png.flaticon.com/512/2232/2232688.png'
     })
-    .setTitle(`✅ Study Checklist · Started ${dateLabel}`.slice(0, 256))
+    .setTitle('✅ Study Checklist')
     .setDescription([
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      '> ➕ Add **Subject + How Much to Study** *(unlimited tasks)*',
-      '> ✅ Tick off what **you** finish *(locked once completed for you)*',
-      '> ✏️ Anyone can edit items · Clears at **100%** & posts a **new form instantly**!',
+      `> 📅 **Date:** **${todayLabel}**`,
+      '> ➕ **Add / ✏️ Edit / ✅ Tick:** Anyone · **🗑️ Remove:** Admin only',
+      '> 🔒 Completed items lock per user · Clears at **100%** & starts a **fresh form**!',
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     ].join('\n'))
     .setTimestamp();
@@ -562,6 +572,13 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   }
 
   if (interaction.isButton() && (action === 'study-remove' || action === 'study-remove-page')) {
+    if (!canRemoveStudyItems(interaction)) {
+      return interaction.reply({
+        embeds: [errorEmbed('Admin Only', 'Only server administrators can remove items from the Study To-Do form.\nAnyone can still **Add**, **Edit**, and **Tick Done**!')],
+        flags: 64
+      });
+    }
+
     const page = action === 'study-remove-page' ? (parseInt(extra, 10) || 0) : 0;
     const items = getStudyItems(formId);
     if (items.length === 0) {
@@ -653,6 +670,13 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
   }
 
   if (interaction.isStringSelectMenu() && action === 'study-remove-select') {
+    if (!canRemoveStudyItems(interaction)) {
+      return interaction.reply({
+        embeds: [errorEmbed('Admin Only', 'Only server administrators can remove items from the Study To-Do form.')],
+        flags: 64
+      });
+    }
+
     await interaction.deferUpdate();
     const selectedIds = interaction.values.map(Number).filter(Number.isFinite);
     let removed = 0;
@@ -711,6 +735,8 @@ async function handleStudyInteraction(interaction, client = interaction.client) 
 // ─── Startup Bootstrap ────────────────────────────────────────
 
 function startStudyTodo(client) {
+  const TZ = getTimeZone();
+
   setTimeout(async () => {
     try {
       await recheckActiveStudyForms(client);
@@ -720,7 +746,16 @@ function startStudyTodo(client) {
     }
   }, 8000);
 
-  console.log('[StudyTodo] Instant-reset Study To-Do manager initialized.');
+  // Auto-update the displayed date at midnight without wiping any pending items
+  cron.schedule('0 0 * * *', async () => {
+    try {
+      await recheckActiveStudyForms(client);
+    } catch (err) {
+      console.error('[StudyTodo] Midnight date refresh error:', err.message);
+    }
+  }, { timezone: TZ, noOverlap: true });
+
+  console.log(`[StudyTodo] Instant-reset Study To-Do manager initialized (date auto-refreshes at midnight ${TZ}).`);
 }
 
 module.exports = {

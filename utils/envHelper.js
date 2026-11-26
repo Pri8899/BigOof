@@ -25,13 +25,15 @@ function getValidId(val, fallback = null) {
  * Checks if the interacting user is the configured bot owner or Discord application owner/team member.
  */
 function isBotOwner(interaction) {
+  const userId = interaction?.user?.id;
+  if (!userId) return false;
   const ownerEnvId = getValidId(process.env.OWNER_ID, null);
-  if (ownerEnvId && interaction.user.id === ownerEnvId) return true;
+  if (ownerEnvId && userId === ownerEnvId) return true;
 
-  const owner = interaction.client.application?.owner;
+  const owner = interaction?.client?.application?.owner;
   if (!owner) return false;
-  if (owner.id === interaction.user.id) return true;
-  return Boolean(owner.members?.has(interaction.user.id));
+  if (owner.id === userId) return true;
+  return Boolean(owner.members?.has(userId));
 }
 
 async function fetchGuildTextChannel(client, channelId, expectedGuildId = null) {
