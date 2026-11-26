@@ -10,6 +10,7 @@ const CHANNEL_DEFS = [
   { key: 'wrapup_channel_id',       label: '🌅 Contest Wrap-up',       shortLabel: 'Contest Wrap-up',       desc: 'Next-day 9AM recap & upsolve radar',                   optionDesc: 'Next-day 9AM contest recap & upsolve',      group: 'core' },
   { key: 'github_channel_id',       label: '🐙 GitHub Activity Feed',  shortLabel: 'GitHub Activity Feed',  desc: 'Commits, releases, PRs, and new repos',                optionDesc: 'Commits, PRs, and repositories',            group: 'comm' },
   { key: 'announcement_channel_id', label: '📢 Announcements',         shortLabel: 'Announcements',         desc: 'Channel used by /announce',                            optionDesc: 'Broadcast channel for /announce',           group: 'comm' },
+  { key: 'useful_links_channel_id', label: '🔗 Useful Links',          shortLabel: 'Useful Links',          desc: 'Shared resources & allowed member /announce channel',  optionDesc: 'Resource links & allowed /announce target', group: 'comm' },
   { key: 'general_channel_id',      label: '💬 General Channel',       shortLabel: 'General Channel',       desc: 'Submissions, weekly digest, first blood & sweep alerts', optionDesc: 'Submissions, weekly digest, first blood & sweep', group: 'comm' },
   { key: 'study_channel_id',        label: '✅ Study To-Do',           shortLabel: 'Study To-Do',           desc: 'Interactive study checklist (auto-replaces at 100%)', optionDesc: 'Interactive study checklist board',         group: 'comm' }
 ];

@@ -136,6 +136,7 @@ flowchart TD
 | `/whosolved` | `link` | Find current server members who solved a given Codeforces problem URL. |
 | `/suggest` | `tag`, `rating`, `div`, `problems` *(all optional)* | Suggest unsolved Codeforces problems tailored to your filters. |
 | `/ask-help` | `problem`, `image1`..`image5` *(optional)* | Request community hints with optional code/screenshot images. |
+| `/announce` | `channel` *(optional, autocomplete)* | Post a formatted card with optional hidden-URL button (Members: Announcements & Useful Links only; Admins: any channel). |
 | `/help` | None | Interactive command directory with category selector menu. |
 
 ### 🎮 Duels & Competitions
@@ -155,7 +156,6 @@ flowchart TD
 | `/setup-roles` | None | Manage Roles | Create and sync `CP`, CF Rank tiers, and Streak milestone roles (`7d` through `2+ yr`). |
 | `/custom-contest` | `add` / `edit` / `delete` / `list` | Manage Channels | Manage custom server contests on the radar & reminder schedule. |
 | `/force-unlink` | `member`, `platform` *(optional)* | Manage Server | Forcefully unlink or purge a member's accounts. |
-| `/announce` | `channel` *(optional)* | Mention Everyone | Open an announcement modal and broadcast with `@everyone`. |
 | `/set-bot` | `avatar` / `username` | Bot Owner | Update the bot avatar or username on Discord. |
 | `/backupdb` | None | Bot Owner | Upload a WAL-consistent `bigoof-backup-*.db` snapshot immediately. |
 | `/restoredb` | `source` (`latest`/`upload`), `database` | Bot Owner | Validate & restore the SQLite DB live from backup or attachment. |
@@ -223,7 +223,7 @@ npm start
 
 Inside your Discord server:
 1. Open **Server Settings → Roles** and make sure the **BigOof** bot role sits **above** `CP`, Codeforces rank, and streak roles so role assignment succeeds.
-2. Run `/set-channel feature:All Features channel:#cp-bot` (or bind individual channels per feature, including `#study-todo` via `feature:✅ Study To-Do`).
+2. Run `/set-channel feature:All Features channel:#cp-bot` (or bind individual channels per feature, including `#study-todo` via `feature:✅ Study To-Do` and `#useful-links` via `feature:🔗 Useful Links`).
 3. Run `/setup-roles` to create and sync `CP`, rank, and streak roles.
 4. Link your profiles with `/link platform:Codeforces handle:your_handle` (plus `AtCoder`, `Toph`, and `GitHub`).
    - *Migrating an existing database?* Run `/restoredb source:Upload a .db file manually` and attach your `.db` file directly in Discord.

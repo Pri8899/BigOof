@@ -43,7 +43,8 @@ const CATEGORIES = {
       { name: '`/leaderboard`', value: 'Display the server ranking leaderboard filtered to current members.' },
       { name: '`/suggest [tag] [rating] [div] [problems]`', value: 'Smart on-demand Codeforces problem recommender tailored to your rating.' },
       { name: '`/whosolved <link>`', value: 'Find everyone in this server who has solved a Codeforces problem.' },
-      { name: '`/ask-help <problem> [image1..image5]`', value: 'Request community hints with optional code/screenshot attachments.' }
+      { name: '`/ask-help <problem> [image1..image5]`', value: 'Request community hints with optional code/screenshot attachments.' },
+      { name: '`/announce [channel]`', value: 'Post a formatted card (optionally with a clickable link button) to `#announcements` or `#useful-links` (Admins: any channel).' }
     ]
   },
   competitions: {
@@ -78,7 +79,6 @@ const CATEGORIES = {
       { name: '`/setup-roles`', value: 'Create and assign `CP`, CF Rank tiers, and Streak roles (`7d` to `2+ yr`).' },
       { name: '`/custom-contest <add|edit|delete|list>`', value: 'Schedule, edit, list, or delete custom server contests.' },
       { name: '`/force-unlink <member> [platform]`', value: 'Admin command to unlink or purge accounts for a member.' },
-      { name: '`/announce [channel]`', value: 'Open an announcement modal and broadcast with `@everyone` mention.' },
       { name: '`/set-bot <avatar|username>`', value: 'Update bot avatar or username on Discord (Bot Owner only).' },
       { name: '`/backupdb` / `/restoredb`', value: 'Manage SQLite database backups & restores (Bot Owner only).' }
     ]
