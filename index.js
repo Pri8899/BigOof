@@ -77,6 +77,7 @@ client.once('ready', async () => {
   const { startContestWrapup } = require('./tasks/contestWrapup');
   const { startAutoBackup } = require('./tasks/autoBackup');
   const { startGitHubFeed } = require('./tasks/githubFeed');
+  const { startStudyTodo } = require('./tasks/studyTodo');
   const { initializeProblemCache } = require('./utils/codeforces');
   const { initVCRecovery } = require('./commands/vc');
 
@@ -92,6 +93,7 @@ client.once('ready', async () => {
   startContestWrapup(client);
   startAutoBackup(client);
   startGitHubFeed(client);
+  startStudyTodo(client);
 });
 
 client.on('error', err => console.error('[Client Error]', err));

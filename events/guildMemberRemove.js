@@ -14,6 +14,10 @@ module.exports = {
 
     if (!user) {
       console.log(`[guildMemberRemove] ${displayName} left ${guildName} (no linked accounts).`);
+      if (discordClient && member.guild?.id) {
+        const { recheckActiveStudyForms } = require('../tasks/studyTodo');
+        recheckActiveStudyForms(discordClient, member.guild.id).catch(() => {});
+      }
       return;
     }
 
@@ -49,6 +53,8 @@ module.exports = {
       updateDashboard(discordClient, member.guild.id).catch(err =>
         console.error('[guildMemberRemove] Dashboard update error:', err.message)
       );
+      const { recheckActiveStudyForms } = require('../tasks/studyTodo');
+      recheckActiveStudyForms(discordClient, member.guild.id).catch(() => {});
     }
   }
 };

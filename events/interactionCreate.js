@@ -1,5 +1,6 @@
-// events/interactionCreate.js — Centralized router for slash commands, autocomplete, & persistent buttons
+// events/interactionCreate.js — Centralized router for slash commands, autocomplete, buttons, selects, & modals
 const { handleGitHubSyncInteraction } = require('../tasks/githubFeed');
+const { handleStudyInteraction } = require('../tasks/studyTodo');
 
 module.exports = {
   name: 'interactionCreate',
@@ -13,6 +14,21 @@ module.exports = {
         } catch (err) {
           console.error('[Autocomplete Error]', err);
         }
+      }
+      return;
+    }
+
+    if (
+      (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) &&
+      interaction.customId.startsWith('study-')
+    ) {
+      try {
+        await handleStudyInteraction(interaction, client);
+      } catch (err) {
+        console.error('[StudyTodo Interaction Error]', err);
+        const reply = { content: `❌ Error: ${err.message}`, flags: 64 };
+        if (interaction.replied || interaction.deferred) await interaction.followUp(reply).catch(() => {});
+        else await interaction.reply(reply).catch(() => {});
       }
       return;
     }

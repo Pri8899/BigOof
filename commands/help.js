@@ -73,7 +73,7 @@ const CATEGORIES = {
     emoji: '⚙️',
     title: '⚙️ Server Administration Commands (Admin Only)',
     fields: [
-      { name: '`/set-channel <feature> <channel>`', value: 'Route contest radar, dashboard, feeds, daily challenges, and alerts.' },
+      { name: '`/set-channel <feature> <channel>`', value: 'Route contest radar, dashboard, feeds, daily challenges, study to-do, and alerts.' },
       { name: '`/view-channels`', value: 'Inspect all currently configured channels for this server.' },
       { name: '`/setup-roles`', value: 'Create and assign `CP`, CF Rank tiers, and Streak roles (`7d` to `2+ yr`).' },
       { name: '`/custom-contest <add|edit|delete|list>`', value: 'Schedule, edit, list, or delete custom server contests.' },

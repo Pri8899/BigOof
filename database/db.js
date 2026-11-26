@@ -179,6 +179,33 @@ function ensureSchema(instance) {
       author     TEXT,
       created_at INTEGER DEFAULT (strftime('%s','now'))
     );
+
+    CREATE TABLE IF NOT EXISTS study_forms (
+      id         TEXT PRIMARY KEY,
+      guild_id   TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      date_str   TEXT NOT NULL,
+      created_at INTEGER DEFAULT (strftime('%s','now')),
+      completed  INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS study_items (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      form_id    TEXT NOT NULL,
+      subject    TEXT NOT NULL,
+      details    TEXT NOT NULL,
+      added_by   TEXT NOT NULL,
+      updated_by TEXT,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS study_ticks (
+      item_id    INTEGER NOT NULL,
+      discord_id TEXT NOT NULL,
+      ticked_at  INTEGER DEFAULT (strftime('%s','now')),
+      PRIMARY KEY (item_id, discord_id)
+    );
   `);
 }
 
@@ -411,6 +438,7 @@ const purgeUser = makeTransaction((discordId) => {
   db.prepare('DELETE FROM vc_participants WHERE discord_id = ?').run(discordId);
   db.prepare('DELETE FROM virtual_contests WHERE started_by = ? AND ended = 0').run(discordId);
   db.prepare('DELETE FROM processed_submissions WHERE id LIKE ?').run(`%_prob_${discordId}_%`);
+  db.prepare('DELETE FROM study_ticks WHERE discord_id = ?').run(discordId);
   db.prepare('DELETE FROM ratings WHERE discord_id = ?').run(discordId);
   db.prepare('DELETE FROM last_submissions WHERE discord_id = ?').run(discordId);
   db.prepare('DELETE FROM streaks WHERE discord_id = ?').run(discordId);
@@ -833,6 +861,99 @@ function getHeadToHeadVersus(discordId1, discordId2) {
   }
 }
 
+// ─── Study To-Do Helpers ─────────────────────────────────────
+function createStudyForm(id, guildId, channelId, messageId, dateStr) {
+  db.prepare(`
+    INSERT INTO study_forms (id, guild_id, channel_id, message_id, date_str, completed)
+    VALUES (?, ?, ?, ?, ?, 0)
+  `).run(id, String(guildId), String(channelId), messageId || null, dateStr);
+}
+
+function getStudyForm(id) {
+  return db.prepare('SELECT * FROM study_forms WHERE id = ?').get(id);
+}
+
+function getStudyFormForDate(guildId, dateStr) {
+  return db.prepare(`
+    SELECT * FROM study_forms
+    WHERE guild_id = ? AND date_str = ?
+    ORDER BY created_at DESC LIMIT 1
+  `).get(String(guildId), dateStr);
+}
+
+function getActiveStudyForms(guildId = null) {
+  if (guildId) {
+    return db.prepare('SELECT * FROM study_forms WHERE guild_id = ? AND completed = 0 ORDER BY created_at ASC').all(String(guildId));
+  }
+  return db.prepare('SELECT * FROM study_forms WHERE completed = 0 ORDER BY created_at ASC').all();
+}
+
+function updateStudyFormMessage(id, messageId, dateStr = null) {
+  if (dateStr) {
+    db.prepare('UPDATE study_forms SET message_id = ?, date_str = ? WHERE id = ?').run(messageId, dateStr, id);
+  } else {
+    db.prepare('UPDATE study_forms SET message_id = ? WHERE id = ?').run(messageId, id);
+  }
+}
+
+const completeAndClearStudyForm = makeTransaction((id) => {
+  const info = db.prepare('UPDATE study_forms SET completed = 1, message_id = NULL WHERE id = ? AND completed = 0').run(id);
+  if (info.changes === 0) return false;
+  db.prepare('DELETE FROM study_ticks WHERE item_id IN (SELECT id FROM study_items WHERE form_id = ?)').run(id);
+  db.prepare('DELETE FROM study_items WHERE form_id = ?').run(id);
+  return true;
+});
+
+function addStudyItem(formId, subject, details, addedBy) {
+  const info = db.prepare(`
+    INSERT INTO study_items (form_id, subject, details, added_by)
+    VALUES (?, ?, ?, ?)
+  `).run(formId, subject, details, addedBy);
+  return Number(info.lastInsertRowid);
+}
+
+function getStudyItem(itemId) {
+  return db.prepare('SELECT * FROM study_items WHERE id = ?').get(Number(itemId));
+}
+
+function getStudyItems(formId) {
+  return db.prepare('SELECT * FROM study_items WHERE form_id = ? ORDER BY id ASC').all(formId);
+}
+
+function updateStudyItem(itemId, subject, details, updatedBy) {
+  const info = db.prepare(`
+    UPDATE study_items SET subject = ?, details = ?, updated_by = ?
+    WHERE id = ?
+  `).run(subject, details, updatedBy, Number(itemId));
+  return info.changes > 0;
+}
+
+const deleteStudyItem = makeTransaction((itemId) => {
+  const numId = Number(itemId);
+  db.prepare('DELETE FROM study_ticks WHERE item_id = ?').run(numId);
+  const info = db.prepare('DELETE FROM study_items WHERE id = ?').run(numId);
+  return info.changes > 0;
+});
+
+const addStudyTicks = makeTransaction((itemIds, discordId) => {
+  const stmt = db.prepare('INSERT OR IGNORE INTO study_ticks (item_id, discord_id) VALUES (?, ?)');
+  let added = 0;
+  for (const id of itemIds) {
+    const info = stmt.run(Number(id), discordId);
+    if (info.changes > 0) added++;
+  }
+  return added;
+});
+
+function getStudyTicksForForm(formId) {
+  return db.prepare(`
+    SELECT t.item_id, t.discord_id, t.ticked_at
+    FROM study_ticks t
+    JOIN study_items i ON i.id = t.item_id
+    WHERE i.form_id = ?
+  `).all(formId);
+}
+
 module.exports = {
   DB_PATH,
   db,
@@ -892,5 +1013,18 @@ module.exports = {
   updateVSParticipantScore,
   getActiveVSMatches,
   removeVSMatch,
-  getHeadToHeadVersus
+  getHeadToHeadVersus,
+  createStudyForm,
+  getStudyForm,
+  getStudyFormForDate,
+  getActiveStudyForms,
+  updateStudyFormMessage,
+  completeAndClearStudyForm,
+  addStudyItem,
+  getStudyItem,
+  getStudyItems,
+  updateStudyItem,
+  deleteStudyItem,
+  addStudyTicks,
+  getStudyTicksForForm
 };

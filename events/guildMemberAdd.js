@@ -67,5 +67,10 @@ module.exports = {
       .setTimestamp();
 
     await member.user.send({ embeds: [welcomeEmbed] }).catch(() => {});
+
+    if (member.client && member.guild?.id) {
+      const { recheckActiveStudyForms } = require('../tasks/studyTodo');
+      recheckActiveStudyForms(member.client, member.guild.id).catch(() => {});
+    }
   }
 };
