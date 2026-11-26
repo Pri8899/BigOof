@@ -1,4 +1,4 @@
-// commands/announce.js — Announcement & Useful Links publisher (Members: configured Announcements/Useful Links; Admins: any channel)
+// commands/announce.js — Formal Card & Quick-Paste publisher (Members: Announcements & Useful Links; Admins: any channel)
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -26,7 +26,12 @@ function isAnnounceAdmin(interaction) {
 }
 
 function isPostableTextChannel(ch) {
-  return Boolean(ch && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement || (ch.isTextBased?.() && !ch.isVoiceBased?.())));
+  return Boolean(
+    ch &&
+    (ch.type === ChannelType.GuildText ||
+      ch.type === ChannelType.GuildAnnouncement ||
+      (ch.isTextBased?.() && !ch.isVoiceBased?.()))
+  );
 }
 
 async function fetchConfiguredChannel(guild, configKey, envVarName) {
@@ -68,6 +73,9 @@ async function getMemberAllowedChannels(guild, member = null) {
 function resolveAnyGuildChannel(guild, rawInput) {
   if (!guild || !rawInput) return null;
   const trimmed = rawInput.trim();
+  const direct = guild.channels.cache.get(trimmed);
+  if (direct) return isPostableTextChannel(direct) ? direct : null;
+
   const idMatch = trimmed.match(/^<#(\d+)>$/) || trimmed.match(/^(\d{15,25})$/);
   if (idMatch) {
     const ch = guild.channels.cache.get(idMatch[1]);
@@ -81,7 +89,11 @@ function resolveAnyGuildChannel(guild, rawInput) {
     || null;
 }
 
-async function openAnnounceModalAndPost(triggerInteraction, targetChannel, { isAdmin, usefulLinksChannelId }) {
+async function openAnnounceModalAndPost(
+  triggerInteraction,
+  targetChannel,
+  { isAdmin, usefulLinksChannelId, mode = 'card', pingOption = null }
+) {
   const guild = triggerInteraction.guild;
   const me = guild.members.me;
   const perms = me && targetChannel?.permissionsFor(me);
@@ -101,33 +113,23 @@ async function openAnnounceModalAndPost(triggerInteraction, targetChannel, { isA
   }
 
   const isUsefulLinks = Boolean(usefulLinksChannelId && targetChannel.id === usefulLinksChannelId);
+  const isPasteMode = mode === 'paste';
   const modalId = `announcementModal_${triggerInteraction.id}`;
+
   const modal = new ModalBuilder()
     .setCustomId(modalId)
-    .setTitle(isUsefulLinks ? 'Post Useful Link / Resource' : 'Post Announcement');
-
-  const titleInput = new TextInputBuilder()
-    .setCustomId('announcementTitle')
-    .setLabel('Card Title (Optional)')
-    .setStyle(TextInputStyle.Short)
-    .setMaxLength(150)
-    .setPlaceholder(isUsefulLinks ? 'e.g. Semester 2.2 Archive (#Quanta-52_2.2_.zip)' : 'e.g. Community Announcement')
-    .setRequired(false);
-
-  const messageInput = new TextInputBuilder()
-    .setCustomId('announcementMessage')
-    .setLabel('Content / Description')
-    .setStyle(TextInputStyle.Paragraph)
-    .setMaxLength(3900)
-    .setPlaceholder('Type your message or resource details here... (Markdown & links supported)')
-    .setRequired(true);
+    .setTitle(
+      isPasteMode
+        ? (isUsefulLinks ? 'Paste Useful Link Post' : 'Paste Full Announcement')
+        : (isUsefulLinks ? 'Post Useful Link / Resource' : 'Post Announcement')
+    );
 
   const btnLabelInput = new TextInputBuilder()
     .setCustomId('buttonLabel')
     .setLabel('Clickable Button Label (Optional)')
     .setStyle(TextInputStyle.Short)
     .setMaxLength(80)
-    .setPlaceholder('e.g. 📦 Download Archive ↗️')
+    .setPlaceholder('e.g. Download Archive')
     .setRequired(false);
 
   const btnUrlInput = new TextInputBuilder()
@@ -138,12 +140,44 @@ async function openAnnounceModalAndPost(triggerInteraction, targetChannel, { isA
     .setPlaceholder('https://drive.google.com/...')
     .setRequired(false);
 
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(titleInput),
-    new ActionRowBuilder().addComponents(messageInput),
-    new ActionRowBuilder().addComponents(btnLabelInput),
-    new ActionRowBuilder().addComponents(btnUrlInput)
-  );
+  if (isPasteMode) {
+    const fullInput = new TextInputBuilder()
+      .setCustomId('announcementMessage')
+      .setLabel('Paste Full Content Here')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(4000)
+      .setPlaceholder('Paste your complete announcement or resource message (Markdown supported)...')
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(fullInput),
+      new ActionRowBuilder().addComponents(btnLabelInput),
+      new ActionRowBuilder().addComponents(btnUrlInput)
+    );
+  } else {
+    const titleInput = new TextInputBuilder()
+      .setCustomId('announcementTitle')
+      .setLabel('Card Title (Optional)')
+      .setStyle(TextInputStyle.Short)
+      .setMaxLength(150)
+      .setPlaceholder(isUsefulLinks ? 'e.g. Semester 2.2 Course Materials — Quanta-52' : 'e.g. Important Schedule Update')
+      .setRequired(false);
+
+    const messageInput = new TextInputBuilder()
+      .setCustomId('announcementMessage')
+      .setLabel('Content / Description')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(3900)
+      .setPlaceholder('Write clean details here... (Markdown supported)')
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(titleInput),
+      new ActionRowBuilder().addComponents(messageInput),
+      new ActionRowBuilder().addComponents(btnLabelInput),
+      new ActionRowBuilder().addComponents(btnUrlInput)
+    );
+  }
 
   await triggerInteraction.showModal(modal);
 
@@ -155,7 +189,9 @@ async function openAnnounceModalAndPost(triggerInteraction, targetChannel, { isA
   if (!submitted) return;
   await submitted.deferReply({ flags: 64 });
 
-  const customTitle = submitted.fields.getTextInputValue('announcementTitle').trim();
+  const customTitle = !isPasteMode
+    ? submitted.fields.getTextInputValue('announcementTitle').trim()
+    : '';
   const messageContent = submitted.fields.getTextInputValue('announcementMessage').trim();
   let buttonLabel = submitted.fields.getTextInputValue('buttonLabel').trim();
   const rawButtonUrl = submitted.fields.getTextInputValue('buttonUrl').trim();
@@ -183,27 +219,28 @@ async function openAnnounceModalAndPost(triggerInteraction, targetChannel, { isA
   }
 
   try {
-    const embedTitle = customTitle
-      ? `${isUsefulLinks ? '🔗' : '📢'} ${customTitle}`.slice(0, 256)
-      : (isUsefulLinks ? '🔗 Useful Resource' : '📢 Community Announcement');
-
-    const announcementEmbed = new EmbedBuilder()
+    const embed = new EmbedBuilder()
       .setColor(isUsefulLinks ? 0x00BCD4 : 0x5865F2)
       .setAuthor({
         name: `${guild.name} · ${isUsefulLinks ? 'Useful Links' : (isAdmin ? 'Official Announcement' : 'Community Announcement')}`,
         iconURL: guild.iconURL({ dynamic: true }) || triggerInteraction.client.user.displayAvatarURL()
       })
-      .setTitle(embedTitle)
-      .setDescription(
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `${messageContent}\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
-      )
+      .setDescription(messageContent)
       .setFooter({
         text: `Posted by ${triggerInteraction.user.tag}`,
         iconURL: triggerInteraction.user.displayAvatarURL({ dynamic: true })
       })
       .setTimestamp();
+
+    if (!isPasteMode) {
+      embed.setTitle(
+        customTitle
+          ? customTitle.slice(0, 256)
+          : (isUsefulLinks ? 'Useful Resource' : 'Community Announcement')
+      );
+    } else if (customTitle) {
+      embed.setTitle(customTitle.slice(0, 256));
+    }
 
     const components = [];
     if (validatedUrl) {
@@ -217,10 +254,13 @@ async function openAnnounceModalAndPost(triggerInteraction, targetChannel, { isA
       );
     }
 
-    const canPingEveryone = isAdmin && perms.has(PermissionFlagsBits.MentionEveryone);
+    // Only Admins can trigger @everyone; default is ON for announcements/other channels and OFF for Useful Links unless specified
+    const wantsPing = pingOption !== null ? Boolean(pingOption) : !isUsefulLinks;
+    const canPingEveryone = isAdmin && wantsPing && perms.has(PermissionFlagsBits.MentionEveryone);
+
     const sendPayload = {
       content: canPingEveryone ? '@everyone' : undefined,
-      embeds: [announcementEmbed],
+      embeds: [embed],
       components
     };
     if (!isAdmin) {
@@ -233,17 +273,14 @@ async function openAnnounceModalAndPost(triggerInteraction, targetChannel, { isA
       embeds: [successEmbed(
         isUsefulLinks ? 'Resource Posted!' : 'Announcement Sent!',
         `Posted cleanly to ${targetChannel}` +
-        (validatedUrl ? ` with clickable button **${buttonLabel}**` : '') +
-        (isAdmin ? (canPingEveryone ? ' (`@everyone` pinged).' : ' (without `@everyone` — bot lacks Mention Everyone permission).') : '.')
+        (validatedUrl ? ` with button **${buttonLabel}**` : '') +
+        (canPingEveryone ? ' (`@everyone` pinged).' : '.')
       )]
     });
   } catch (err) {
     console.error('[announce] Failed to send message:', err.message);
     return submitted.editReply({
-      embeds: [errorEmbed(
-        'Failed to Send',
-        `Could not post to ${targetChannel}: ${err.message}`
-      )]
+      embeds: [errorEmbed('Failed to Send', `Could not post to ${targetChannel}: ${err.message}`)]
     });
   }
 }
@@ -252,12 +289,26 @@ module.exports = {
   guildOnly: true,
   data: new SlashCommandBuilder()
     .setName('announce')
-    .setDescription('Post an announcement or link card (Admins: any channel; Members: 2 set channels)')
+    .setDescription('Post an announcement or useful link (Admins: any channel; Members: 2 set channels)')
     .addStringOption(opt =>
       opt.setName('channel')
         .setDescription('Target channel (Admins: any; Members: Announcements & Useful Links only)')
         .setRequired(false)
         .setAutocomplete(true)
+    )
+    .addStringOption(opt =>
+      opt.setName('mode')
+        .setDescription('Choose Formal Card fields or Paste Whole Thing')
+        .setRequired(false)
+        .addChoices(
+          { name: '📝 Formal Card (Title + Content + Optional Button)', value: 'card' },
+          { name: '📋 Paste Whole Thing (Single Box + Optional Button)', value: 'paste' }
+        )
+    )
+    .addBooleanOption(opt =>
+      opt.setName('ping')
+        .setDescription('Ping @everyone? (Admin only — default: On for Announcements, Off for Useful Links)')
+        .setRequired(false)
     ),
 
   async autocomplete(interaction) {
@@ -282,7 +333,6 @@ module.exports = {
       return interaction.respond(choices).catch(() => {});
     }
 
-    // Admins see configured presets first + every text/announcement channel in the guild
     await guild.channels.fetch().catch(() => {});
     const allowed = await getMemberAllowedChannels(guild, null);
     const seenIds = new Set();
@@ -319,6 +369,8 @@ module.exports = {
     const guild = interaction.guild;
     const isAdmin = isAnnounceAdmin(interaction);
     const rawChannelOpt = interaction.options.getString('channel')?.trim() || null;
+    const mode = interaction.options.getString('mode') || 'card';
+    const pingOption = interaction.options.getBoolean('ping');
 
     const usefulLinksCh = await fetchConfiguredChannel(guild, 'useful_links_channel_id', 'USEFUL_LINKS_CHANNEL_ID');
     const usefulLinksChannelId = usefulLinksCh?.id || null;
@@ -355,14 +407,23 @@ module.exports = {
           });
         }
 
-        return openAnnounceModalAndPost(interaction, match.channel, { isAdmin: false, usefulLinksChannelId });
+        return openAnnounceModalAndPost(interaction, match.channel, {
+          isAdmin: false,
+          usefulLinksChannelId,
+          mode,
+          pingOption: false
+        });
       }
 
       if (allowed.length === 1) {
-        return openAnnounceModalAndPost(interaction, allowed[0].channel, { isAdmin: false, usefulLinksChannelId });
+        return openAnnounceModalAndPost(interaction, allowed[0].channel, {
+          isAdmin: false,
+          usefulLinksChannelId,
+          mode,
+          pingOption: false
+        });
       }
 
-      // If both channels exist and member didn't specify one, show ONLY the 2 allowed channels cleanly
       const select = new StringSelectMenuBuilder()
         .setCustomId(`announce_pick_${interaction.id}`)
         .setPlaceholder('Choose where to post (Announcements or Useful Links)...')
@@ -397,10 +458,14 @@ module.exports = {
         return picked.update({ content: '❌ Selected channel is no longer available.', components: [] }).catch(() => {});
       }
 
-      return openAnnounceModalAndPost(picked, selectedEntry.channel, { isAdmin: false, usefulLinksChannelId });
+      return openAnnounceModalAndPost(picked, selectedEntry.channel, {
+        isAdmin: false,
+        usefulLinksChannelId,
+        mode,
+        pingOption: false
+      });
     }
 
-    // ── Admin Path: Can announce in ANY channel in the server ──
     let targetChannel = null;
     if (rawChannelOpt) {
       targetChannel = resolveAnyGuildChannel(guild, rawChannelOpt);
@@ -415,6 +480,11 @@ module.exports = {
         || interaction.channel;
     }
 
-    return openAnnounceModalAndPost(interaction, targetChannel, { isAdmin: true, usefulLinksChannelId });
+    return openAnnounceModalAndPost(interaction, targetChannel, {
+      isAdmin: true,
+      usefulLinksChannelId,
+      mode,
+      pingOption
+    });
   }
 };

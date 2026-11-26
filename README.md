@@ -136,7 +136,7 @@ flowchart TD
 | `/whosolved` | `link` | Find current server members who solved a given Codeforces problem URL. |
 | `/suggest` | `tag`, `rating`, `div`, `problems` *(all optional)* | Suggest unsolved Codeforces problems tailored to your filters. |
 | `/ask-help` | `problem`, `image1`..`image5` *(optional)* | Request community hints with optional code/screenshot images. |
-| `/announce` | `channel` *(optional, autocomplete)* | Post a formatted card with optional hidden-URL button (Members: Announcements & Useful Links only; Admins: any channel). |
+| `/announce` | `channel`, `mode`, `ping` *(all optional)* | Post a clean Formal Card (`card`) or Paste Whole Thing (`paste`) with an optional hidden-URL button (Members: Announcements & Useful Links only; Admins: any channel). |
 | `/help` | None | Interactive command directory with category selector menu. |
 
 ### 🎮 Duels & Competitions

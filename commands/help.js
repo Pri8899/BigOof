@@ -44,7 +44,7 @@ const CATEGORIES = {
       { name: '`/suggest [tag] [rating] [div] [problems]`', value: 'Smart on-demand Codeforces problem recommender tailored to your rating.' },
       { name: '`/whosolved <link>`', value: 'Find everyone in this server who has solved a Codeforces problem.' },
       { name: '`/ask-help <problem> [image1..image5]`', value: 'Request community hints with optional code/screenshot attachments.' },
-      { name: '`/announce [channel]`', value: 'Post a formatted card (optionally with a clickable link button) to `#announcements` or `#useful-links` (Admins: any channel).' }
+      { name: '`/announce [channel] [mode] [ping]`', value: 'Post a clean Formal Card or Paste Whole Thing (plus optional clickable link button) to `#announcements` / `#useful-links` (Admins: any channel).' }
     ]
   },
   competitions: {
