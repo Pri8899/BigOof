@@ -69,42 +69,105 @@ async function getGitHubUser(username) {
 }
 
 /**
- * Fetch recent public GitHub events for a user (supports conditional ETag requests to avoid burning rate limits).
+ * Shared conditional GET helper with ETag caching so polling returns 304 without burning rate limit.
  */
-async function getUserRecentEvents(username, { useETag = false, withMeta = false, etagKey = null } = {}) {
-  const cacheKey = String(etagKey || username).toLowerCase();
+async function fetchWithETag(url, { params = {}, useETag = false, etagKey = null, timeout = 10000 } = {}) {
+  const cacheKey = etagKey ? String(etagKey).toLowerCase() : null;
   const headers = getGitHubHeaders();
-  if (useETag) {
-    const cachedEtag = eventEtagCache.get(cacheKey);
-    if (cachedEtag) headers['If-None-Match'] = cachedEtag;
+  if (useETag && cacheKey) {
+    const cached = eventEtagCache.get(cacheKey);
+    if (cached) headers['If-None-Match'] = cached;
   }
 
   try {
-    const res = await axios.get(`${GITHUB_API}/users/${encodeURIComponent(username)}/events/public`, {
-      params: { per_page: 30 },
+    const res = await axios.get(url, {
+      params,
       headers,
-      timeout: 10000,
+      timeout,
       validateStatus: status => status === 200 || status === 304
     });
 
     if (res.status === 304) {
-      return withMeta ? { events: [], notModified: true, rateLimited: false } : [];
+      return { data: [], notModified: true, rateLimited: false };
     }
 
-    if (res.headers?.etag) {
+    if (cacheKey && res.headers?.etag) {
       eventEtagCache.set(cacheKey, res.headers.etag);
     }
 
-    const filtered = Array.isArray(res.data)
-      ? res.data.filter(event => SUPPORTED_EVENT_TYPES.has(event.type))
-      : [];
-    return withMeta ? { events: filtered, notModified: false, rateLimited: false } : filtered;
+    return {
+      data: Array.isArray(res.data) ? res.data : [],
+      notModified: false,
+      rateLimited: false
+    };
   } catch (err) {
     const status = err.response?.status;
     const rateLimited = status === 403 || status === 429;
-    console.error(`[GitHub] Error fetching events for ${username}:`, err.message);
-    return withMeta ? { events: [], notModified: false, rateLimited } : [];
+    console.error(`[GitHub] GET ${url} failed:`, err.message);
+    return { data: [], notModified: false, rateLimited };
   }
+}
+
+/**
+ * Fetch public repositories sorted by most recent push timestamp (reliable real-time push detection).
+ */
+async function getUserPushedRepos(username, { useETag = false, etagKey = null, perPage = 15 } = {}) {
+  const res = await fetchWithETag(`${GITHUB_API}/users/${encodeURIComponent(username)}/repos`, {
+    params: { type: 'all', sort: 'pushed', per_page: perPage },
+    useETag,
+    etagKey: etagKey || `repos:${username}`,
+    timeout: 10000
+  });
+  return { repos: res.data, notModified: res.notModified, rateLimited: res.rateLimited };
+}
+
+/**
+ * Fetch recent commits on a repository with exact committer/author dates and logins.
+ */
+async function getRepoRecentCommits(repoFullName, { sinceIso = null, perPage = 10 } = {}) {
+  try {
+    const safeRepo = repoFullName.split('/').map(encodeURIComponent).join('/');
+    const params = { per_page: perPage };
+    if (sinceIso) params.since = sinceIso;
+
+    const res = await axios.get(`${GITHUB_API}/repos/${safeRepo}/commits`, {
+      params,
+      headers: getGitHubHeaders(),
+      timeout: 10000
+    });
+    if (res.status !== 200 || !Array.isArray(res.data)) return [];
+    return res.data.map(c => ({
+      sha: c.sha,
+      shortSha: c.sha.substring(0, 7),
+      message: c.commit?.message || 'Commit pushed',
+      date: c.commit?.committer?.date || c.commit?.author?.date || null,
+      authorLogin: c.author?.login || null,
+      committerLogin: c.committer?.login || null,
+      url: c.html_url
+    }));
+  } catch (err) {
+    if (err.response?.status !== 409) { // 409 = empty git repository
+      console.warn(`[GitHub] Error fetching commits for ${repoFullName}:`, err.message);
+    }
+    return [];
+  }
+}
+
+/**
+ * Fetch recent public GitHub events for a user (secondary feed for PRs, issues, releases, branches, forks).
+ */
+async function getUserRecentEvents(username, { useETag = false, withMeta = false, etagKey = null } = {}) {
+  const res = await fetchWithETag(`${GITHUB_API}/users/${encodeURIComponent(username)}/events/public`, {
+    params: { per_page: 30 },
+    useETag,
+    etagKey: etagKey || `events:${username}`,
+    timeout: 10000
+  });
+  if (res.notModified || res.rateLimited) {
+    return withMeta ? { events: [], notModified: res.notModified, rateLimited: res.rateLimited } : [];
+  }
+  const filtered = res.data.filter(event => SUPPORTED_EVENT_TYPES.has(event.type));
+  return withMeta ? { events: filtered, notModified: false, rateLimited: false } : filtered;
 }
 
 /**
@@ -187,6 +250,8 @@ function detectLanguage(filename) {
 module.exports = {
   validateGitHubUser,
   getGitHubUser,
+  getUserPushedRepos,
+  getRepoRecentCommits,
   getUserRecentEvents,
   getCommitDetails,
   detectLanguage

@@ -129,20 +129,19 @@ async function autoRestoreIfEmpty(client) {
 function startAutoBackup(client) {
   const tz = getTimeZone();
 
+  // Take a clean initial snapshot once any DB restore check has already completed in index.js
   setTimeout(async () => {
-    await autoRestoreIfEmpty(client);
-    // Only snapshot at boot once any empty-DB restore check has completed and users exist
     const users = getAllUsers();
     if (users && users.length > 0) {
       await runBackup(client);
     }
-  }, 5000);
+  }, 30000);
 
   cron.schedule('0 * * * *', () => {
     runBackup(client);
   }, { timezone: tz, noOverlap: true });
 
-  console.log(`[Backup] Auto-backup task started (hourly in ${tz} + boot check).`);
+  console.log(`[Backup] Auto-backup task started (hourly in ${tz}).`);
 }
 
 module.exports = { startAutoBackup, runBackup, autoRestoreIfEmpty, getBackupChannel };

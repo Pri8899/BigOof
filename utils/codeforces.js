@@ -274,6 +274,17 @@ async function initializeProblemCache() {
   }
 }
 
+function getContestDivisionFlags(contestName) {
+  const lower = String(contestName || '').toLowerCase();
+  const isCombined = lower.includes('div. 1 + div. 2');
+  return {
+    div1: /div\.?\s*1\b/i.test(lower) || lower.includes('global') || isCombined,
+    div2: /div\.?\s*2\b/i.test(lower) || lower.includes('educational') || isCombined,
+    div3: /div\.?\s*3\b/i.test(lower),
+    div4: /div\.?\s*4\b/i.test(lower)
+  };
+}
+
 function matchesDivision(contestName, division, rating = null) {
   if (!contestName) {
     if (!rating) return true;
@@ -284,17 +295,8 @@ function matchesDivision(contestName, division, rating = null) {
     return true;
   }
 
-  const lowerName = contestName.toLowerCase();
-  const hasDiv1 = /div\.?\s*1\b/i.test(lowerName) || lowerName.includes('global') || lowerName.includes('div. 1 + div. 2');
-  const hasDiv2 = /div\.?\s*2\b/i.test(lowerName) || lowerName.includes('educational') || lowerName.includes('div. 1 + div. 2');
-  const hasDiv3 = /div\.?\s*3\b/i.test(lowerName);
-  const hasDiv4 = /div\.?\s*4\b/i.test(lowerName);
-
-  if (division === 'div1') return hasDiv1;
-  if (division === 'div2') return hasDiv2;
-  if (division === 'div3') return hasDiv3;
-  if (division === 'div4') return hasDiv4;
-  return true;
+  const flags = getContestDivisionFlags(contestName);
+  return division in flags ? flags[division] : true;
 }
 
 function filterProblemCandidates(problems, minRating, maxRating, tag, excludeIds, division, excludeTags, contestMap) {
@@ -464,16 +466,11 @@ async function getCFDivisionBreakdown(handle) {
 
         const contestName = contestMap ? contestMap[sub.problem.contestId] : null;
         if (contestName) {
-          const lowerName = contestName.toLowerCase();
-          const hasDiv1 = /div\.?\s*1\b/i.test(lowerName) || lowerName.includes('global');
-          const hasDiv2 = /div\.?\s*2\b/i.test(lowerName) || lowerName.includes('educational');
-          const hasDiv3 = /div\.?\s*3\b/i.test(lowerName);
-          const hasDiv4 = /div\.?\s*4\b/i.test(lowerName);
-
-          if (hasDiv1) breakdown.div1++;
-          else if (hasDiv2) breakdown.div2++;
-          else if (hasDiv3) breakdown.div3++;
-          else if (hasDiv4) breakdown.div4++;
+          const flags = getContestDivisionFlags(contestName);
+          if (flags.div1) breakdown.div1++;
+          else if (flags.div2) breakdown.div2++;
+          else if (flags.div3) breakdown.div3++;
+          else if (flags.div4) breakdown.div4++;
           else breakdown.others++;
         } else {
           breakdown.others++;

@@ -68,6 +68,7 @@ client.once('ready', async () => {
 
   client.user.setActivity('CP Contests 🏆', { type: 3 });
 
+  const { startAutoBackup, autoRestoreIfEmpty } = require('./tasks/autoBackup');
   const { startContestFetcher } = require('./tasks/contestFetcher');
   const { startRatingSync } = require('./tasks/ratingSync');
   const { startDailyChallenge } = require('./tasks/dailyChallenge');
@@ -75,11 +76,13 @@ client.once('ready', async () => {
   const { startWeeklyWrapup } = require('./tasks/weeklyWrapup');
   const { startVSPoller } = require('./tasks/vsPoller');
   const { startContestWrapup } = require('./tasks/contestWrapup');
-  const { startAutoBackup } = require('./tasks/autoBackup');
   const { startGitHubFeed } = require('./tasks/githubFeed');
   const { startStudyTodo } = require('./tasks/studyTodo');
   const { initializeProblemCache } = require('./utils/codeforces');
   const { initVCRecovery } = require('./commands/vc');
+
+  // Recover SQLite snapshot FIRST on fresh container boots before any scheduler reads/writes DB
+  await autoRestoreIfEmpty(client).catch(err => console.error('[Startup] Auto-restore error:', err.message));
 
   initializeProblemCache().catch(err => console.error('[Startup] Cache warm-up failed:', err.message));
   initVCRecovery(client).catch(err => console.error('[Startup] VC recovery failed:', err.message));

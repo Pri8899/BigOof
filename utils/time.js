@@ -159,7 +159,6 @@ function calculateStreakFromTimestamps(timestampsSeconds, tz = getTimeZone()) {
 module.exports = {
   getTimeZone,
   getLocalParts,
-  getTzOffsetMinutes,
   zonedDateTimeToUnix,
   isValidCalendarDate,
   calculateStreakFromTimestamps

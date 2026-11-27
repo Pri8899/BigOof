@@ -736,17 +736,6 @@ function setConfig(key, value, guildId = 'global') {
   `).run(gid, key, value !== null && value !== undefined ? String(value) : null);
 }
 
-function deleteConfig(key, guildId = 'global') {
-  const gid = guildId ? String(guildId) : 'global';
-  db.prepare('DELETE FROM guild_config WHERE guild_id = ? AND key = ?').run(gid, key);
-}
-
-function getAllGuildConfigs(key) {
-  return db.prepare(
-    "SELECT guild_id, value FROM guild_config WHERE key = ? AND guild_id != 'global' AND value IS NOT NULL"
-  ).all(key);
-}
-
 function getFullGuildConfig(guildId) {
   const gid = guildId ? String(guildId) : 'global';
   const rows = db.prepare('SELECT key, value FROM guild_config WHERE guild_id = ?').all(gid);
@@ -1027,8 +1016,6 @@ module.exports = {
   getContestByUrl,
   getConfig,
   setConfig,
-  deleteConfig,
-  getAllGuildConfigs,
   getFullGuildConfig,
   insertRatingHistory,
   getRatingHistory,

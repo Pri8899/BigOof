@@ -3,6 +3,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getUser, getRatingHistory } = require('../database/db');
 const { errorEmbed, resolveTargetMeta } = require('../utils/embeds');
 const { getPlatformEmojis, PLATFORM_INFO } = require('../utils/emojis');
+const { getTimeZone, getLocalParts } = require('../utils/time');
 
 const PLATFORM_COLORS = { cf: '#1F8DD6', ac: '#E74C3C', toph: '#7B2FBE' };
 
@@ -53,9 +54,10 @@ module.exports = {
       });
     }
 
+    const tz = getTimeZone();
     const labels = history.map(h => {
-      const d = new Date(h.recorded_at * 1000);
-      return `${d.getMonth() + 1}/${d.getDate()}`;
+      const p = getLocalParts(new Date(h.recorded_at * 1000), tz);
+      return `${p.month}/${p.day}`;
     });
     const ratings = history.map(h => h.rating);
 

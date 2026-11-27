@@ -437,7 +437,6 @@ async function getCalendarEmojisForDates(client, dateInputs = [], tz = getTimeZo
 
 module.exports = {
   renderCalendarPng,
-  resolveCalendarDateInfo,
   resolveCalendarDateKey,
   getCalendarEmoji,
   getCalendarEmojisForDates

@@ -723,19 +723,38 @@ function buildGitHubActivityEmbed(user, event, commitDetails = null) {
 
   if (event.type === 'PushEvent') {
     const branch = event.payload?.ref?.replace('refs/heads/', '') || 'main';
-    const commitUrl = commitDetails?.commitUrl || repoUrl;
-    const rawMsg = commitDetails?.message || event.payload?.commits?.[0]?.message || 'Pushed new changes';
-    const commitMsg = rawMsg.split('\n')[0].slice(0, 300);
+    const commitUrl = commitDetails?.commitUrl || event.payload?.commits?.[0]?.url || repoUrl;
+    const grouped = Array.isArray(commitDetails?.groupedCommits) && commitDetails.groupedCommits.length > 1
+      ? commitDetails.groupedCommits
+      : null;
+
     const shortSha = commitDetails?.shortSha || event.payload?.head?.slice(0, 7) || 'commit';
     const filesCount = commitDetails?.files?.length ?? event.payload?.commits?.length ?? 1;
     const stats = commitDetails?.stats;
     const topFile = commitDetails?.files?.[0]?.filename;
     const lang = topFile ? detectLanguage(topFile) : null;
 
+    let bodyLines;
+    if (grouped) {
+      const displayList = grouped.slice(-5).map(c => {
+        const msgFirstLine = String(c.message || 'Commit pushed').split('\n')[0].slice(0, 120);
+        const link = c.url ? `[\`${c.shortSha}\`](${c.url})` : `\`${c.shortSha}\``;
+        return `> • ${link} ${msgFirstLine}`;
+      });
+      if (grouped.length > 5) {
+        displayList.unshift(`> *…and ${grouped.length - 5} earlier commit(s) in this push*`);
+      }
+      bodyLines = displayList;
+    } else {
+      const rawMsg = commitDetails?.message || event.payload?.commits?.[0]?.message || 'Pushed new changes';
+      const commitMsg = rawMsg.split('\n')[0].slice(0, 300);
+      bodyLines = [`> **${commitMsg}**`];
+    }
+
     const lines = [
-      `🚀 ${actorMention} pushed to **\`${repoName}\`**`,
+      `🚀 ${actorMention} pushed${grouped ? ` **${grouped.length} commits**` : ''} to **\`${repoName}\`**`,
       '',
-      `> **${commitMsg}**`,
+      ...bodyLines,
       `🌿 **Branch:** \`${branch}\` · 📁 **Files:** \`${filesCount}\`${stats ? ` · \`+${stats.additions}/-${stats.deletions}\`` : ''}${lang ? ` · ${lang.emoji} ${lang.name}` : ''}${timeSuffix}`,
       `[**Inspect Commit [${shortSha}] on GitHub ↗️**](${commitUrl})`
     ];
@@ -743,7 +762,12 @@ function buildGitHubActivityEmbed(user, event, commitDetails = null) {
     return new EmbedBuilder()
       .setColor(0x2EA44F)
       .setAuthor({ name: `${actor} · GitHub Push`, iconURL: event.actor?.avatar_url, url: repoUrl })
-      .setTitle(`🔨 Push to ${repoName} [${shortSha}]`.slice(0, 256))
+      .setTitle(
+        (grouped
+          ? `🔨 Push to ${repoName} (${grouped.length} commits) [${shortSha}]`
+          : `🔨 Push to ${repoName} [${shortSha}]`
+        ).slice(0, 256)
+      )
       .setURL(commitUrl)
       .setDescription(lines.join('\n'))
       .setFooter({ text: 'BigOof GitHub Stream' })
@@ -800,12 +824,8 @@ module.exports = {
   buildGitHubActivityEmbed,
   buildCompareEmbed,
   getCFRankColor,
-  getStreakBadge,
   resolveTargetMeta,
-  renderProgressBar,
-  isICPCProblem,
   STREAK_ROLES,
   CF_ROLES,
-  COLORS,
   PLATFORM_ICONS
 };

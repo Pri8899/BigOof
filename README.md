@@ -107,7 +107,7 @@ flowchart TD
 - **⏰ Contest Radar & Auto-Expiring 24h/1h Reminders:** Aggregates upcoming contests across Codeforces, AtCoder, Toph, and server custom contests (`/custom-contest`), replacing the radar overview every 12 hours, rendering dynamic date-matching calendar badges (`NOV 27`, `DEC 01`, etc.) across reminders, schedules, daily challenges, and Study To-Do boards via Discord Application Emojis, and automatically deleting 24h/1h reminder alerts once each contest finishes.
 - **⚔️ 3x3 Battle Grid & Duels (`/vs`):** Real-time 1v1 or multiplayer 9-problem Battle Grid (1st AC scores 100%, later solves score 1/3) or Classic time-decay race, synced every 15 seconds with lock protection.
 - **🏁 Persistent Virtual Contests (`/vc`):** Simulated individual or multi-team Codeforces rounds with restart recovery and contest-window timestamp verification.
-- **🐙 GitHub Stream:** Tracks live public commits, PRs, releases, branches, and forks with ETag conditional polling, baseline cursor seeding (no stale history dumps), and true GitHub event timestamps (link via `/link`, view cards & 24h manual sync via `/github`, supports `GITHUB_TOKEN` for 5,000 req/hr).
+- **🐙 GitHub Stream:** Tracks live commits, multi-commit bursts, PRs, releases, branches, and forks in real time via repository push monitoring (`/users/:user/repos?sort=pushed` + `/commits`) paired with ETag caching, baseline cursor seeding, and accurate commit timestamps (link via `/link`, view cards & 24h manual sync via `/github`, supports `GITHUB_TOKEN` for 5,000 req/hr).
 
 ---
 
