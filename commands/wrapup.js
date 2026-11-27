@@ -7,6 +7,8 @@ const {
   buildContestWrapupEmbed,
   getWrapupChannel
 } = require('../tasks/contestWrapup');
+const { getCalendarEmoji } = require('../utils/calendarEmoji');
+const { getTimeZone } = require('../utils/time');
 
 let cachedFinishedContests = [];
 let lastFinishedFetch = 0;
@@ -103,7 +105,10 @@ module.exports = {
       });
     }
 
-    const embed = buildContestWrapupEmbed(targetContest, memberResults);
+    const calEmoji = targetContest.startTimeSeconds
+      ? await getCalendarEmoji(interaction.client, targetContest.startTimeSeconds, getTimeZone())
+      : null;
+    const embed = buildContestWrapupEmbed(targetContest, memberResults, { calEmoji });
 
     if (shouldBroadcast) {
       const channel = getWrapupChannel(guild);

@@ -5,6 +5,7 @@ const { postContestSummary, deleteContestRemindersFromDiscord } = require('../..
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
 const { chunkLines } = require('../../utils/envHelper');
 const { getTimeZone, getLocalParts, zonedDateTimeToUnix, isValidCalendarDate } = require('../../utils/time');
+const { getCalendarEmojisForDates, resolveCalendarDateKey } = require('../../utils/calendarEmoji');
 
 function parseDuration(str) {
   if (!str) return null;
@@ -307,9 +308,16 @@ module.exports = {
         return interaction.reply({ content: '⏰ No custom contests are currently scheduled.', flags: 64 });
       }
 
+      const dateEmojis = await getCalendarEmojisForDates(
+        interaction.client,
+        contests.map(c => c.start_time).filter(Boolean),
+        TZ
+      );
+
       const lines = contests.map((c, i) => {
         const timeLabel = c.start_time ? `<t:${c.start_time}:F>` : 'Date: N/A';
-        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n     🕒 ${timeLabel}`;
+        const rowCal = c.start_time ? (dateEmojis.get(resolveCalendarDateKey(c.start_time, TZ)) || '🕒') : '🕒';
+        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n     ${rowCal} ${timeLabel}`;
       });
 
       const embed = successEmbed('Custom Contests', 'Scheduled custom contests in this radar:');

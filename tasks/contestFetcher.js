@@ -22,6 +22,7 @@ const { getTophContests } = require('../utils/toph');
 const { buildContestEmbed, buildContestListEmbed } = require('../utils/embeds');
 const { getGuildTargetChannels, replaceChannelBotMessage } = require('../utils/envHelper');
 const { getTimeZone } = require('../utils/time');
+const { getCalendarEmoji, getCalendarEmojisForDates } = require('../utils/calendarEmoji');
 
 let isRefreshing = false;
 let isCheckingReminders = false;
@@ -201,6 +202,7 @@ async function checkAndSendContestReminders(client) {
     if (targets.length === 0) return;
 
     const now = Math.floor(Date.now() / 1000);
+    const TZ = getTimeZone();
 
     for (const contest of contests) {
       const timeLeft = contest.start_time - now;
@@ -212,10 +214,11 @@ async function checkAndSendContestReminders(client) {
       if (!is1h && !is24h) continue;
 
       const label = is1h ? 'Starting in ~1 hour!' : 'Starting within 24 hours!';
-      const embed = buildContestEmbed(contest, label);
+      const calEmoji = await getCalendarEmoji(client, contest.start_time, TZ);
+      const embed = buildContestEmbed(contest, label, { calEmoji });
       const alertHeader = is1h
         ? `🚨 **1-Hour Contest Reminder:** **${contest.name}** starts soon!`
-        : `⏰ **24-Hour Contest Reminder:** **${contest.name}** starts tomorrow!`;
+        : `${calEmoji} **24-Hour Contest Reminder:** **${contest.name}** starts tomorrow!`;
       const expiresAt = getContestEndTime(contest);
 
       let delivered = false;
@@ -283,7 +286,16 @@ async function postContestSummary(client, specificGuildId = null) {
     if (targets.length === 0) return;
 
     const { getPlatformEmojis } = require('../utils/emojis');
-    const nowSec = Math.floor(Date.now() / 1000);
+    const TZ = getTimeZone();
+    const nowDate = new Date();
+    const nowSec = Math.floor(nowDate.getTime() / 1000);
+    const todayLabel = nowDate.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', timeZone: TZ
+    });
+    const [todayCal, dateEmojis] = await Promise.all([
+      getCalendarEmoji(client, nowDate, TZ),
+      getCalendarEmojisForDates(client, contests.map(c => c.start_time).filter(Boolean), TZ)
+    ]);
 
     for (const { guild_id, channel } of targets) {
       try {
@@ -292,7 +304,8 @@ async function postContestSummary(client, specificGuildId = null) {
           contests,
           'all',
           { cf: cfStatus, ac: acStatus, toph: tophStatus },
-          emojis
+          emojis,
+          { todayCal, dateEmojis, todayLabel }
         );
 
         // Preserve still-upcoming or ongoing reminders so they sit below the refreshed radar overview and drop once over
@@ -309,11 +322,36 @@ async function postContestSummary(client, specificGuildId = null) {
             const dedupKey = e.url || m.content;
             if (seenUrls.has(dedupKey)) continue;
             seenUrls.add(dedupKey);
+
+            // Upgrade preserved reminder icons to the contest's actual date calendar emoji
+            const dbContest = e.url ? getContestByUrl(e.url) : null;
+            const tsMatch = e.description?.match(/<t:(\d+):[FR]>/);
+            const startTs = dbContest?.start_time || (tsMatch ? parseInt(tsMatch[1], 10) : 0);
+            const calEmoji = startTs ? await getCalendarEmoji(client, startTs, TZ) : null;
+
+            let updatedContent = m.content;
+            const updatedEmbeds = m.embeds.map(emb => {
+              const json = typeof emb.toJSON === 'function' ? emb.toJSON() : { ...emb };
+              if (calEmoji && json.description) {
+                json.description = json.description.replace(
+                  /^> [^\s]+\s+\*\*Starts At:\*\*/m,
+                  `> ${calEmoji} **Starts At:**`
+                );
+              }
+              return json;
+            });
+            if (calEmoji && updatedContent?.includes('24-Hour Contest Reminder:')) {
+              updatedContent = updatedContent.replace(
+                /^[^\s]+\s+\*\*24-Hour Contest Reminder:\*\*/,
+                `${calEmoji} **24-Hour Contest Reminder:**`
+              );
+            }
+
             activeReminders.push({
               contestId,
               endTs,
-              content: m.content,
-              embeds: m.embeds.map(emb => (typeof emb.toJSON === 'function' ? emb.toJSON() : emb)),
+              content: updatedContent,
+              embeds: updatedEmbeds,
               createdAt: m.createdTimestamp || 0
             });
           }

@@ -10,6 +10,7 @@ const {
 const { cfGet, getCFStatus } = require('../utils/codeforces');
 const { chunkLines } = require('../utils/envHelper');
 const { getTimeZone, getLocalParts } = require('../utils/time');
+const { getCalendarEmoji } = require('../utils/calendarEmoji');
 
 /**
  * Resolves the writable wrapup/general target channel for a guild without falling back to unrelated channels.
@@ -197,7 +198,7 @@ async function analyzeContestForUsers(contestId, users) {
   return results;
 }
 
-function buildContestWrapupEmbed(contest, participantResults) {
+function buildContestWrapupEmbed(contest, participantResults, { calEmoji = null } = {}) {
   const sorted = [...participantResults].sort((a, b) => {
     if (b.solvedCount !== a.solvedCount) return b.solvedCount - a.solvedCount;
     return (a.rank || 999999) - (b.rank || 999999);
@@ -218,6 +219,10 @@ function buildContestWrapupEmbed(contest, participantResults) {
     return header;
   });
 
+  const roundDateLine = (contest.startTimeSeconds && calEmoji)
+    ? `> ${calEmoji} **Contest Date:** <t:${contest.startTimeSeconds}:D>`
+    : null;
+
   const embed = new EmbedBuilder()
     .setColor(0x1F8DD6)
     .setAuthor({
@@ -227,11 +232,12 @@ function buildContestWrapupEmbed(contest, participantResults) {
     .setTitle(`🏆 ${contest.name} — Standings & Upsolve Radar`.slice(0, 256))
     .setDescription([
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      roundDateLine,
       '> 🌅 **Good morning!** Yesterday\'s round is finalized and system tests are done.',
       '> 🎯 **Upsolve Goal:** Conquer the problem that stopped your streak yesterday!',
       `> 🔗 **Contest Page:** [Open Round Standings & Submissions](https://codeforces.com/contest/${contest.id})`,
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-    ].join('\n'))
+    ].filter(Boolean).join('\n'))
     .setFooter({ text: 'BigOof Upsolve Radar · Solve your roadblock today to grow your rating!' })
     .setTimestamp();
 
@@ -332,7 +338,10 @@ async function processContestWrapup(client, forceContestId = null, targetGuild =
           continue;
         }
 
-        const embed = buildContestWrapupEmbed(contest, guildResults);
+        const calEmoji = contest.startTimeSeconds
+          ? await getCalendarEmoji(client, contest.startTimeSeconds, getTimeZone())
+          : null;
+        const embed = buildContestWrapupEmbed(contest, guildResults, { calEmoji });
         try {
           await channel.send({ embeds: [embed] });
           markContestWrappedUp(contest.id, guild.id);

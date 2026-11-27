@@ -14,6 +14,7 @@ const {
 const { getCFProblems, getCFStatus, getProblemsetCache, extractSolvedIds } = require('../utils/codeforces');
 const { resolveChannelChain, getGuildTargetChannels, replaceChannelBotMessage } = require('../utils/envHelper');
 const { getTimeZone, getLocalParts, zonedDateTimeToUnix } = require('../utils/time');
+const { getCalendarEmoji } = require('../utils/calendarEmoji');
 
 let isFirstBloodRunning = false;
 
@@ -129,6 +130,8 @@ async function postDailySuggestions(client, targetDate = null) {
     setDailyProblems(todayDateStr, p1?.id || null, p2?.id || null, p3?.id || null, p4?.id || null, p5?.id || null);
   }
 
+  const dateCalEmoji = await getCalendarEmoji(client, activeDate, TZ);
+
   const cfEmbed = new EmbedBuilder()
     .setColor(0x7C4DFF)
     .setAuthor({
@@ -137,6 +140,7 @@ async function postDailySuggestions(client, targetDate = null) {
     })
     .setTitle(`🎯 Daily Coding Quests — ${todayDisplay}`)
     .setDescription(
+      `> ${dateCalEmoji} **Date:** **${todayDisplay}**\n` +
       '> 🎯 **Sharpen your algorithms with 5 tiered challenges for today!**\n' +
       '> 🩸 **First Blood**: Be the very first coder in the server to solve any level!\n' +
       '> 🏆 **Daily Sweep**: Solve all 5 to claim the daily champion crown!\n\n' +
@@ -384,6 +388,32 @@ function startDailyChallenge(client) {
         const posted = await postDailySuggestions(client);
         if (posted) {
           setConfig('last_suggest_post_date', todayDateStr, 'global');
+        }
+      } else {
+        // Silently upgrade any active daily message that still carries a static Unicode calendar emoji
+        const targets = await getGuildTargetChannels(client, 'suggest_channel_id', 'SUGGEST_CHANNEL_ID');
+        const activeDate = getActiveCycleDate(new Date(), TZ);
+        const dateCalEmoji = await getCalendarEmoji(client, activeDate, TZ);
+        const activeDisplay = activeDate.toLocaleDateString('en-US', {
+          weekday: 'long', month: 'long', day: 'numeric', timeZone: TZ
+        });
+        for (const { channel } of targets) {
+          const recent = await channel.messages.fetch({ limit: 15 }).catch(() => null);
+          if (!recent) continue;
+          for (const m of recent.values()) {
+            if (m.author.id !== client.user.id || !m.embeds?.length) continue;
+            const e = m.embeds[0];
+            if (!e.title?.includes('Daily Coding Quests')) continue;
+            if (!/[\u{1F4C5}\u{1F4C6}\u{1F5D3}]/u.test(e.title || '') && e.description?.includes(dateCalEmoji)) continue;
+            const json = typeof e.toJSON === 'function' ? e.toJSON() : { ...e };
+            json.title = (json.title || '').replace(/^[\u{1F4C5}\u{1F4C6}\u{1F5D3}\u{FE0F}\s]+/u, '🎯 ');
+            if (!json.description?.includes('**Date:**')) {
+              json.description = `> ${dateCalEmoji} **Date:** **${activeDisplay}**\n${json.description || ''}`;
+            } else {
+              json.description = json.description.replace(/^> [^\s]+\s+\*\*Date:\*\*/m, `> ${dateCalEmoji} **Date:**`);
+            }
+            await m.edit({ embeds: [EmbedBuilder.from(json)] }).catch(() => {});
+          }
         }
       }
     } catch (err) {

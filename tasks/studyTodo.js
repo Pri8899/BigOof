@@ -29,6 +29,7 @@ const {
 const { getTargetChannel, chunkLines, isBotOwner } = require('../utils/envHelper');
 const { errorEmbed } = require('../utils/embeds');
 const { getTimeZone, getLocalParts, zonedDateTimeToUnix } = require('../utils/time');
+const { getCalendarEmoji } = require('../utils/calendarEmoji');
 
 const formLocks = new Map();
 const guildCreateLocks = new Map();
@@ -147,7 +148,14 @@ function formatItemBlock(item, idx, tickMap, trackedMembers) {
   ].join('\n');
 }
 
-function buildStudyFormEmbed(form, items, ticks, trackedMembers, now = new Date(), { touchTimestamp = false } = {}) {
+function buildStudyFormEmbed(
+  form,
+  items,
+  ticks,
+  trackedMembers,
+  now = new Date(),
+  { touchTimestamp = false, calEmoji = '🕒' } = {}
+) {
   const tickMap = buildTickMap(ticks);
   const TZ = getTimeZone();
   const isOld = isOldStudyForm(form, now, TZ);
@@ -167,14 +175,14 @@ function buildStudyFormEmbed(form, items, ticks, trackedMembers, now = new Date(
       isOld
         ? [
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-            `> 🕒 **From:** **${displayDateLabel}**`,
+            `> ${calEmoji} **From:** **${displayDateLabel}**`,
             '> 🔒 **Day Passed:** Add, Edit & Remove are locked — only **✅ Tick Done** is allowed!',
             '> 🧹 Auto-removes as soon as everyone ticks **100%** of remaining items.',
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
           ].join('\n')
         : [
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-            `> 🕒 **Date:** **${displayDateLabel}**`,
+            `> ${calEmoji} **Date:** **${displayDateLabel}**`,
             '> ➕ **Add / ✏️ Edit / ✅ Tick:** Anyone · **🗑️ Remove:** Admin only',
             '> 🔒 Completed items lock per user · Clears at **100%** *(or new form at 9:00 AM)*!',
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
@@ -320,7 +328,8 @@ async function ensureCurrentStudyFormForGuild(client, guildId, now = new Date())
     const formId = crypto.randomBytes(4).toString('hex');
     const trackedMembers = await getChannelStudyMembers(channel.guild, channel);
     const stubForm = { id: formId, guild_id: guildId, channel_id: channel.id, date_str: dateStr, created_at: nowSec };
-    const { embed, overflowed } = buildStudyFormEmbed(stubForm, [], [], trackedMembers, now);
+    const calEmoji = await getCalendarEmoji(client, dateStr || now, TZ);
+    const { embed, overflowed } = buildStudyFormEmbed(stubForm, [], [], trackedMembers, now, { calEmoji });
     const components = buildStudyFormComponents(formId, [], { overflowed, isOld: false });
 
     const sent = await channel.send({ embeds: [embed], components }).catch(err => {
@@ -407,8 +416,10 @@ async function refreshOrCompleteStudyForm(client, formId, now = new Date(), { fo
       return { completed: true, formRemoved: true, newFormId: null };
     }
 
+    const calEmoji = await getCalendarEmoji(client, form.date_str || now, TZ);
     const { embed, overflowed } = buildStudyFormEmbed(form, items, ticks, trackedMembers, now, {
-      touchTimestamp: forceEdit
+      touchTimestamp: forceEdit,
+      calEmoji
     });
     const components = buildStudyFormComponents(formId, items, { overflowed, isOld });
 

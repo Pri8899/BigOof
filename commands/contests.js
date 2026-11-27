@@ -3,6 +3,8 @@ const { SlashCommandBuilder } = require('discord.js');
 const { getUpcomingContests, getConfig } = require('../database/db');
 const { buildContestListEmbed } = require('../utils/embeds');
 const { getPlatformEmojis } = require('../utils/emojis');
+const { getCalendarEmoji, getCalendarEmojisForDates } = require('../utils/calendarEmoji');
+const { getTimeZone } = require('../utils/time');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -32,8 +34,21 @@ module.exports = {
       toph: getConfig('toph_api_online') !== '0'
     };
 
-    const emojis = await getPlatformEmojis(interaction.guild);
-    const embed = buildContestListEmbed(contests, platform, apiStatus, emojis);
+    const TZ = getTimeZone();
+    const now = new Date();
+    const todayLabel = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: TZ });
+
+    const [emojis, todayCal, dateEmojis] = await Promise.all([
+      getPlatformEmojis(interaction.guild),
+      getCalendarEmoji(interaction.client, now, TZ),
+      getCalendarEmojisForDates(interaction.client, contests.map(c => c.start_time).filter(Boolean), TZ)
+    ]);
+
+    const embed = buildContestListEmbed(contests, platform, apiStatus, emojis, {
+      todayCal,
+      dateEmojis,
+      todayLabel
+    });
     return interaction.editReply({ embeds: [embed] });
   }
 };

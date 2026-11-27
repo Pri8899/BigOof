@@ -11,6 +11,7 @@ const {
 const { buildWeeklyWrapupEmbed } = require('../utils/embeds');
 const { resolveChannelChain } = require('../utils/envHelper');
 const { getTimeZone, getLocalParts } = require('../utils/time');
+const { getCalendarEmoji } = require('../utils/calendarEmoji');
 
 const WEEKLY_PLATFORMS = ['cf', 'ac', 'toph'];
 
@@ -87,7 +88,11 @@ const WEEKLY_CHANNEL_CHAIN = [
 
 async function runWeeklyWrapup(client, updateSnapshots = false) {
   const users = getAllUsers();
-  const { dateStr: todayStr } = getLocalParts(new Date(), getTimeZone());
+  const TZ = getTimeZone();
+  const now = new Date();
+  const { dateStr: todayStr } = getLocalParts(now, TZ);
+  const weekLabel = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: TZ });
+  const calEmoji = await getCalendarEmoji(client, now, TZ);
 
   let postedCount = 0;
   const sentChannels = new Set();
@@ -107,7 +112,7 @@ async function runWeeklyWrapup(client, updateSnapshots = false) {
       if (guildUsers.length === 0) continue;
 
       const { allSolved, allRatingGains } = computeStats(guildUsers);
-      const embed = buildWeeklyWrapupEmbed(allSolved, allRatingGains);
+      const embed = buildWeeklyWrapupEmbed(allSolved, allRatingGains, { calEmoji, weekLabel });
 
       await channel.send({ content: '@everyone', embeds: [embed] }).catch(() =>
         channel.send({ embeds: [embed] })
@@ -126,7 +131,7 @@ async function runWeeklyWrapup(client, updateSnapshots = false) {
 
     if (globalChannel) {
       const { allSolved, allRatingGains } = computeStats(users);
-      const embed = buildWeeklyWrapupEmbed(allSolved, allRatingGains);
+      const embed = buildWeeklyWrapupEmbed(allSolved, allRatingGains, { calEmoji, weekLabel });
       await globalChannel.send({ content: '@everyone', embeds: [embed] }).catch(() =>
         globalChannel.send({ embeds: [embed] })
       );

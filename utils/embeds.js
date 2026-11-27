@@ -2,6 +2,8 @@
 const { EmbedBuilder } = require('discord.js');
 const { chunkLines } = require('./envHelper');
 const { detectLanguage } = require('./github');
+const { resolveCalendarDateKey } = require('./calendarEmoji');
+const { getTimeZone } = require('./time');
 
 const STREAK_ROLES = [
   { name: '☄️ 2+ Year Streak',  min: 730, color: 0xFF0055, badge: '☄️' },
@@ -116,7 +118,7 @@ function errorEmbed(title, description) {
 
 // ── 1. Contest Notification Embed (24h / 1h alerts) ─────────────
 
-function buildContestEmbed(contest, timeUntilLabel) {
+function buildContestEmbed(contest, timeUntilLabel = 'Starting Soon!', { calEmoji = '🕒' } = {}) {
   const startTime = contest.startTime ?? contest.start_time;
   const durSec = contest.durationSec ?? contest.duration_sec;
   const platform = contest.platform;
@@ -140,7 +142,7 @@ function buildContestEmbed(contest, timeUntilLabel) {
     .setDescription([
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       `> ⏳ **Countdown:** ${startTime ? `<t:${startTime}:R>` : 'Starting Soon!'}`,
-      `> 🕒 **Starts At:** ${startTime ? `<t:${startTime}:F>` : 'TBD'}`,
+      `> ${calEmoji} **Starts At:** ${startTime ? `<t:${startTime}:F>` : 'TBD'}`,
       `> ⏱️ **Duration:** \`${durationStr.trim()}\``,
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       `🔗 [**Click here to open contest & register →**](${url})`
@@ -342,7 +344,13 @@ function buildDashboardEmbed(rows, streaks = [], emojis = { cf: '🔵', ac: '�
 
 // ── 4. Full Contest Schedule Radar ───────────────────────────────
 
-function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emojis = { cf: '🔵', ac: '🔴', toph: '🟣' }) {
+function buildContestListEmbed(
+  contests,
+  platform = 'all',
+  apiStatus = {},
+  emojis = { cf: '🔵', ac: '🔴', toph: '🟣' },
+  { todayCal = '🕒', dateEmojis = null, todayLabel = null } = {}
+) {
   const PLATFORM_ORDER = ['Codeforces', 'AtCoder', 'Toph', 'Custom'];
   const PLATFORM_HEADER = {
     Codeforces: `${emojis.cf || '🔵'} **Codeforces Rounds**`,
@@ -350,10 +358,15 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
     Toph:       `${emojis.toph || '🟣'} **Toph Events**`,
     Custom:     '🌟 **Community Custom Contests**'
   };
+  const TZ = getTimeZone();
 
   const filtered = platform === 'all'
     ? contests.filter(c => PLATFORM_ORDER.includes(c.platform))
     : contests.filter(c => c.platform.toLowerCase().startsWith(platform.toLowerCase()));
+
+  const dateLine = todayLabel
+    ? `${todayCal} **Today (${todayLabel}):** Live contest schedule & 24h / 1h reminders.`
+    : `${todayCal} Live contest schedule with real-time countdowns and 24h / 1h reminder alerts.`;
 
   const embed = new EmbedBuilder()
     .setColor(0x1F8DD6)
@@ -363,7 +376,7 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
     })
     .setTitle('🏁 Upcoming Competitive Programming Contests')
     .setDescription([
-      'Live contest schedule with real-time countdowns and 24h / 1h reminder alerts.',
+      dateLine,
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     ].join('\n'));
 
@@ -406,7 +419,8 @@ function buildContestListEmbed(contests, platform = 'all', apiStatus = {}, emoji
           durStr = dh > 0 ? (dm > 0 ? `${dh}h ${dm}m` : `${dh}h`) : `${dm}m`;
         }
         const timeStr = start ? `<t:${start}:R> (<t:${start}:d>)` : 'TBD';
-        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n> ⏱️ \`${durStr}\` · ⏳ Starts ${timeStr}`;
+        const rowCal = (start && dateEmojis?.get(resolveCalendarDateKey(start, TZ))) || todayCal || '🕒';
+        return `\`${i + 1}.\` **[${c.name}](${c.url})**\n> ⏱️ \`${durStr}\` · ${rowCal} Starts ${timeStr}`;
       });
 
       const chunks = chunkLines(lines, 1000);
@@ -506,9 +520,15 @@ function buildSubmissionEmbed(user, problem, platform) {
 
 // ── 6. Weekly Wrap-Up Embed ──────────────────────────────────────
 
-function buildWeeklyWrapupEmbed(allSolved, allRatingGains) {
+function buildWeeklyWrapupEmbed(allSolved, allRatingGains, { calEmoji = null, weekLabel = null } = {}) {
   const topClimber = allRatingGains[0];
   const topGrinder = allSolved[0];
+
+  const descLines = [
+    calEmoji && weekLabel ? `> ${calEmoji} **Week Ended:** **${weekLabel}**` : null,
+    "Celebrating our community's hardest grinders and top rating climbers this week!",
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+  ].filter(Boolean);
 
   const embed = new EmbedBuilder()
     .setColor(0xFFD700)
@@ -517,10 +537,7 @@ function buildWeeklyWrapupEmbed(allSolved, allRatingGains) {
       iconURL: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'
     })
     .setTitle('📰 Weekly Community Digest')
-    .setDescription([
-      "Celebrating our community's hardest grinders and top rating climbers this week!",
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-    ].join('\n'));
+    .setDescription(descLines.join('\n'));
 
   if (topClimber && (topClimber.gain > 0 || topClimber.rating_gained > 0)) {
     const gainVal = topClimber.gain ?? topClimber.rating_gained ?? 0;
